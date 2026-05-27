@@ -6,6 +6,10 @@
 - 本地生文大模型不需要代理也可以直接运行。Base URL 直接使用 TokenHub地址就可以了：https://tokenhub.tencentmaas.com ，后面/v1/api/xxx这些不需要加。
 
 
+## 更新记录
+
+3.0版本做了一个大的更新，只保留了腾讯云VOD和Tokenhub调用逻辑，用于运行测试。其他provider已经移除。如果需要使用其他平台，可以回退到2.x.x版本。
+
 ## 🌟 核心工作内容 (Highlights)
 相比于原始项目，我们在以下方面进行了重大改进：
 *   **工程化重构**: 将原始单 HTML 架构利用 Vite + React 进行现代化重构，提升了 10 倍以上的加载速度。
@@ -192,3 +196,18 @@ Golang代理主要解决VOD服务安全问题，DeepSeek 能直连，是因为�
     3. 原始网络 URL (Original)
 
 <br>
+
+## CloudBase 部署信息
+
+- 环境 ID：`test234-d0g5z9qyae01763f6`（地域：`ap-shanghai`）
+- 静态托管地址：`https://test234-d0g5z9qyae01763f6-1305660054.tcloudbaseapp.com/`
+- 当前验证访问地址：`https://test234-d0g5z9qyae01763f6-1305660054.tcloudbaseapp.com/?v=20260527-0926`
+- 最近部署时间：`2026-05-27 09:26`
+- 本次更新：VOD 上传媒体名使用 `vodstudio-` 前缀；顶部新增 AIGC 生成文件云端保存/临时文件切换，对应 `OutputConfig.StorageMode=Permanent/Temporary`。
+- 云函数：`vodstudio-proxy`，事件函数形态，通过 Web SDK `callFunction` 调用；本次音画同步更新未修改云函数代码，仅更新前端静态托管产物。
+- 部署命令：
+
+```bash
+npm run build
+tcb hosting deploy dist/ -e test234-d0g5z9qyae01763f6 --yes
+```

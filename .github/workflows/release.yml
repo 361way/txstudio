@@ -97,7 +97,7 @@ jobs:
           )
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release delete-asset "$TAG" "VodStudio-V${VERSION}.html" -y >/dev/null 2>&1 || true
+            gh release delete-asset "$TAG" "VodStudio-TX-V${VERSION}.html" -y >/dev/null 2>&1 || true
             gh release upload "$TAG" release-assets/* --clobber
           else
             gh release create "$TAG" release-assets/* \

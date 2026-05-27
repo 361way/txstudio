@@ -6081,6 +6081,14 @@ function TapnowApp() {
             return 'off';
         }
     });
+    const [aigcStorageMode, setAigcStorageMode] = useState(() => {
+        try {
+            const saved = localStorage.getItem('tapnow_aigc_storage_mode');
+            return saved === 'Permanent' ? 'Permanent' : 'Temporary';
+        } catch (e) {
+            return 'Temporary';
+        }
+    });
 
     // V2.6.1 Feature: 本地服务器 URL
     const [localServerUrl, setLocalServerUrl] = useState(() => {
@@ -6407,6 +6415,9 @@ function TapnowApp() {
     useEffect(() => {
         localStorage.setItem('tapnow_global_performance_mode', globalPerformanceMode);
     }, [globalPerformanceMode]);
+    useEffect(() => {
+        localStorage.setItem('tapnow_aigc_storage_mode', aigcStorageMode);
+    }, [aigcStorageMode]);
 
     useEffect(() => {
         localStorage.setItem('tapnow_local_server_url', localServerUrl);
@@ -17047,13 +17058,20 @@ function TapnowApp() {
             // 异步执行 pipeline
             (async () => {
                 try {
+                    const vodAudioGenerationEnabled = type === 'video' && node?.settings?.vodAudioGeneration !== false;
                     const { urls } = await runVodAigcPipeline({
                         type,
                         prompt,
                         modelName: vodSubModel.modelName,
                         modelVersion: vodSubModel.modelVersion,
                         sourceImages: vodSourceImages,
-                        aspectRatio: aspectRatio || undefined
+                        aspectRatio: aspectRatio || undefined,
+                        extraConfig: {
+                            StorageMode: aigcStorageMode,
+                            ...(type === 'video'
+                                ? { AudioGeneration: vodAudioGenerationEnabled ? 'Enabled' : 'Disabled' }
+                                : {})
+                        }
                     }, {
                         credentials: vodCreds,
                         useProxy: vodUseProxy,
@@ -21444,7 +21462,7 @@ function TapnowApp() {
                     };
                 })()
                 : type === 'gen-video'
-                    ? { model: resolveModelKey(lastUsedVideoModel), duration: '5s', ratio: lastUsedRatio, resolution: lastUsedVideoResolution, videoPrompt: '' }
+                    ? { model: resolveModelKey(lastUsedVideoModel), duration: '5s', ratio: lastUsedRatio, resolution: lastUsedVideoResolution, videoPrompt: '', vodAudioGeneration: true }
                     : type === 'video-analyze'
                         ? { model: resolveModelKey(lastUsedAnalyzeModel), segmentDuration: parseInt(lastUsedSegmentDuration), analysisMode: 'manual', voiceoverResults: [], analysisResults: [] }
                     : type === 'storyboard-node'
@@ -34288,6 +34306,29 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             </div>
                                         );
                                     })()}
+                                    {node.type === 'gen-video' && (() => {
+                                        const vodConfig = getApiConfigByKey(node.settings?.model);
+                                        const isVodVideo = vodConfig?.provider === TENCENT_VOD_PROVIDER_KEY || vodConfig?.id === VOD_VIDEO_MODEL_ID;
+                                        if (!isVodVideo) return null;
+                                        const enabled = node.settings?.vodAudioGeneration !== false;
+                                        return (
+                                            <div className={`mb-2 rounded-lg border px-3 py-2 flex items-center justify-between gap-3 ${theme === 'dark' ? 'bg-cyan-950/20 border-cyan-900/40 text-zinc-300' : 'bg-cyan-50 border-cyan-200 text-zinc-700'}`}>
+                                                <div className="min-w-0">
+                                                    <div className="text-[10px] font-semibold">VOD 音画同步</div>
+                                                    <div className={`text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>OutputConfig.AudioGeneration：{enabled ? 'Enabled' : 'Disabled'}</div>
+                                                </div>
+                                                <label className="relative inline-flex items-center cursor-pointer shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={enabled}
+                                                        onChange={(e) => updateNodeSettings(node.id, { vodAudioGeneration: e.target.checked })}
+                                                        className="sr-only peer"
+                                                    />
+                                                    <div className={`${enabled ? 'bg-blue-600' : theme === 'dark' ? 'bg-zinc-700' : 'bg-zinc-300'} w-9 h-5 rounded-full peer peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/50 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${enabled ? 'after:translate-x-full after:border-white' : ''}`}></div>
+                                                </label>
+                                            </div>
+                                        );
+                                    })()}
                                     <div
                                         className={`mt-auto sticky bottom-0 z-20 pt-2 flex items-center justify-between shrink-0 relative gap-2 border-t ${theme === 'dark' ? 'border-zinc-800/50 bg-zinc-900/95' : theme === 'solarized' ? 'border-[#d7cfb2] bg-[#fdf6e3]/95' : 'border-zinc-200 bg-zinc-100/95'
                                             } backdrop-blur`}
@@ -34911,6 +34952,27 @@ ${inputText.substring(0, 15000)} ... (截断)
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setAigcStorageMode(prev => prev === 'Permanent' ? 'Temporary' : 'Permanent')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${aigcStorageMode === 'Permanent'
+                                ? theme === 'dark'
+                                    ? 'bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-500'
+                                    : theme === 'solarized'
+                                        ? 'bg-emerald-600 border-emerald-500 text-[#fdf6e3] hover:bg-emerald-500'
+                                        : 'bg-emerald-500 border-emerald-400 text-white hover:bg-emerald-600'
+                                : theme === 'dark'
+                                    ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                                    : theme === 'solarized'
+                                        ? 'bg-[#616161] border-[#525252] text-[#fdf6e3] hover:bg-[#555555]'
+                                        : 'bg-zinc-100 border-zinc-300 text-zinc-700 hover:bg-zinc-200'
+                                }`}
+                            title={aigcStorageMode === 'Permanent'
+                                ? 'AIGC 生成文件将永久保存到 VOD（点击改为临时存储）'
+                                : 'AIGC 生成文件当前为临时存储（点击改为永久保存）'}
+                        >
+                            <HardDrive size={14} className={aigcStorageMode === 'Permanent' ? 'fill-current' : ''} />
+                            <span>{aigcStorageMode === 'Permanent' ? '云端保存' : '临时文件'}</span>
+                        </button>
                         {/* 性能模式开关 V2.6.1 */}
                         <button
                             onClick={() => {

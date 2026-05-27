@@ -522,7 +522,7 @@ export async function uploadImageToVod(imageInput, ctx) {
     // 1) ApplyUpload
     const applyResp = await callVodApi('ApplyUpload', {
         MediaType: ext,
-        MediaName: `tapnow-${Date.now()}`,
+        MediaName: `vodstudio-${Date.now()}`,
         SubAppId: credentials.subAppId
     }, ctx);
 
