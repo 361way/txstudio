@@ -1,5 +1,5 @@
 // ============================================================================
-// 腾讯云 VOD AIGC 适配器 (Tapnow Studio)
+// 腾讯云 VOD AIGC 适配器 (VodStudio Studio)
 // ----------------------------------------------------------------------------
 // 对接接口：
 //   - ApplyUpload           (VOD)      申请上传凭证
@@ -252,7 +252,7 @@ function base64ToBlob(base64, mime = 'application/octet-stream') {
  * @returns {Promise<Object>} 解析后的 Response 对象
  */
 async function callVodApi(action, body, ctx) {
-    const { credentials, useProxy, localServerUrl, tcb } = ctx;
+    const { credentials, useProxy, localServerUrl } = ctx;
     const { secretId, secretKey, region } = credentials;
     const payload = JSON.stringify(body || {});
 
@@ -274,55 +274,24 @@ async function callVodApi(action, body, ctx) {
     const directUrl = `https://${VOD_API_HOST}`;
     let resp;
 
-    // 如果提供了 tcb 实例，则通过云函数代理调用
-    if (tcb) {
-        try {
-            const proxyResult = await tcb.callFunction({
-                name: 'vodstudio-proxy',
-                data: {
-                    httpMethod: 'POST',
-                    path: '/proxy',
-                    queryString: { url: directUrl },
-                    url: directUrl,
-                    headers: fetchHeaders,
-                    body: payload
-                }
-            });
-            
-            const { statusCode, headers: respHeaders, body: respBody, isBase64Encoded } = proxyResult.result || {};
-            const bodyText = isBase64Encoded ? atob(respBody) : (respBody || '');
-            
-            // 创建类似 fetch Response 的对象
-            resp = {
-                ok: statusCode >= 200 && statusCode < 300,
-                status: statusCode || 500,
-                headers: new Headers(respHeaders || {}),
-                text: async () => bodyText,
-                json: async () => { try { return JSON.parse(bodyText); } catch (e) { return {}; } }
-            };
-        } catch (err) {
-            throw new Error(`[VOD/${action}] 云函数调用失败: ${err?.message || err}`);
-        }
-    } else {
-        // 原有逻辑：通过 fetch 调用（本地代理或直接）
-        const finalUrl = wrapProxy(directUrl, { useProxy, localServerUrl });
-        try {
-            resp = await fetch(finalUrl, {
+    // 通过 fetch 调用（本地代理或直接）
+    const finalUrl = wrapProxy(directUrl, { useProxy, localServerUrl });
+    try {
+        resp = await fetch(finalUrl, {
+            method: 'POST',
+            headers: fetchHeaders,
+            body: payload
+        });
+    } catch (err) {
+        if (!useProxy && localServerUrl) {
+            const proxyUrl = wrapProxy(directUrl, { useProxy: true, localServerUrl });
+            resp = await fetch(proxyUrl, {
                 method: 'POST',
                 headers: fetchHeaders,
                 body: payload
             });
-        } catch (err) {
-            if (!useProxy && localServerUrl) {
-                const proxyUrl = wrapProxy(directUrl, { useProxy: true, localServerUrl });
-                resp = await fetch(proxyUrl, {
-                    method: 'POST',
-                    headers: fetchHeaders,
-                    body: payload
-                });
-            } else {
-                throw new Error(`[VOD/${action}] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
-            }
+        } else {
+            throw new Error(`[VOD/${action}] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
         }
     }
 
@@ -360,28 +329,6 @@ async function resolveBlob(input, ctx = {}) {
     if (typeof input === 'string') {
         // data: URL 或普通 URL
         const isHttpUrl = /^https?:\/\//i.test(input);
-        if (isHttpUrl && ctx.tcb) {
-            const proxyResult = await ctx.tcb.callFunction({
-                name: 'vodstudio-proxy',
-                data: {
-                    httpMethod: 'GET',
-                    path: '/proxy',
-                    queryString: { url: input },
-                    url: input,
-                    headers: {},
-                    body: ''
-                }
-            });
-            const { statusCode, headers = {}, body = '', isBase64Encoded } = proxyResult.result || {};
-            if (!(statusCode >= 200 && statusCode < 300)) {
-                const text = isBase64Encoded ? atob(body || '') : (body || '');
-                throw new Error(`[VOD Upload] 获取图片失败: ${statusCode || 500} ${text.slice(0, 160)}`);
-            }
-            const mime = headers['content-type'] || headers['Content-Type'] || 'image/png';
-            const blob = isBase64Encoded ? base64ToBlob(body, mime) : new Blob([body], { type: mime });
-            const ext = mimeToExt(mime);
-            return { blob, mime, ext };
-        }
         const targetUrl = isHttpUrl ? wrapProxy(input, ctx) : input;
         const resp = await fetch(targetUrl);
         if (!resp.ok) throw new Error(`[VOD Upload] 获取图片失败: ${resp.status}`);
@@ -440,66 +387,33 @@ async function putObjectToCos({ tempCred, bucket, region, key, blob }, ctx = {})
     const encodedKey = uriPathname.split('/').map((seg) => seg ? encodeURIComponent(seg) : '').join('/');
     let resp;
     
-    // 如果提供了 tcb 实例，则通过云函数代理上传（解决浏览器 CORS 问题）
-    if (ctx.tcb) {
-        try {
-            const proxyResult = await ctx.tcb.callFunction({
-                name: 'vodstudio-proxy',
-                data: {
-                    httpMethod: 'PUT',
-                    path: '/cos-put',
-                    queryString: { url: `https://${host}${encodedKey}` },
-                    url: `https://${host}${encodedKey}`,
-                    headers: {
-                        Authorization: authorization,
-                        'x-cos-security-token': tempCred.Token
-                    },
-                    body: await blob.arrayBuffer().then(arrayBufferToBase64),
-                    isBase64Encoded: true
-                }
-            });
-            
-            const { statusCode, headers: respHeaders, body: respBody, isBase64Encoded } = proxyResult.result || {};
-            const bodyText = isBase64Encoded ? atob(respBody) : (respBody || '');
-            
-            resp = {
-                ok: statusCode >= 200 && statusCode < 300,
-                status: statusCode || 500,
-                headers: new Headers(respHeaders || {}),
-                text: async () => bodyText,
-                json: async () => { try { return JSON.parse(bodyText); } catch (e) { return {}; } }
-            };
-        } catch (err) {
-            throw new Error(`[VOD Upload/COS PUT] 云函数调用失败: ${err?.message || err}`);
-        }
-    } else {
-        // 原有逻辑：通过 fetch 上传（本地代理或直接）
-        const url = `https://${host}${encodedKey}`;
-        const finalUrl = wrapProxy(url, ctx);
-        try {
-            resp = await fetch(finalUrl, {
+    const url = `https://${host}${encodedKey}`;
+
+    // 通过 fetch 上传（本地代理或直接）
+    const finalUrl = wrapProxy(url, ctx);
+    try {
+        resp = await fetch(finalUrl, {
+            method: 'PUT',
+            headers: {
+                Authorization: authorization,
+                'x-cos-security-token': tempCred.Token
+                // 注意：不设 Host / Content-Length，浏览器会自动处理；代理会转发目标 Host
+            },
+            body: blob
+        });
+    } catch (err) {
+        if (!ctx.useProxy && ctx.localServerUrl) {
+            const proxyUrl = wrapProxy(url, { ...ctx, useProxy: true });
+            resp = await fetch(proxyUrl, {
                 method: 'PUT',
                 headers: {
                     Authorization: authorization,
                     'x-cos-security-token': tempCred.Token
-                    // 注意：不设 Host / Content-Length，浏览器会自动处理；代理会转发目标 Host
                 },
                 body: blob
             });
-        } catch (err) {
-            if (!ctx.useProxy && ctx.localServerUrl) {
-                const proxyUrl = wrapProxy(url, { ...ctx, useProxy: true });
-                resp = await fetch(proxyUrl, {
-                    method: 'PUT',
-                    headers: {
-                        Authorization: authorization,
-                        'x-cos-security-token': tempCred.Token
-                    },
-                    body: blob
-                });
-            } else {
-                throw new Error(`[VOD Upload/COS PUT] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
-            }
+        } else {
+            throw new Error(`[VOD Upload/COS PUT] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
         }
     }
     
@@ -568,9 +482,11 @@ export async function createAigcImageTask(params, ctx) {
         Prompt: params.prompt || undefined,
         NegativePrompt: params.negativePrompt || undefined,
         EnhancePrompt: params.enhancePrompt || undefined,
-        FileInfos: Array.isArray(params.fileIds) && params.fileIds.length
-            ? params.fileIds.map((id) => ({ FileId: id }))
-            : undefined,
+        FileInfos: Array.isArray(params.fileInfos) && params.fileInfos.length
+            ? params.fileInfos
+            : Array.isArray(params.fileIds) && params.fileIds.length
+                ? params.fileIds.map((id) => ({ FileId: id }))
+                : undefined,
         OutputConfig: params.outputConfig || undefined,
         InputRegion: params.inputRegion || undefined,
         Seed: Number.isFinite(params.seed) ? params.seed : undefined,
@@ -597,11 +513,14 @@ export async function createAigcVideoTask(params, ctx) {
         Prompt: params.prompt || undefined,
         NegativePrompt: params.negativePrompt || undefined,
         EnhancePrompt: params.enhancePrompt || undefined,
-        FileInfos: Array.isArray(params.fileIds) && params.fileIds.length
-            ? params.fileIds.map((id) => ({ FileId: id }))
-            : undefined,
+        FileInfos: Array.isArray(params.fileInfos) && params.fileInfos.length
+            ? params.fileInfos
+            : Array.isArray(params.fileIds) && params.fileIds.length
+                ? params.fileIds.map((id) => ({ FileId: id }))
+                : undefined,
         LastFrameFileId: params.lastFrameFileId || undefined,
         LastFrameUrl: params.lastFrameUrl || undefined,
+        SubjectInfos: Array.isArray(params.subjectInfos) && params.subjectInfos.length ? params.subjectInfos : undefined,
         OutputConfig: params.outputConfig || undefined,
         InputRegion: params.inputRegion || undefined,
         SceneType: params.sceneType || undefined,
@@ -730,6 +649,8 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
  * @param {string}   params.modelName      如 'GG'
  * @param {string}   params.modelVersion   如 '3.1'
  * @param {Array<Blob|string>} params.sourceImages  参考图（画布上游）
+ * @param {Array<Object|null>} params.sourceFileInfos  每个上传文件对应的 FileInfos 附加字段；null 表示不放入 FileInfos
+ * @param {number}   params.lastFrameSourceIndex  sourceImages 中作为 LastFrameFileId 的索引
  * @param {string}   params.aspectRatio   如 '16:9'
  * @param {Object}   params.extraConfig   合并到 OutputConfig
  * @param {Object}   params.extraTaskParams  其它任务级别参数
@@ -748,13 +669,42 @@ export async function runVodAigcPipeline(params, ctx) {
     const sourceImages = Array.isArray(params.sourceImages)
         ? params.sourceImages.filter(Boolean)
         : [];
-    const fileIds = [];
+    const sourceFileInfos = Array.isArray(params.sourceFileInfos) ? params.sourceFileInfos : null;
+    const uploadResults = [];
+    const isInnerIpUrl = (url) => {
+        if (typeof url !== 'string') return false;
+        // 内网 IP / 本地地址：127.x.x.x、192.168.x.x、10.x.x.x、172.16-31.x.x、localhost、0.0.0.0
+        return /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?(\/|$)/i.test(url);
+    };
     for (let i = 0; i < sourceImages.length; i++) {
-        emit('upload_start', { index: i, total: sourceImages.length });
-        const { fileId } = await uploadImageToVod(sourceImages[i], ctx);
-        fileIds.push(fileId);
-        emit('upload_done', { index: i, total: sourceImages.length, fileId });
+        const source = sourceImages[i];
+        const canReferenceUrlDirectly = !!sourceFileInfos && typeof source === 'string' && /^https?:\/\//i.test(source) && !isInnerIpUrl(source);
+        emit('upload_start', { index: i, total: sourceImages.length, directUrl: canReferenceUrlDirectly });
+        if (canReferenceUrlDirectly) {
+            uploadResults.push({ url: source });
+            emit('upload_done', { index: i, total: sourceImages.length, url: source, directUrl: true });
+            continue;
+        }
+        const uploadResult = await uploadImageToVod(source, ctx);
+        uploadResults.push(uploadResult);
+        emit('upload_done', { index: i, total: sourceImages.length, fileId: uploadResult.fileId });
     }
+    const fileIds = uploadResults.map((item) => item.fileId).filter(Boolean);
+    const fileInfos = sourceFileInfos
+        ? uploadResults
+            .map((item, index) => {
+                const meta = sourceFileInfos[index];
+                if (!meta) return null;
+                if (item.fileId) return { FileId: item.fileId, ...meta };
+                if (item.url) return { ...meta, Type: meta.Type || 'Url', Url: item.url };
+                return null;
+            })
+            .filter(Boolean)
+        : null;
+    const lastFrameSourceIndex = Number.isInteger(params.lastFrameSourceIndex) ? params.lastFrameSourceIndex : -1;
+    const lastFrameSource = lastFrameSourceIndex >= 0 ? uploadResults[lastFrameSourceIndex] : null;
+    const lastFrameFileId = lastFrameSource?.fileId;
+    const lastFrameUrl = lastFrameSource?.url;
 
     // 2) 创建任务
     const outputConfig = {
@@ -768,7 +718,10 @@ export async function runVodAigcPipeline(params, ctx) {
         prompt: params.prompt,
         negativePrompt: params.negativePrompt,
         enhancePrompt: params.enhancePrompt,
-        fileIds,
+        fileIds: fileInfos ? [] : fileIds,
+        fileInfos: fileInfos || undefined,
+        lastFrameFileId,
+        lastFrameUrl,
         outputConfig,
         ...(params.extraTaskParams || {})
     };

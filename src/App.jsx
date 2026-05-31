@@ -49,18 +49,6 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from '
 import { createPortal } from 'react-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import cloudbase from '@cloudbase/js-sdk';
-const tcb = cloudbase.init({
-    env: 'test234-d0g5z9qyae01763f6',
-    region: 'ap-shanghai',
-    accessKey: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjlkMWRjMzFlLWI0ZDAtNDQ4Yi1hNzZmLWIwY2M2M2Q4MTQ5OCJ9.eyJpc3MiOiJodHRwczovL3Rlc3QyMzQtZDBnNXo5cXlhZTAxNzYzZjYuYXAtc2hhbmdoYWkudGNiLWFwaS50ZW5jZW50Y2xvdWRhcGkuY29tIiwic3ViIjoiYW5vbiIsImF1ZCI6InRlc3QyMzQtZDBnNXo5cXlhZTAxNzYzZjYiLCJleHAiOjQwODI3NTgwNjEsImlhdCI6MTc3OTA3NDg2MSwibm9uY2UiOiJkUmVaQl9WZ1NVNldnV3lKU1ZWUFdBIiwiYXRfaGFzaCI6ImRSZVpCX1ZnU1U2V2dXeUpTVlZQV0EiLCJuYW1lIjoiQW5vbnltb3VzIiwic2NvcGUiOiJhbm9ueW1vdXMiLCJwcm9qZWN0X2lkIjoidGVzdDIzNC1kMGc1ejlxeWFlMDE3NjNmNiIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJ1c2VyX3R5cGUiOiIiLCJjbGllbnRfdHlwZSI6ImNsaWVudF91c2VyIiwiaXNfc3lzdGVtX2FkbWluIjpmYWxzZX0.UdDiUQFnMxgUKtRCGoEJ0sr3j4fhghteR7w_W5bhzA_XiQA_5CMQ0Ll7KJHKNZturgQMYyxCZXjdBSsUGx9FRTuk8m_Qe3Tlg7uYZjcex8J2189Qh_5X9tYEEHajx_jY2973zNyUU7H7Afb_FQsN_TKtM13358-4xZP2obJhtvDTywaqgtlS950Aw1ZPPCxT3l8UdqCDLqb1txnTLmO5wGnJfLMeHb-HDvw4FLYVeIpc1gK3zxA7D7mRDhO_ssosimP9jRWIA7EU6rY6PpW6vHsm9CL40GrXVGieGxe3rvglsYd0uk1qupXo0lqKrHwu10IzJuw5bUXFaD5_p30qTA',
-    auth: { detectSessionInUrl: true }
-});
-// 创建 auth 实例可让 SDK 使用 Publishable Key 调用云函数；不依赖匿名登录开关
-const tcbAuth = tcb.auth({ persistence: 'local' });
-function ensureTcbAuth() {
-    return tcbAuth.getSession().catch(() => null);
-}
 
 // V3.5.20-1: Direct icon imports for better performance (eliminates wrapper overhead)
 import {
@@ -98,63 +86,7 @@ import {
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
 
-const LEGACY_LOCAL_STORAGE_PREFIX = 'tapnow_';
-const CURRENT_LOCAL_STORAGE_PREFIX = 'studio_';
-
-const normalizeLocalStorageKey = (key) => {
-    const rawKey = String(key || '');
-    return rawKey.startsWith(LEGACY_LOCAL_STORAGE_PREFIX)
-        ? `${CURRENT_LOCAL_STORAGE_PREFIX}${rawKey.slice(LEGACY_LOCAL_STORAGE_PREFIX.length)}`
-        : rawKey;
-};
-
-const installStudioLocalStorageAlias = () => {
-    if (typeof window === 'undefined' || !window.localStorage || window.__studioLocalStorageAliasInstalled) return;
-    window.__studioLocalStorageAliasInstalled = true;
-    try {
-        const storage = window.localStorage;
-        const StorageProto = Object.getPrototypeOf(storage);
-        const originalGetItem = StorageProto.getItem;
-        const originalSetItem = StorageProto.setItem;
-        const originalRemoveItem = StorageProto.removeItem;
-
-        const legacyKeys = [];
-        for (let index = 0; index < storage.length; index += 1) {
-            const key = storage.key(index);
-            if (key && key.startsWith(LEGACY_LOCAL_STORAGE_PREFIX)) legacyKeys.push(key);
-        }
-        legacyKeys.forEach((legacyKey) => {
-            const nextKey = normalizeLocalStorageKey(legacyKey);
-            const legacyValue = originalGetItem.call(storage, legacyKey);
-            if (legacyValue !== null && originalGetItem.call(storage, nextKey) === null) {
-                originalSetItem.call(storage, nextKey, legacyValue);
-            }
-            originalRemoveItem.call(storage, legacyKey);
-        });
-
-        StorageProto.getItem = function (key) {
-            if (this !== storage) return originalGetItem.call(this, key);
-            const nextKey = normalizeLocalStorageKey(key);
-            const value = originalGetItem.call(this, nextKey);
-            if (value !== null || nextKey === String(key || '')) return value;
-            return originalGetItem.call(this, key);
-        };
-        StorageProto.setItem = function (key, value) {
-            if (this !== storage) return originalSetItem.call(this, key, value);
-            return originalSetItem.call(this, normalizeLocalStorageKey(key), value);
-        };
-        StorageProto.removeItem = function (key) {
-            if (this !== storage) return originalRemoveItem.call(this, key);
-            const nextKey = normalizeLocalStorageKey(key);
-            originalRemoveItem.call(this, nextKey);
-            if (nextKey !== String(key || '')) originalRemoveItem.call(this, key);
-        };
-    } catch (error) {
-        console.warn('[StudioStorage] localStorage prefix migration failed:', error);
-    }
-};
-
-installStudioLocalStorageAlias();
+// VodStudio: 存储 key 统一使用 `vodstudio_` 前缀，不再做 vodstudio_/studio_ 兼容迁移。
 
 // --- MaskVisualFeedback 组件：蒙版视觉反馈层 ---
 const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
@@ -220,7 +152,7 @@ const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
 // --- V3.5.16: LocalImageManager - IndexedDB-based image storage ---
 // Replaces localStorage Base64 storage with IndexedDB for better performance and larger capacity
 const LocalImageManager = (() => {
-    const DB_NAME = 'tapnow_images_db';
+    const DB_NAME = 'vodstudio_images_db';
     const DB_VERSION = 1;
     const STORE_NAME = 'images';
     let dbInstance = null;
@@ -1026,7 +958,7 @@ const HistoryItem = memo(({
             selectedIndex
         };
         e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('application/x-tapnow-history', JSON.stringify(payload));
+        e.dataTransfer.setData('application/x-vodstudio-history', JSON.stringify(payload));
         e.dataTransfer.setData('text/uri-list', dragUrl);
         e.dataTransfer.setData('text/plain', dragUrl);
     };
@@ -2012,6 +1944,31 @@ const buildVodCustomParamsWithSelection = (type, modelName, modelVersion) => {
     });
 };
 
+const normalizeVodKlingVersion = (version) => String(version || '').trim().toLowerCase().replace('omini', 'omni');
+
+const getVodKlingReferenceFeature = (modelName, modelVersion) => {
+    if (String(modelName || '').trim().toLowerCase() !== 'kling') return '';
+    const version = normalizeVodKlingVersion(modelVersion);
+    if (version === '3.0') return 'firstLastFrame';
+    if (version === '3.0-omni') return 'multiReference';
+    if (version === 'o1') return 'subjectReference';
+    return '';
+};
+
+const parseVodKlingSubjectInfos = (raw) => {
+    return String(raw || '')
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+            const [idPart, ...nameParts] = line.split(/[|,，]/).map((part) => part.trim());
+            const id = idPart || '';
+            const name = nameParts.join('').trim();
+            return id ? { Id: id, ...(name ? { Name: name } : {}) } : null;
+        })
+        .filter(Boolean);
+};
+
 // V3.6.0: 模型配置（简化版 - id 即 modelName，无 displayName）
 const DEFAULT_API_CONFIGS = [
     // TokenHub Chat Model
@@ -2050,7 +2007,7 @@ const DEFAULT_API_CONFIGS = [
 const RATIOS = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
 const GROK_VIDEO_RATIOS = ['3:2', '2:3', '1:1'];
 const VIDEO_RES_OPTIONS = ['1080P', '720P'];
-const PROMPT_LIBRARY_KEY = 'tapnow_prompt_library';
+const PROMPT_LIBRARY_KEY = 'vodstudio_prompt_library';
 const GRID_PROMPT_TEXT = `基于我上传的这张参考图，生成一张九宫格（3x3 grid）布局的分镜脚本。请严格保持角色与参考图一致（Keep character strictly consistent），但在9个格子中展示该角色不同的动作、表情和拍摄角度（如正面、侧面、背面、特写等）。要求风格高度统一，形成一张完整的角色动态表（Character Sheet）。`;
 const UPSCALE_PROMPT_TEXT = `请对参考图片进行无损高清放大（Upscale）。请严格保持原图的构图、色彩、光影和所有细节元素不变，不要进行任何创造性的重绘或添加新内容。仅专注于提升分辨率、锐化边缘（Sharpening）和去除噪点（Denoising），实现像素级的高清修复。Best quality, 8k, masterpiece, highres, ultra detailed, sharp focus, image restoration, upscale, faithful to original.`;
 const STORYBOARD_PROMPT_TEXT = `you are a veteran Hollywood storyboard artist with years of experience. You have the ability to accurately analyze character features and scene characteristics based on images. Provide me with the most suitable camera angles and storyboards. Strictly base this on the uploaded character and scene images, while maintaining a consistent visual style.
@@ -2145,7 +2102,6 @@ const DELETED_MODEL_IDS = [
 ];
 const REMOVED_PROVIDER_KEYS = ['yunwu'];
 const isRemovedProviderKey = (providerKey) => REMOVED_PROVIDER_KEYS.includes(String(providerKey || '').trim());
-const TOKENHUB_VISIBLE_MODEL_IDS = [DEFAULT_TOKENHUB_MODEL_ID];
 const SETTINGS_PROVIDER_KEYS = [TOKENHUB_PROVIDER_KEY, TENCENT_VOD_PROVIDER_KEY];
 const isSettingsProviderVisible = (providerKey) => SETTINGS_PROVIDER_KEYS.includes(String(providerKey || '').trim());
 const isSettingsProviderFixed = (providerKey) => isSettingsProviderVisible(providerKey);
@@ -2154,9 +2110,6 @@ const getSettingsProviderDisplayName = (providerKey, fallback = '') => (
 );
 const getSettingsProviderModels = (providerKey, models = []) => {
     const list = Array.isArray(models) ? models : [];
-    if (providerKey === TOKENHUB_PROVIDER_KEY) {
-        return list.filter((item) => TOKENHUB_VISIBLE_MODEL_IDS.includes(String(item?.id || item?.modelName || '').trim()));
-    }
     if (providerKey === TENCENT_VOD_PROVIDER_KEY) {
         return list.filter((item) => !!getVodConfigType(item));
     }
@@ -2285,7 +2238,7 @@ const materializeStoryboardOutputFromSnapshot = (snapshot, currentShot) => {
 };
 const isStoryboardDebugEnabled = () => {
     try {
-        return localStorage.getItem('tapnow_debug_storyboard') === '1';
+        return localStorage.getItem('vodstudio_debug_storyboard') === '1';
     } catch (e) {
         return false;
     }
@@ -2407,7 +2360,7 @@ const IMAGE_BATCH_MODE_STANDARD_BATCH = 'standard_batch';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_AUTO = 'auto';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_FORCE = 'force_native';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_DISABLE = 'disable_native';
-const NATIVE_MULTI_IMAGE_CAPABILITY_STORAGE_KEY = 'tapnow_native_multi_image_capabilities';
+const NATIVE_MULTI_IMAGE_CAPABILITY_STORAGE_KEY = 'vodstudio_native_multi_image_capabilities';
 const NODE_IO_ENVELOPE_VERSION = '1.0';
 const TRANSPORT_HTTP_JSON = 'http-json';
 const TRANSPORT_HTTP_SSE = 'http-sse';
@@ -2601,7 +2554,7 @@ const stripValueNotes = (value) => {
         .trim();
 };
 const normalizeJimengVideoRatio = (value, options = {}) => {
-    const defaultRatio = options.defaultRatio ? String(options.defaultRatio) : '1:1';
+    const defaultRatio = options.defaultRatio ? String(options.defaultRatio) : '16:9';
     const allowed = Array.isArray(options.allowedRatios)
         ? new Set(options.allowedRatios.map((item) => String(item).toLowerCase()))
         : null;
@@ -2678,33 +2631,86 @@ const isChatPanelSelectableModel = (model) => {
 const MAX_CUSTOM_PARAMS = 30;
 const DEFAULT_IMAGE_DISPATCH_INTERVAL_SECONDS = 2;
 const INTERNAL_CUSTOM_PARAM_NAMES = new Set([
-    'tapnow_image_concurrency',
-    'tapnow_concurrency',
+    'vodstudio_image_concurrency',
+    'vodstudio_concurrency',
     'image_concurrency'
 ]);
-const DEFAULT_STORYBOARD_SCRIPT_PROMPT = `你是一个分镜脚本分析专家。请将用户提供的脚本按镜头拆分，每个镜头生成一个简洁的画面描述提示词。
-输出格式为 JSON 数组: [{"prompt": "镜头1的画面描述"}, {"prompt": "镜头2的画面描述"}, ...]
-只输出 JSON，不要其他内容。`;
-const DEFAULT_STORYBOARD_NOVEL_PROMPT = `你是影视分镜策划师。请把用户提供的小说/剧情文本拆分成镜头列表，每个镜头输出一句可直接用于生图/生视频的画面提示词。
+const DEFAULT_STORYBOARD_SCRIPT_PROMPT_IMAGE = `你是分镜生图导演。请将用户脚本拆成“图片分镜卡片”，数量要细、密、完整，明显多于视频卡片。
 要求：
-1) 保留剧情顺序与关键动作；
-2) 每个镜头一条，避免空话；
-3) 输出格式必须是 JSON 数组: [{"prompt":"..."}, ...]
+1) 按视觉节拍拆分，一个动作过程可拆成多个静态画面：场景图、角色表情、动作关键帧、首帧、尾帧、转场帧；
+2) 每个图片卡片只描述一个清晰静态画面，可直接用于生图、首尾帧或作为视频参考图；
+3) 不要合并多个动作到一张图片；同一视频场景可以对应多张图片卡片；
+4) 输出 JSON 数组：[{"description":"静态画面说明","image_prompt":"用于生图的细节提示词","video_scene_index":1,"frame_role":"首帧/尾帧/场景图/关键帧"}, ...]
 只输出 JSON，不要其他内容。`;
-const DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT = `你是影视分镜导演和表格编剧。请根据用户提供的小说/剧情文本，按剧情顺序拆成可执行的分镜 Markdown 表格。
+const DEFAULT_STORYBOARD_SCRIPT_PROMPT_VIDEO = `你是分镜视频导演。请将用户脚本拆成“视频场景卡片”，数量要少于图片卡片，一个视频卡片应合并多个连续图片分镜的内容。
+要求：
+1) 按视频段落/场景/连续动作拆分，不要按每个静态画面拆；
+2) 每个视频卡片描述一个可直接生成的视频片段，包含连续动作、运镜、人物调度、对白/旁白、情绪变化和节奏；
+3) 在 source_image_indices 中写出建议由哪些图片分镜作为首帧/尾帧/参考图，例如 "1-3"、"4,5,6"；
+4) 输出 JSON 数组：[{"description":"视频场景说明","video_prompt":"用于直接生视频的动态提示词","source_image_indices":"1-3","dialogue":"台词或旁白"}, ...]
+只输出 JSON，不要其他内容。`;
+const DEFAULT_STORYBOARD_NOVEL_PROMPT_IMAGE = `你是影视分镜图导演。请把小说/剧情文本拆成“小说转分镜图”的图片分镜卡片，必须细化到各个场景、镜头、动作关键帧，数量要细、密、完整，通常是视频片段数量的 2-5 倍。
+要求：
+1) 严格保留剧情顺序，按场景变化、人物调度、表情变化、动作起落、首帧/尾帧/转场帧拆分，不要把多个镜头合成一张图；
+2) 每个卡片只描述一个清晰静态画面，可直接用于分镜图、生图、首尾帧或参考图，禁止写连续动作的视频生成语言；
+3) 每个卡片强调主体、构图、景别、单帧运镜意图、场景、光线、服装、道具、人物表情和画面细节；
+4) 同一连续视频场景可拆出多张图片，并用 video_scene_index 标注它归属的视频场景，用 frame_role 标注“首帧/尾帧/场景图/人物特写/动作关键帧/转场帧”；
+5) 输出 JSON 数组：[{"description":"静态画面说明","image_prompt":"用于生图的详细提示词","video_scene_index":1,"frame_role":"首帧/尾帧/场景图/关键帧","shotSize":"景别","camera":"运镜","action":"人物动作","emotion":"人物情绪","dialogue":"台词或旁白"}, ...]
+只输出 JSON，不要其他内容。`;
+const DEFAULT_STORYBOARD_NOVEL_PROMPT_VIDEO = `你是影视分镜视频策划师。请把小说/剧情文本拆成“小说转视频”的生视频提示词卡片，每个卡片都是视频模型一次可生成的连续片段。
+要求：
+1) 按连贯场景和连续动作拆分，优先拆成 5 秒或 10 秒片段；长段落要按“1-5秒、6-10秒……”继续拆分；
+2) 每个卡片必须包含人物/角色、所在场景、连续动作、运镜、台词、表情、情绪变化、独白/旁白和节奏；
+3) video_prompt 要像视频生成提示词，可直接描述“第几秒到第几秒，人物在什么场景下做什么动作、说什么话、露出什么表情”；
+4) source_image_indices 标注建议合并使用的图片分镜编号范围，例如 "1-4"；
+5) 输出 JSON 数组：[{"description":"视频场景说明","video_prompt":"1-5秒，...","source_image_indices":"1-4","dialogue":"台词或旁白","duration":"5s","shotSize":"景别","camera":"运镜","action":"连续动作","emotion":"人物情绪"}, ...]
+只输出 JSON，不要其他内容。`;
+const DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT_IMAGE = `你是影视分镜图导演和表格编剧。请根据小说/剧情文本生成“小说转分镜图 Markdown 表格”。
 要求：
 1) 只输出 Markdown 表格，不要解释、不要代码块；
-2) 表头必须使用：| 场次镜号 | 时长 | 景别 | 运镜 | 场景描述 | 人物动作 | 生图提示词 | 人物情绪 | 台词和旁白 | 参考画面 | 音频音效 | BGM段落 | 场景图 | 人物图 | 合成图 | 片段视频 |；
-3) 每一行对应一个镜头，场次镜号从 1 开始递增；
-4) 生图提示词要具体、可直接用于生图/生视频，包含主体、动作、场景、镜头语言、光线和氛围；
-5) 没有信息的列留空，不要编造无关设定。`;
-const DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT = `你是影视分镜提示词整合专家。请基于用户提供的分镜表逐行生成可直接用于生图/生视频的镜头提示词。
+2) 图片分镜必须细化到各个场景镜头，一个动作过程可拆成场景图、人物特写、动作关键帧、首帧、尾帧、转场帧；
+3) 表头必须使用：| 图片镜号 | 所属视频场景 | 画面类型 | 景别 | 运镜 | 场景描述 | 人物动作 | 人物情绪 | 台词和旁白 | 生图提示词 | 参考画面 | 音频音效 | BGM段落 | 场景图 | 人物图 | 合成图 |；
+4) 生图提示词必须是静态单帧画面提示词，偏分镜图/首尾帧/场景图，包含主体、构图、场景、光线、服装、道具、表情和画面细节，不要写“第几秒”“连续动作”等视频动态语言；
+5) 同一视频场景下的多张图片要在“所属视频场景”中保持连续编号；没有信息的列留空，不要编造无关设定。`;
+const DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT_VIDEO = `你是影视分镜视频导演和表格编剧。请根据小说/剧情文本生成“小说转视频 Markdown 表格”，核心产物是可直接给视频模型使用的生视频提示词。
 要求：
-1) 每一行输出一条提示词，必须保持与 scene_index 一一对应；
-2) 提示词应综合景别、运镜、场景描述、人物动作、情绪、台词等字段；
-3) 不要输出解释；
-4) 仅输出 JSON 数组，格式:
-[{"scene_index":1,"prompt":"..."},{"scene_index":2,"prompt":"..."}]`;
+1) 只输出 Markdown 表格，不要解释、不要代码块；
+2) 按连贯场景依次拆分，每一行是视频模型一次可生成的片段，优先 5 秒或 10 秒；长场景必须拆成“1-5秒、6-10秒……”这样的连续小段；
+3) 表头必须使用：| 视频场次 | 合并图片镜号 | 时长 | 景别 | 运镜 | 视频场景描述 | 连续动作 | 人物情绪 | 台词和旁白 | 生视频提示词 | 首帧建议 | 尾帧建议 | 参考图建议 | 音频音效 | BGM段落 | 片段视频 |；
+4) “生视频提示词”必须写清：第几秒到第几秒，人物/角色在什么场景下，做什么动作，说什么话，什么表情，什么情绪变化，是否有独白/旁白，以及镜头如何运动；
+5) “时长”只能填 5s 或 10s；“合并图片镜号”填写建议由哪些分镜图作为首帧、尾帧或参考图，例如 1-3、4-6；
+6) 相邻视频场次要保持剧情和动作连续，不要跳跃，不要生成无法衔接的孤立片段。`;
+const DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT_IMAGE = `你是影视分镜生图提示词整合专家。请基于用户提供的分镜表逐行生成“图片分镜提示词”。
+要求：
+1) 每一行输出一个 image_prompt，必须保持与 scene_index 一一对应；
+2) image_prompt 偏静态镜头画面，用于分镜图、首尾帧、场景图；
+3) 不要合并多行，不要输出视频提示词；
+4) 仅输出 JSON 数组，格式：[{"scene_index":1,"image_prompt":"..."},{"scene_index":2,"image_prompt":"..."}]`;
+const DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT_VIDEO = `你是影视分镜视频提示词整合专家。请基于用户提供的视频场景表逐行生成“生视频提示词”。
+要求：
+1) 每一行输出一个 video_prompt，必须保持与 scene_index 一一对应；
+2) video_prompt 偏动态视频生成，综合合并图片镜号、运镜、连续动作、人物、场景、台词/旁白、表情、独白、情绪和节奏；
+3) 每条提示词要适合 5s 或 10s 视频模型一次生成，按“1-5秒/6-10秒……”描述人物在什么场景下做什么动作、说什么话、什么表情和镜头如何运动；
+4) 不要拆成图片分镜，不要输出生图提示词；
+5) 仅输出 JSON 数组，格式：[{"scene_index":1,"video_prompt":"1-5秒，...","duration":"5s"},{"scene_index":2,"video_prompt":"6-10秒，...","duration":"5s"}]`;
+// VodStudio 两阶段分镜：同一条镜头同时产出「静态图片提示词」与「动态视频提示词」，
+// 供「① 生成分镜图片」与「② 生成视频片段」两个子功能分别使用。
+const DEFAULT_STORYBOARD_SCRIPT_PROMPT_DUAL = `你是分镜导演。请将用户脚本拆成一组镜头卡片，每个卡片同时给出「静态图片提示词」和「动态视频提示词」。
+要求：
+1) 按镜头/场景顺序拆分，每个卡片是一个连贯镜头单元，可先据此生成分镜图、再据此生成视频片段；
+2) image_prompt 偏静态单帧画面，用于生图/首尾帧/参考图：强调主体、构图、景别、场景、光线、服装、道具、人物表情和画面细节，不要写"第几秒""连续动作"等动态语言；
+3) video_prompt 偏动态视频生成：在该静态画面基础上描述连续动作、运镜、人物调度、台词/旁白、表情与情绪变化、节奏，适合 5s 或 10s 视频模型一次生成；
+4) 同一卡片的 image_prompt 与 video_prompt 必须描述同一镜头、同一角色与同一场景，保持一致；
+5) 输出 JSON 数组：[{"description":"画面/场景说明","image_prompt":"静态生图提示词","video_prompt":"动态生视频提示词","frame_role":"场景图/首帧/尾帧/关键帧","shotSize":"景别","camera":"运镜","action":"连续动作","emotion":"人物情绪","dialogue":"台词或旁白"}, ...]
+只输出 JSON，不要其他内容。`;
+const DEFAULT_STORYBOARD_NOVEL_PROMPT_DUAL = `你是影视分镜导演。请把小说/剧情文本拆成一组镜头卡片，严格保留剧情顺序，每个卡片同时给出「静态图片提示词」和「动态视频提示词」。
+要求：
+1) 按场景变化、人物调度、动作起落依次拆分，每个卡片是一个可独立生成的镜头单元；
+2) image_prompt 必须是静态单帧画面提示词，偏分镜图/首尾帧/场景图，强调主体、构图、景别、场景、光线、服装、道具、人物表情和画面细节，禁止写连续动作的视频生成语言；
+3) video_prompt 必须是动态视频提示词：在同一画面基础上描述"第几秒到第几秒，人物在什么场景下做什么动作、说什么话、什么表情、情绪如何变化、镜头如何运动"，适合 5s 或 10s 片段；
+4) 同一卡片的 image_prompt 与 video_prompt 必须对应同一镜头、同一角色与同一场景；
+5) 输出 JSON 数组：[{"description":"场景说明","image_prompt":"静态生图提示词","video_prompt":"动态生视频提示词","frame_role":"场景图/首帧/尾帧/关键帧","shotSize":"景别","camera":"运镜","action":"连续动作","emotion":"人物情绪","dialogue":"台词或旁白","duration":"5s"}, ...]
+只输出 JSON，不要其他内容。`;
 const STORYBOARD_TABLE_PROMPT_MODE = 'table_summary';
 const STORYBOARD_LLM_SPLIT_MODES = ['script', 'novel', 'custom'];
 const STORYBOARD_LLM_PROMPT_MODES = [...STORYBOARD_LLM_SPLIT_MODES, STORYBOARD_TABLE_PROMPT_MODE];
@@ -2716,24 +2722,43 @@ const STORYBOARD_PROMPT_SLOT_OPTIONS = [
 const STORYBOARD_EDITABLE_PROMPT_SLOT_KEYS = STORYBOARD_PROMPT_SLOT_OPTIONS
     .filter((item) => item.editable)
     .map((item) => item.key);
-const STORYBOARD_DEFAULT_TABLE_HEADERS = [
-    '场次镜号',
-    '时长',
+const STORYBOARD_IMAGE_TABLE_HEADERS = [
+    '图片镜号',
+    '所属视频场景',
+    '画面类型',
     '景别',
     '运镜',
     '场景描述',
     '人物动作',
-    '生图提示词',
     '人物情绪',
     '台词和旁白',
+    '生图提示词',
     '参考画面',
     '音频音效',
     'BGM段落',
     '场景图',
     '人物图',
-    '合成图',
+    '合成图'
+];
+const STORYBOARD_VIDEO_TABLE_HEADERS = [
+    '视频场次',
+    '合并图片镜号',
+    '时长',
+    '景别',
+    '运镜',
+    '视频场景描述',
+    '连续动作',
+    '人物情绪',
+    '台词和旁白',
+    '生视频提示词',
+    '首帧建议',
+    '尾帧建议',
+    '参考图建议',
+    '音频音效',
+    'BGM段落',
     '片段视频'
 ];
+const STORYBOARD_DEFAULT_TABLE_HEADERS = STORYBOARD_IMAGE_TABLE_HEADERS;
 const STORYBOARD_DEFAULT_MODE = 'image';
 const STORYBOARD_VIEW_MODES = ['cards', 'table'];
 const STORYBOARD_DEFAULT_VIEW_MODE = 'cards';
@@ -2748,6 +2773,21 @@ const normalizeStoryboardWorkspaceHeight = (value, fallback = STORYBOARD_WORKSPA
 const MAX_CUSTOM_PARAM_VALUES = 50;
 const COMPLETED_STATUS_SET = new Set(['completed', 'complete', 'success', 'succeeded', 'done', 'finished', 'ok']);
 const normalizeStoryboardMode = (mode) => (String(mode || '').toLowerCase() === 'video' ? 'video' : STORYBOARD_DEFAULT_MODE);
+const getStoryboardDefaultTableHeaders = (mode) => (
+    normalizeStoryboardMode(mode) === 'video'
+        ? [...STORYBOARD_VIDEO_TABLE_HEADERS]
+        : [...STORYBOARD_IMAGE_TABLE_HEADERS]
+);
+const getStoryboardModeTableDataKey = (mode) => (normalizeStoryboardMode(mode) === 'video' ? 'videoTableData' : 'imageTableData');
+const getStoryboardModeTableMarkdownKey = (mode) => (normalizeStoryboardMode(mode) === 'video' ? 'videoTableMarkdown' : 'imageTableMarkdown');
+const getStoryboardModeTableSource = (settings = {}, mode = STORYBOARD_DEFAULT_MODE) => {
+    const normalizedMode = normalizeStoryboardMode(mode);
+    const tableDataKey = getStoryboardModeTableDataKey(normalizedMode);
+    const tableMarkdownKey = getStoryboardModeTableMarkdownKey(normalizedMode);
+    const tableData = settings?.[tableDataKey] || (normalizeStoryboardMode(settings?.mode) === normalizedMode ? settings?.tableData : null);
+    const tableMarkdown = settings?.[tableMarkdownKey] || (normalizeStoryboardMode(settings?.mode) === normalizedMode ? settings?.tableMarkdown : '');
+    return { tableData, tableMarkdown, tableDataKey, tableMarkdownKey };
+};
 const normalizeStoryboardViewMode = (mode) => (
     STORYBOARD_VIEW_MODES.includes(String(mode || '').toLowerCase())
         ? String(mode).toLowerCase()
@@ -2892,9 +2932,105 @@ const includesStoryboardHeaderKeyword = (header, keywords = []) => {
     if (!normalized) return false;
     return keywords.some((keyword) => normalized.includes(String(keyword || '').toLowerCase().replace(/\s+/g, '')));
 };
-const getStoryboardTableShotColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['场次镜号', '镜头号', '镜号', 'scene', 'shot']));
-const getStoryboardTablePromptColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['生图提示词', '提示词', 'prompt']));
-const getStoryboardTableDescriptionColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['场景描述', '人物动作', '镜头描述', '描述', 'description']));
+const getStoryboardTableShotColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['场次镜号', '图片镜号', '视频场次', '场次', '镜头号', '镜号', 'scene', 'shot']));
+const getStoryboardTablePromptColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['生图提示词', '图片提示词', 'image_prompt', 'imageprompt']));
+const getStoryboardTableVideoPromptColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['生视频提示词', '视频提示词', '动态提示词', 'video_prompt', 'videoprompt']));
+const getStoryboardTableDescriptionColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['视频场景描述', '场景描述', '连续动作', '人物动作', '镜头描述', '描述', 'description']));
+const getStoryboardTableDurationColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['时长', 'duration']));
+const getStoryboardTableSourceImagesColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['合并图片镜号', '所属视频场景', 'source_image_indices', 'sourceimageindices']));
+const getStoryboardTableFrameRoleColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['画面类型', 'frame_role', 'framerole']));
+const getStoryboardTableDialogueColumnIndex = (headers = []) => headers.findIndex((header) => includesStoryboardHeaderKeyword(header, ['台词和旁白', '对白', '独白', 'dialogue', '旁白']));
+const normalizeStoryboardVideoDurationText = (value, fallback = '5s') => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return fallback;
+    if (raw.includes('10')) return '10s';
+    if (raw.includes('5')) return '5s';
+    const rangeMatch = raw.match(/(\d+(?:\.\d+)?)\s*[-~至到]\s*(\d+(?:\.\d+)?)/);
+    if (rangeMatch) {
+        const seconds = Math.max(0, Number(rangeMatch[2]) - Number(rangeMatch[1]));
+        return seconds > 5 ? '10s' : '5s';
+    }
+    const firstNumber = raw.match(/\d+(?:\.\d+)?/);
+    if (firstNumber) return Number(firstNumber[0]) > 5 ? '10s' : '5s';
+    return fallback;
+};
+const pickStoryboardPromptValue = (item, keys = []) => {
+    if (!item || typeof item !== 'object') return '';
+    for (const key of keys) {
+        const value = item[key];
+        if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+    return '';
+};
+const getStoryboardShotImagePrompt = (shot = {}) => String(shot.imagePrompt || shot.image_prompt || shot.prompt || shot.description || '').trim();
+const getStoryboardShotVideoPrompt = (shot = {}) => String(shot.videoPrompt || shot.video_prompt || shot.motionPrompt || shot.motion_prompt || shot.prompt || shot.description || '').trim();
+// 两阶段分镜·视频片段：在「动态视频提示词」基础上，把镜头的运镜、动作、情绪、对话/台词等
+// 结构化导演信息一并组合进最终视频生成提示词。图片(静态)生成不使用这些动态字段。
+const getStoryboardShotCamera = (shot = {}) => String(shot.camera || shot.运镜 || '').trim();
+const getStoryboardShotAction = (shot = {}) => String(shot.action || shot.人物动作 || shot.动作 || '').trim();
+const getStoryboardShotEmotion = (shot = {}) => String(shot.emotion || shot.人物情绪 || shot.情绪 || '').trim();
+const getStoryboardShotDialogue = (shot = {}) => String(shot.dialogue || shot.台词和旁白 || shot.对白 || shot.台词 || '').trim();
+const buildStoryboardVideoGenerationPrompt = (shot = {}) => {
+    const segments = [];
+    const base = getStoryboardShotVideoPrompt(shot);
+    if (base) segments.push(base);
+    const action = getStoryboardShotAction(shot);
+    const emotion = getStoryboardShotEmotion(shot);
+    const camera = getStoryboardShotCamera(shot);
+    const dialogue = getStoryboardShotDialogue(shot);
+    if (action) segments.push(`动作：${action}`);
+    if (emotion) segments.push(`情绪：${emotion}`);
+    if (camera) segments.push(`运镜：${camera}`);
+    if (dialogue) segments.push(`台词/对白：${dialogue}`);
+    return segments.join('；');
+};
+const buildStoryboardTableDataFromShots = (shots = [], mode = STORYBOARD_DEFAULT_MODE) => {
+    const storyboardMode = normalizeStoryboardMode(mode);
+    const headers = getStoryboardDefaultTableHeaders(storyboardMode);
+    const list = Array.isArray(shots) ? shots : [];
+    const rows = list.map((shot, idx) => {
+        const sceneIndex = String(shot?.scene_index || idx + 1);
+        if (storyboardMode === 'video') {
+            return [
+                sceneIndex,
+                String(shot?.sourceImageIndices || shot?.source_image_indices || ''),
+                normalizeStoryboardVideoDurationText(shot?.duration || shot?.time_range || '', '5s'),
+                String(shot?.shotSize || shot?.景别 || ''),
+                String(shot?.camera || ''),
+                String(shot?.description || ''),
+                String(shot?.action || shot?.人物动作 || ''),
+                String(shot?.emotion || shot?.人物情绪 || ''),
+                String(shot?.dialogue || shot?.台词和旁白 || ''),
+                getStoryboardShotVideoPrompt(shot),
+                String(shot?.firstFrameSuggestion || shot?.首帧建议 || ''),
+                String(shot?.lastFrameSuggestion || shot?.尾帧建议 || ''),
+                String(shot?.referenceSuggestion || shot?.参考图建议 || ''),
+                String(shot?.audio || shot?.音频音效 || ''),
+                String(shot?.bgm || shot?.BGM段落 || ''),
+                String(shot?.video_url || shot?.output_url || '')
+            ];
+        }
+        return [
+            sceneIndex,
+            String(shot?.videoSceneIndex || shot?.video_scene_index || ''),
+            String(shot?.frameRole || shot?.frame_role || ''),
+            String(shot?.shotSize || shot?.景别 || ''),
+            String(shot?.camera || ''),
+            String(shot?.description || ''),
+            String(shot?.action || shot?.人物动作 || ''),
+            String(shot?.emotion || shot?.人物情绪 || ''),
+            String(shot?.dialogue || shot?.台词和旁白 || ''),
+            getStoryboardShotImagePrompt(shot),
+            String(shot?.reference || shot?.参考画面 || ''),
+            String(shot?.audio || shot?.音频音效 || ''),
+            String(shot?.bgm || shot?.BGM段落 || ''),
+            String(shot?.sceneImage || shot?.场景图 || ''),
+            String(shot?.characterImage || shot?.人物图 || ''),
+            String(shot?.compositeImage || shot?.合成图 || '')
+        ];
+    });
+    return { headers, rows };
+};
 const normalizeStoryboardSceneIndex = (value, fallback = 1) => {
     const fallbackValue = Number.isFinite(Number(fallback)) && Number(fallback) > 0 ? Number(fallback) : 1;
     const raw = String(value ?? '').trim();
@@ -4217,11 +4353,11 @@ const getModelParams = (modelId, ratio, resolution) => {
     return { sizeStr: str, w, h };
 };
 
-const AUTOSAVE_LOCAL_KEY = 'tapnow_autosave';
-const AUTOSAVE_META_KEY = 'tapnow_autosave_meta';
-const AUTOSAVE_IDB_NAME = 'tapnow_autosave_db';
+const AUTOSAVE_LOCAL_KEY = 'vodstudio_autosave';
+const AUTOSAVE_META_KEY = 'vodstudio_autosave_meta';
+const AUTOSAVE_IDB_NAME = 'vodstudio_autosave_db';
 const AUTOSAVE_IDB_STORE = 'autosave';
-const ASSET_BUNDLE_META_KEY = 'tapnow_asset_bundle_meta';
+const ASSET_BUNDLE_META_KEY = 'vodstudio_asset_bundle_meta';
 
 let assetBundleMetaCache = null;
 const readAssetBundleMeta = () => {
@@ -4985,10 +5121,10 @@ const Lightbox = ({ item, onClose, onNavigate, onShotNavigate, onHistoryNavigate
     );
 };
 
-function TapnowApp() {
+function VodStudioApp() {
     const [theme, setTheme] = useState(() => {
         try {
-            return localStorage.getItem('tapnow_theme') || 'dark';
+            return localStorage.getItem('vodstudio_theme') || 'dark';
         } catch (e) {
             return 'dark';
         }
@@ -5047,7 +5183,7 @@ function TapnowApp() {
 
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_theme', theme);
+            localStorage.setItem('vodstudio_theme', theme);
         } catch (e) { }
         const root = document.documentElement;
         root.classList.remove('theme-dark', 'theme-light', 'theme-solarized');
@@ -5160,7 +5296,7 @@ function TapnowApp() {
                 return parsed.nodes || [];
             }
             // Compatible with legacy storage
-            const legacy = localStorage.getItem('tapnow_nodes');
+            const legacy = localStorage.getItem('vodstudio_nodes');
             return legacy ? JSON.parse(legacy) : [];
         } catch (e) { return []; }
     });
@@ -5174,7 +5310,7 @@ function TapnowApp() {
                 return parsed.connections || [];
             }
             // Compatible with legacy storage
-            const legacy = localStorage.getItem('tapnow_connections');
+            const legacy = localStorage.getItem('vodstudio_connections');
             return legacy ? JSON.parse(legacy) : [];
         } catch (e) { return []; }
     });
@@ -5198,7 +5334,7 @@ function TapnowApp() {
 
     // === V3.4.7: Undo/Redo 功能 (可配置步数) ===
     const [maxUndoSteps, setMaxUndoSteps] = useState(() => {
-        const saved = localStorage.getItem('tapnow_max_undo_steps');
+        const saved = localStorage.getItem('vodstudio_max_undo_steps');
         return saved ? Math.min(30, Math.max(1, parseInt(saved) || 5)) : 5;
     });
     const [undoStack, setUndoStack] = useState([]); // { nodes, connections }[]
@@ -5217,23 +5353,23 @@ function TapnowApp() {
     const shotBatchMapRef = useRef(new Map()); // key: nodeId:shotId -> { batchId, batchOrder, taskIndex }
     const [batchQueueMode, setBatchQueueMode] = useState(() => {
         try {
-            return localStorage.getItem('tapnow_batch_queue_mode') || 'parallel';
+            return localStorage.getItem('vodstudio_batch_queue_mode') || 'parallel';
         } catch (e) {
             return 'parallel';
         }
     });
     const [batchTick, setBatchTick] = useState(0); // Used to trigger next batch after cooldown
-    const [batchConcurrency, setBatchConcurrency] = useState(() => parseInt(localStorage.getItem('tapnow_batch_concurrency') || '1')); // Default 1
+    const [batchConcurrency, setBatchConcurrency] = useState(() => parseInt(localStorage.getItem('vodstudio_batch_concurrency') || '1')); // Default 1
     const pendingStartsRef = useRef(new Set()); // Track items that are starting but not yet 'generating' in nodes
     const batchStateRef = useRef('idle'); // 'idle' | 'running' | 'cooling'
 
     // Save batch concurrency to localStorage
     useEffect(() => {
-        localStorage.setItem('tapnow_batch_concurrency', batchConcurrency);
+        localStorage.setItem('vodstudio_batch_concurrency', batchConcurrency);
     }, [batchConcurrency]);
 
     useEffect(() => {
-        localStorage.setItem('tapnow_batch_queue_mode', batchQueueMode);
+        localStorage.setItem('vodstudio_batch_queue_mode', batchQueueMode);
     }, [batchQueueMode]);
 
     // 保存当前状态到撤销栈
@@ -5599,7 +5735,7 @@ function TapnowApp() {
     };
 
     const [modelLibrary, setModelLibrary] = useState(() => {
-        const saved = localStorage.getItem('tapnow_model_library');
+        const saved = localStorage.getItem('vodstudio_model_library');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
@@ -5618,7 +5754,7 @@ function TapnowApp() {
 });
     const collapsedLibraryStateLoadedRef = useRef(false);
     const [collapsedLibraryModels, setCollapsedLibraryModels] = useState(() => {
-        const saved = localStorage.getItem('tapnow_model_library_collapsed');
+        const saved = localStorage.getItem('vodstudio_model_library_collapsed');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
@@ -5634,7 +5770,7 @@ function TapnowApp() {
     });
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_model_library', JSON.stringify(modelLibrary));
+            localStorage.setItem('vodstudio_model_library', JSON.stringify(modelLibrary));
         } catch (e) {
             console.error('保存 modelLibrary 配置失败:', e);
         }
@@ -5660,7 +5796,7 @@ function TapnowApp() {
     useEffect(() => {
         try {
             const payload = Array.from(collapsedLibraryModels);
-            localStorage.setItem('tapnow_model_library_collapsed', JSON.stringify(payload));
+            localStorage.setItem('vodstudio_model_library_collapsed', JSON.stringify(payload));
         } catch (e) {
             console.error('保存模型库折叠状态失败:', e);
         }
@@ -5723,7 +5859,7 @@ function TapnowApp() {
     }, [getNativeMultiImageCapabilityKey]);
 
     const [apiConfigs, setApiConfigs] = useState(() => {
-        const saved = localStorage.getItem('tapnow_api_configs');
+        const saved = localStorage.getItem('vodstudio_api_configs');
 
         // V3.6.0: 如果有存量数据，直接使用（不再合并默认模型）
         if (saved) {
@@ -5806,7 +5942,7 @@ function TapnowApp() {
     // V3.4.18: 使用 _deleted 标记追踪删除的Provider
     const [providers, setProviders] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_providers');
+            const saved = localStorage.getItem('vodstudio_providers');
             if (saved) {
                 const parsed = JSON.parse(saved);
                 // 直接使用用户保存的数据，不再自动补充默认Provider
@@ -5830,7 +5966,7 @@ function TapnowApp() {
     // V3.3: 持久化 providers
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_providers', JSON.stringify(providers));
+            localStorage.setItem('vodstudio_providers', JSON.stringify(providers));
         } catch (e) {
             console.error('保存 providers 配置失败:', e);
         }
@@ -5918,12 +6054,12 @@ function TapnowApp() {
         };
     }, [apiConfigs, providers]);
 
-    const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('tapnow_global_key') || '');
+    const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('vodstudio_global_key') || '');
 
     // API 黑名单机制 (比照 Jimeng-api-tool 实现)
     const [apiBlacklist, setApiBlacklist] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_api_blacklist');
+            const saved = localStorage.getItem('vodstudio_api_blacklist');
             if (!saved) return {};
             const parsed = JSON.parse(saved);
             const today = new Date().toDateString();
@@ -5938,7 +6074,7 @@ function TapnowApp() {
     // 持久化黑名单
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_api_blacklist', JSON.stringify({
+            localStorage.setItem('vodstudio_api_blacklist', JSON.stringify({
                 date: new Date().toDateString(),
                 blacklist: apiBlacklist
             }));
@@ -5974,7 +6110,7 @@ function TapnowApp() {
     // V3.7.23: API 临时暂停列表（用于登录失效等可恢复错误，TTL 60分钟）
     const [apiSuspendList, setApiSuspendList] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_api_suspend');
+            const saved = localStorage.getItem('vodstudio_api_suspend');
             if (!saved) return {};
             const parsed = JSON.parse(saved);
             const now = Date.now();
@@ -5988,7 +6124,7 @@ function TapnowApp() {
     // 持久化暂停列表
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_api_suspend', JSON.stringify(apiSuspendList));
+            localStorage.setItem('vodstudio_api_suspend', JSON.stringify(apiSuspendList));
         } catch (e) { }
     }, [apiSuspendList]);
 
@@ -6026,7 +6162,7 @@ function TapnowApp() {
 
     // 即梦图生图使用本地文件设置（默认true，强制使用本地文件而不是URL）
     const [jimengUseLocalFile, setJimengUseLocalFile] = useState(() => {
-        const saved = localStorage.getItem('tapnow_jimeng_use_local_file');
+        const saved = localStorage.getItem('vodstudio_jimeng_use_local_file');
         return saved !== null ? saved === 'true' : true; // 默认true
     });
 
@@ -6034,12 +6170,12 @@ function TapnowApp() {
     const [projectName, setProjectName] = useState(() => {
         try {
             // 如果没有保存的节点，说明是新项目，强制显示"未命名项目"
-            const savedNodes = localStorage.getItem('tapnow_nodes');
+            const savedNodes = localStorage.getItem('vodstudio_nodes');
             if (!savedNodes || JSON.parse(savedNodes).length === 0) {
-                localStorage.removeItem('tapnow_project_name');
+                localStorage.removeItem('vodstudio_project_name');
                 return '未命名项目';
             }
-            const saved = localStorage.getItem('tapnow_project_name');
+            const saved = localStorage.getItem('vodstudio_project_name');
             return saved || '未命名项目';
         } catch (e) {
             return '未命名项目';
@@ -6062,13 +6198,13 @@ function TapnowApp() {
     // ultra: 极速 (缩略图质量 0.3)
     const [performanceMode, setPerformanceMode] = useState(() => {
         try {
-            const savedHistory = localStorage.getItem('tapnow_history_performance_mode');
+            const savedHistory = localStorage.getItem('vodstudio_history_performance_mode');
             if (savedHistory !== null) {
                 if (savedHistory === 'true') return 'normal';
                 if (savedHistory === 'false') return 'off';
                 return savedHistory || 'off';
             }
-            return localStorage.getItem('tapnow_performance_mode') || 'off';
+            return localStorage.getItem('vodstudio_performance_mode') || 'off';
         } catch (e) {
             return 'off';
         }
@@ -6076,14 +6212,14 @@ function TapnowApp() {
     // 全局性能模式（与历史面板独立）
     const [globalPerformanceMode, setGlobalPerformanceMode] = useState(() => {
         try {
-            return localStorage.getItem('tapnow_global_performance_mode') || 'off';
+            return localStorage.getItem('vodstudio_global_performance_mode') || 'off';
         } catch (e) {
             return 'off';
         }
     });
     const [aigcStorageMode, setAigcStorageMode] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_aigc_storage_mode');
+            const saved = localStorage.getItem('vodstudio_aigc_storage_mode');
             return saved === 'Permanent' ? 'Permanent' : 'Temporary';
         } catch (e) {
             return 'Temporary';
@@ -6092,7 +6228,7 @@ function TapnowApp() {
 
     // V2.6.1 Feature: 本地服务器 URL
     const [localServerUrl, setLocalServerUrl] = useState(() => {
-        const saved = localStorage.getItem('tapnow_local_server_url') || '';
+        const saved = localStorage.getItem('vodstudio_local_server_url') || '';
         if (!saved || saved.includes(CLOUD_FUNCTION_PROXY_LEGACY_URL) || saved.includes('app.tcloudbase.com') || saved.includes('tcloudbaseapp.com')) {
             return LOCAL_PROXY_DEFAULT_URL;
         }
@@ -6103,9 +6239,9 @@ function TapnowApp() {
     const [localCacheServerConnected, setLocalCacheServerConnected] = useState(false);
     const [localCacheEnabled, setLocalCacheEnabled] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_local_cache_enabled');
+            const saved = localStorage.getItem('vodstudio_local_cache_enabled');
             if (saved !== null) return saved === 'true';
-            const legacy = localStorage.getItem('tapnow_show_local_cache_banner');
+            const legacy = localStorage.getItem('vodstudio_show_local_cache_banner');
             return legacy === null ? true : legacy === 'true';
         } catch (e) {
             return true;
@@ -6113,14 +6249,14 @@ function TapnowApp() {
     });
     const [cacheRedownloadOnEnable, setCacheRedownloadOnEnable] = useState(() => {
         try {
-            return localStorage.getItem('tapnow_cache_redownload_on_enable') === 'true';
+            return localStorage.getItem('vodstudio_cache_redownload_on_enable') === 'true';
         } catch (e) {
             return false;
         }
     });
     const [saveHistoryAssets, setSaveHistoryAssets] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_save_history_assets');
+            const saved = localStorage.getItem('vodstudio_save_history_assets');
             if (saved === null) return true;
             return saved === 'true';
         } catch (e) {
@@ -6136,7 +6272,7 @@ function TapnowApp() {
     };
     const [historySaveLimit, setHistorySaveLimit] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_history_limit');
+            const saved = localStorage.getItem('vodstudio_history_limit');
             if (saved === null) return 80;
             return normalizeHistorySaveLimit(saved);
         } catch (e) {
@@ -6310,8 +6446,8 @@ function TapnowApp() {
         if (!base || !expectedId) return '';
         if (!localCacheIndexReadyRef.current) return '';
         const segments = [
-            preferHistoryPath ? 'history' : '.tapnow_cache/history',
-            preferHistoryPath ? '.tapnow_cache/history' : 'history'
+            preferHistoryPath ? 'history' : '.vodstudio_cache/history',
+            preferHistoryPath ? '.vodstudio_cache/history' : 'history'
         ];
         const candidates = [];
         segments.forEach((seg) => {
@@ -6357,15 +6493,15 @@ function TapnowApp() {
 
     // 持久化性能模式和本地服务器设置
     useEffect(() => {
-        localStorage.setItem('tapnow_performance_mode', performanceMode);
-        localStorage.setItem('tapnow_history_performance_mode', performanceMode);
+        localStorage.setItem('vodstudio_performance_mode', performanceMode);
+        localStorage.setItem('vodstudio_history_performance_mode', performanceMode);
     }, [performanceMode]);
     useEffect(() => {
-        localStorage.setItem('tapnow_save_history_assets', String(saveHistoryAssets));
+        localStorage.setItem('vodstudio_save_history_assets', String(saveHistoryAssets));
     }, [saveHistoryAssets]);
     useEffect(() => {
         try {
-            localStorage.setItem('tapnow_history_limit', String(historySaveLimit));
+            localStorage.setItem('vodstudio_history_limit', String(historySaveLimit));
         } catch (e) { }
     }, [historySaveLimit]);
 
@@ -6413,20 +6549,20 @@ function TapnowApp() {
     }, []);
 
     useEffect(() => {
-        localStorage.setItem('tapnow_global_performance_mode', globalPerformanceMode);
+        localStorage.setItem('vodstudio_global_performance_mode', globalPerformanceMode);
     }, [globalPerformanceMode]);
     useEffect(() => {
-        localStorage.setItem('tapnow_aigc_storage_mode', aigcStorageMode);
+        localStorage.setItem('vodstudio_aigc_storage_mode', aigcStorageMode);
     }, [aigcStorageMode]);
 
     useEffect(() => {
-        localStorage.setItem('tapnow_local_server_url', localServerUrl);
+        localStorage.setItem('vodstudio_local_server_url', localServerUrl);
     }, [localServerUrl]);
     useEffect(() => {
-        try { localStorage.setItem('tapnow_local_cache_enabled', String(localCacheEnabled)); } catch (e) { }
+        try { localStorage.setItem('vodstudio_local_cache_enabled', String(localCacheEnabled)); } catch (e) { }
     }, [localCacheEnabled]);
     useEffect(() => {
-        try { localStorage.setItem('tapnow_cache_redownload_on_enable', String(cacheRedownloadOnEnable)); } catch (e) { }
+        try { localStorage.setItem('vodstudio_cache_redownload_on_enable', String(cacheRedownloadOnEnable)); } catch (e) { }
     }, [cacheRedownloadOnEnable]);
     useEffect(() => {
         if (!localCacheActive) {
@@ -6524,7 +6660,7 @@ function TapnowApp() {
 
     const [history, setHistory] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_history');
+            const saved = localStorage.getItem('vodstudio_history');
             if (!saved) return [];
             const parsed = JSON.parse(saved);
             // 检查是否有需要重新切割的Midjourney图片 + 修复 blob/asset 残留
@@ -6592,7 +6728,7 @@ function TapnowApp() {
     // V3.4.12: 自动保存配置
     const [autoSaveConfig, setAutoSaveConfig] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_auto_save_config');
+            const saved = localStorage.getItem('vodstudio_auto_save_config');
             return saved ? JSON.parse(saved) : { enabled: false, interval: 5, folderPath: '' };
         } catch (e) {
             return { enabled: false, interval: 5, folderPath: '' };
@@ -6604,7 +6740,7 @@ function TapnowApp() {
 
     const [chatSessions, setChatSessions] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_chat_sessions');
+            const saved = localStorage.getItem('vodstudio_chat_sessions');
             return saved ? JSON.parse(saved) : [{ id: 'default', title: t('新对话'), messages: [] }];
         } catch (e) {
             return [{ id: 'default', title: t('新对话'), messages: [] }];
@@ -6616,7 +6752,7 @@ function TapnowApp() {
     const [chatWidth, setChatWidth] = useState(400);
     const [chatFiles, setChatFiles] = useState([]);
     const [chatModel, setChatModel] = useState(() => {
-        try { return localStorage.getItem('tapnow_chat_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
+        try { return localStorage.getItem('vodstudio_chat_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
     });
     const [chatModelDropdownOpen, setChatModelDropdownOpen] = useState(false);
     const [chatHoveredProvider, setChatHoveredProvider] = useState(null);
@@ -6625,7 +6761,7 @@ function TapnowApp() {
 
     // V3.7.24: 保存聊天模型选择到 localStorage
     useEffect(() => {
-        try { localStorage.setItem('tapnow_chat_model', chatModel); } catch { }
+        try { localStorage.setItem('vodstudio_chat_model', chatModel); } catch { }
     }, [chatModel]);
 
     const [lightboxItem, setLightboxItem] = useState(null);
@@ -6816,7 +6952,7 @@ function TapnowApp() {
     const [storyboardAssetTab, setStoryboardAssetTab] = useState('image');
     const [characterLibrary, setCharacterLibrary] = useState(() => {
         try {
-            const saved = localStorage.getItem('tapnow_characters');
+            const saved = localStorage.getItem('vodstudio_characters');
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
             console.error('加载角色库失败:', e);
@@ -6851,28 +6987,28 @@ function TapnowApp() {
     const [nodeTimers, setNodeTimers] = useState({});
     // V3.4.8: 记住上次使用的模型
     const [lastUsedImageModel, setLastUsedImageModel] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_image_model') || 'nano-banana'; } catch { return 'nano-banana'; }
+        try { return localStorage.getItem('vodstudio_last_image_model') || 'nano-banana'; } catch { return 'nano-banana'; }
     });
     const [lastUsedVideoModel, setLastUsedVideoModel] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_video_model') || 'sora-2'; } catch { return 'sora-2'; }
+        try { return localStorage.getItem('vodstudio_last_video_model') || 'sora-2'; } catch { return 'sora-2'; }
     });
     const [lastUsedRatio, setLastUsedRatio] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_ratio') || '1:1'; } catch { return '1:1'; }
+        try { return localStorage.getItem('vodstudio_last_ratio') || '16:9'; } catch { return '16:9'; }
     });
     const [lastUsedImageResolution, setLastUsedImageResolution] = useState(() => {
-        try { return normalizeImageResolution(localStorage.getItem('tapnow_last_image_res') || '2K'); } catch { return '2K'; }
+        try { return normalizeImageResolution(localStorage.getItem('vodstudio_last_image_res') || '2K'); } catch { return '2K'; }
     });
     const [lastUsedVideoResolution, setLastUsedVideoResolution] = useState(() => {
-        try { return normalizeVideoResolution(localStorage.getItem('tapnow_last_video_res') || '720P'); } catch { return '720P'; }
+        try { return normalizeVideoResolution(localStorage.getItem('vodstudio_last_video_res') || '720P'); } catch { return '720P'; }
     });
     const [lastUsedSegmentDuration, setLastUsedSegmentDuration] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_segment_duration') || '3'; } catch { return '3'; }
+        try { return localStorage.getItem('vodstudio_last_segment_duration') || '3'; } catch { return '3'; }
     });
     const [lastUsedAnalyzeModel, setLastUsedAnalyzeModel] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_analyze_model') || 'gemini-3-pro'; } catch { return 'gemini-3-pro'; }
+        try { return localStorage.getItem('vodstudio_last_analyze_model') || 'gemini-3-pro'; } catch { return 'gemini-3-pro'; }
     });
     const [lastUsedExtractModel, setLastUsedExtractModel] = useState(() => {
-        try { return localStorage.getItem('tapnow_last_extract_model') || ''; } catch { return ''; }
+        try { return localStorage.getItem('vodstudio_last_extract_model') || ''; } catch { return ''; }
     });
 
     // V2.6.1 Feature: 本地缓存服务器连接检查
@@ -7334,8 +7470,8 @@ function TapnowApp() {
         const looksLikeLocalRuntimeUrl = next.includes('127.0.0.1')
             || next.includes('localhost')
             || next.includes('/proxy?url=')
-            || next.includes('/file/.tapnow_cache/')
-            || next.includes('.tapnow_cache\\');
+            || next.includes('/file/.vodstudio_cache/')
+            || next.includes('.vodstudio_cache\\');
         if (!looksLikeLocalRuntimeUrl) {
             sourceReferenceResolveCacheRef.current.set(value, next);
             return next;
@@ -7391,8 +7527,8 @@ function TapnowApp() {
             const maybeLocalRuntime = value.includes('127.0.0.1')
                 || value.includes('localhost')
                 || value.includes('/proxy?url=')
-                || value.includes('/file/.tapnow_cache/')
-                || value.includes('.tapnow_cache\\');
+                || value.includes('/file/.vodstudio_cache/')
+                || value.includes('.vodstudio_cache\\');
             if (!maybeLocalRuntime) return value;
             return resolveSourceReferenceUrl(value);
         }
@@ -8463,7 +8599,7 @@ function TapnowApp() {
             };
             try {
                 const preferHistoryPath = !!(localServerConfig.imageSavePath || localServerConfig.videoSavePath);
-                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.tapnow_cache/history/';
+                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.vodstudio_cache/history/';
                 const localBase = (localServerUrl || '').trim().replace(/\/+$/, '');
                 if (!localCacheIndexReadyRef.current) {
                     await refreshLocalCacheFileIndex({ silent: true });
@@ -8682,8 +8818,8 @@ function TapnowApp() {
             try {
                 const localBase = (localServerUrl || '').trim().replace(/\/+$/, '');
                 const savePathRaw = localServerConfig.videoSavePath || localServerConfig.savePath || '';
-                const preferHistoryPath = !!(savePathRaw && !String(savePathRaw).includes('.tapnow_cache'));
-                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.tapnow_cache/history/';
+                const preferHistoryPath = !!(savePathRaw && !String(savePathRaw).includes('.vodstudio_cache'));
+                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.vodstudio_cache/history/';
                 if (!localCacheIndexReadyRef.current) {
                     await refreshLocalCacheFileIndex({ silent: true });
                 }
@@ -8781,7 +8917,7 @@ function TapnowApp() {
 
     useEffect(() => {
         // 保存配置到 localStorage（不再过滤任何模型）
-        localStorage.setItem('tapnow_api_configs', JSON.stringify(apiConfigs));
+        localStorage.setItem('vodstudio_api_configs', JSON.stringify(apiConfigs));
     }, [apiConfigs]);
 
     // --- MOVED HELPERS to fix ReferenceError ---
@@ -8852,7 +8988,7 @@ function TapnowApp() {
     // 保存角色库到 localStorage（使用防抖优化）
     const debouncedSaveCharacters = useMemo(() => debounce((charactersToSave) => {
         try {
-            localStorage.setItem('tapnow_characters', JSON.stringify(charactersToSave));
+            localStorage.setItem('vodstudio_characters', JSON.stringify(charactersToSave));
         } catch (e) {
             console.error('保存角色库失败:', e);
         }
@@ -9154,6 +9290,7 @@ function TapnowApp() {
         };
         if (saved.url) saved.url = toStorageUrl(saved.url);
         if (saved.originalUrl) saved.originalUrl = toStorageUrl(saved.originalUrl);
+        if (saved.type === 'video' && saved.url && !saved.originalUrl) saved.originalUrl = saved.url;
         if (saved.mjOriginalUrl) saved.mjOriginalUrl = toStorageUrl(saved.mjOriginalUrl);
         if (Array.isArray(saved.output_images)) {
             saved.output_images = saved.output_images
@@ -9207,7 +9344,7 @@ function TapnowApp() {
     // localStorage 写入防抖函数
     const debouncedSaveHistory = useMemo(() => debounce((historyToSave) => {
         try {
-            localStorage.setItem('tapnow_history', JSON.stringify(historyToSave));
+            localStorage.setItem('vodstudio_history', JSON.stringify(historyToSave));
         } catch (e) {
             console.error('保存历史记录失败（可能超出存储配额）:', e);
             // 如果存储失败，尝试减少数据量
@@ -9228,7 +9365,7 @@ function TapnowApp() {
                     mjRatio: item.mjRatio,
                     mjNeedsSplit: item.mjNeedsSplit
                 }));
-                localStorage.setItem('tapnow_history', JSON.stringify(reduced));
+                localStorage.setItem('vodstudio_history', JSON.stringify(reduced));
             } catch (e2) {
                 console.error('减少数据后保存也失败:', e2);
                 try {
@@ -9237,12 +9374,13 @@ function TapnowApp() {
                         id: item.id,
                         type: item.type,
                         url: trimHistoryUrlForStorage(resolveSourceReferenceUrl(item.url)),
+                        originalUrl: trimHistoryUrlForStorage(resolveSourceReferenceUrl(item.originalUrl || item.url)),
                         prompt: item.prompt?.substring(0, 100) || '',
                         time: item.time,
                         status: item.status,
                         modelName: item.modelName
                     }));
-                    debouncedSaveHistory(minimal);
+                    localStorage.setItem('vodstudio_history', JSON.stringify(minimal));
                 } catch (e3) {
                     console.error('最小化保存也失败:', e3);
                 }
@@ -9255,7 +9393,7 @@ function TapnowApp() {
             const historyToSave = historyItems
                 .slice(0, historyLimit)
                 .map((item) => compactHistoryItemForStorage(item));
-            localStorage.setItem('tapnow_history', JSON.stringify(historyToSave));
+            localStorage.setItem('vodstudio_history', JSON.stringify(historyToSave));
             return true;
         } catch (e) {
             console.error('立即保存历史记录失败:', e);
@@ -9277,7 +9415,7 @@ function TapnowApp() {
                     mjRatio: item.mjRatio,
                     mjNeedsSplit: item.mjNeedsSplit
                 }));
-                localStorage.setItem('tapnow_history', JSON.stringify(reduced));
+                localStorage.setItem('vodstudio_history', JSON.stringify(reduced));
                 return true;
             } catch (e2) {
                 console.error('立即保存历史记录失败（降级后）:', e2);
@@ -9287,7 +9425,7 @@ function TapnowApp() {
     };
 
     const debouncedSaveGlobalKey = useMemo(() => debounce((key) => {
-        localStorage.setItem('tapnow_global_key', key);
+        localStorage.setItem('vodstudio_global_key', key);
     }, 1000), []);
 
     useEffect(() => { debouncedSaveGlobalKey(globalApiKey); }, [globalApiKey, debouncedSaveGlobalKey]);
@@ -9325,12 +9463,14 @@ function TapnowApp() {
                     const minimal = history.slice(0, 10).map(item => ({
                         id: item.id,
                         type: item.type,
+                        url: trimHistoryUrlForStorage(resolveSourceReferenceUrl(item.url)),
+                        originalUrl: trimHistoryUrlForStorage(resolveSourceReferenceUrl(item.originalUrl || item.url)),
                         prompt: item.prompt?.substring(0, 100),
                         time: item.time,
                         status: item.status,
                         modelName: item.modelName
                     }));
-                    debouncedSaveHistory(minimal);
+                    localStorage.setItem('vodstudio_history', JSON.stringify(minimal));
                 } catch (e3) {
                     console.error('最小化保存也失败:', e3);
                 }
@@ -9338,7 +9478,7 @@ function TapnowApp() {
         }
     }, [history, debouncedSaveHistory]);
     const debouncedSaveChatSessions = useMemo(() => debounce((sessions) => {
-        try { localStorage.setItem('tapnow_chat_sessions', JSON.stringify(sessions)); } catch (e) { }
+        try { localStorage.setItem('vodstudio_chat_sessions', JSON.stringify(sessions)); } catch (e) { }
     }, 1000), []);
     useEffect(() => { debouncedSaveChatSessions(chatSessions); }, [chatSessions, debouncedSaveChatSessions]);
     useEffect(() => {
@@ -9959,7 +10099,7 @@ function TapnowApp() {
     }, [chatModel, chatPanelModelOptions, resolveModelKey]);
 
     const getFirstEnabledModelKey = useCallback((mode = 'image') => {
-        const storageKey = mode === 'image' ? 'tapnow_last_image_model' : 'tapnow_last_video_model';
+        const storageKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
         const preferredFromState = mode === 'image' ? lastUsedImageModel : lastUsedVideoModel;
         let preferredStored = '';
         try {
@@ -10046,7 +10186,10 @@ function TapnowApp() {
         const config = getApiConfigByKey(modelId);
         const preferred = String(config?.defaultRatio || '').trim();
         if (preferred && ratioOptions.includes(preferred)) return preferred;
-        return ratioOptions.find((value) => value !== 'Auto') || ratioOptions[0] || (mode === 'video' ? '16:9' : '1:1');
+        // 未显式配置默认比例时，图片/视频统一优先使用 16:9（模型支持时），
+        // 否则回退到第一个非 Auto 选项（如 grok 视频只支持 3:2/2:3/1:1）。
+        if (ratioOptions.includes('16:9')) return '16:9';
+        return ratioOptions.find((value) => value !== 'Auto') || ratioOptions[0] || '16:9';
     }, [getRatiosForModel, getApiConfigByKey]);
 
     const getPreferredImageResolutionForModel = useCallback((modelId) => {
@@ -10400,7 +10543,7 @@ function TapnowApp() {
                 // 延迟切割，避免阻塞UI
                 setTimeout(() => {
                     // 获取比例信息
-                    let ratio = item.mjRatio || '1:1';
+                    let ratio = item.mjRatio || '16:9';
                     if (item.prompt && item.prompt.includes('--ar ')) {
                         const arMatch = item.prompt.match(/--ar\s+([\d:]+)/);
                         if (arMatch && arMatch[1]) {
@@ -10475,8 +10618,8 @@ function TapnowApp() {
                 const baseLabel = [resolvedProjectTitle, item.prompt].filter(Boolean).join('-')
                     || getFilenameFromUrl(url)
                     || item.name
-                    || 'tapnow';
-                let baseName = sanitizeCacheId(baseLabel) || 'tapnow';
+                    || 'vodstudio';
+                let baseName = sanitizeCacheId(baseLabel) || 'vodstudio';
                 baseName = baseName.slice(0, 80);
                 const nextIndex = (nameCounters.get(baseName) || 0) + 1;
                 nameCounters.set(baseName, nextIndex);
@@ -10748,12 +10891,14 @@ function TapnowApp() {
             let current = target;
             while (current && current !== canvasElement) {
                 if (current.classList) {
-                    // 检查是否是智能分镜表容器（通过检查是否有特定的类组合）
-                    const isStoryboardContainer = current.classList.contains('flex') &&
+                    // 检查是否是智能分镜表容器：优先用稳定语义类，
+                    // 回退到旧的 Tailwind 类组合以保持兼容。
+                    const isStoryboardContainer = current.classList.contains('storyboard-node-container') ||
+                        (current.classList.contains('flex') &&
                         current.classList.contains('flex-col') &&
                         current.classList.contains('h-full') &&
                         current.classList.contains('rounded-xl') &&
-                        current.classList.contains('overflow-hidden');
+                        current.classList.contains('overflow-hidden'));
 
                     // 检查当前元素或父元素是否包含节点容器类
                     if (current.classList.contains('video-input-container') ||
@@ -10797,7 +10942,8 @@ function TapnowApp() {
                     }
 
                     // 检查是否是智能分镜表容器
-                    const storyboardContainer = current.closest('.flex.flex-col.h-full.rounded-xl.overflow-hidden');
+                    const storyboardContainer = current.closest('.storyboard-node-container') ||
+                        current.closest('.flex.flex-col.h-full.rounded-xl.overflow-hidden');
                     if (storyboardContainer) {
                         isInsideNode = true;
                         scrollableElement = storyboardContainer.querySelector('.flex-1.overflow-y-auto.custom-scrollbar');
@@ -10852,7 +10998,9 @@ function TapnowApp() {
         return () => {
             canvasElement.removeEventListener('wheel', wheelHandler);
         };
-    }, [view]);
+        // handler 内部只通过 setView(prev => ...) 函数式更新，不直接读取 view，
+        // 因此监听器只需绑定一次，避免每次缩放/平移都重新解绑/绑定原生监听器。
+    }, []);
 
     useEffect(() => {
         if (isResizingChat) {
@@ -10894,98 +11042,6 @@ function TapnowApp() {
     const resetCanvasView = useCallback(() => {
         setView({ ...DEFAULT_VIEW });
     }, []);
-
-    const handleWheel = (e) => {
-        // 如果按下了 Ctrl 键，直接阻止默认行为并不执行任何操作；使用 try-catch 避免控制台报错
-        if (e.ctrlKey) {
-            try {
-                if (e.cancelable) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            } catch (err) {
-                // 静默处理 passive 事件监听器的错误
-            }
-            return;
-        }
-
-        // 检查鼠标是否在视频输入或视频拆解节点内
-        const target = e.target;
-        let isInsideNode = false;
-        let scrollableElement = null;
-
-        // 向上查找父元素，检查是否在 video-input 或 video-analyze 节点内
-        let current = target;
-        while (current && current !== e.currentTarget) {
-            if (current.classList) {
-                // 检查当前元素或父元素是否包含节点容器类
-                if (current.classList.contains('video-input-container') ||
-                    current.classList.contains('video-analyze-container')) {
-                    isInsideNode = true;
-                    // 在当前容器内查找可滚动的元素
-                    scrollableElement = current.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                    if (!scrollableElement) {
-                        // 如果没找到，检查当前元素本身是否可滚动
-                        const style = window.getComputedStyle(current);
-                        if (style.overflowY === 'auto' || style.overflowY === 'scroll' ||
-                            current.classList.contains('custom-scrollbar')) {
-                            scrollableElement = current;
-                        }
-                    }
-                    break;
-                }
-                // 使用 closest 方法查找最近的容器
-                const container = current.closest('.video-input-container, .video-analyze-container');
-                if (container) {
-                    isInsideNode = true;
-                    scrollableElement = container.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                    if (!scrollableElement) {
-                        const style = window.getComputedStyle(container);
-                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                            scrollableElement = container;
-                        }
-                    }
-                    break;
-                }
-            }
-            current = current.parentElement;
-        }
-
-        // 如果在节点内且找到可滚动元素，则滚动该元素而不是缩放画布
-        if (isInsideNode && scrollableElement) {
-            try {
-                if (e.cancelable) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            } catch (err) {
-                // 静默处理 passive 事件监听器的错误
-            }
-            const maxScroll = scrollableElement.scrollHeight - scrollableElement.clientHeight;
-            const currentScroll = scrollableElement.scrollTop;
-            const newScroll = Math.max(0, Math.min(maxScroll, currentScroll + e.deltaY));
-            scrollableElement.scrollTop = newScroll;
-            return;
-        }
-
-        // 否则正常缩放画布
-        try {
-            if (e.cancelable) {
-                e.preventDefault();
-            }
-        } catch (err) {
-            // 静默处理 passive 事件监听器的错误
-        }
-        const rect = e.currentTarget.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        setView((prev) => {
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            let newZoom = Math.min(Math.max(prev.zoom * zoomFactor, 0.2), 3);
-            const scale = newZoom / prev.zoom;
-            return { zoom: newZoom, x: mouseX - (mouseX - prev.x) * scale, y: mouseY - (mouseY - prev.y) * scale };
-        });
-    };
 
     const handleMouseDown = (e) => {
         if (e.button === 0 || e.button === 1) {
@@ -11894,7 +11950,7 @@ function TapnowApp() {
             sourceNodeId = historyItem?.sourceNodeId;
         }
         if (!sourceNodeId) {
-            console.warn('[Tapnow] updatePreviewFromTask: 未找到 sourceNodeId for taskId:', taskId);
+            console.warn('[VodStudio] updatePreviewFromTask: 未找到 sourceNodeId for taskId:', taskId);
             return;
         }
 
@@ -11958,7 +12014,7 @@ function TapnowApp() {
             const filtered = prev.filter(item => item.id !== id);
             // 立即保存到 localStorage，不等待防抖
             try {
-                localStorage.setItem('tapnow_history', JSON.stringify(filtered));
+                localStorage.setItem('vodstudio_history', JSON.stringify(filtered));
             } catch (e) {
                 console.error('立即保存历史记录失败:', e);
             }
@@ -14071,7 +14127,7 @@ function TapnowApp() {
     };
 
     const getHistoryDragPayload = (e) => {
-        const rawPayload = e.dataTransfer.getData('application/x-tapnow-history');
+        const rawPayload = e.dataTransfer.getData('application/x-vodstudio-history');
         if (!rawPayload) return null;
         try {
             return JSON.parse(rawPayload);
@@ -14088,7 +14144,7 @@ function TapnowApp() {
         const rawName = payload.id || payload.modelName || 'model';
         const safeName = String(rawName).replace(/[^\w.-]+/g, '_');
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const fileName = `tapnow-model-${safeName}.json`;
+        const fileName = `vodstudio-model-${safeName}.json`;
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
@@ -14101,7 +14157,7 @@ function TapnowApp() {
         if (!normalized) return;
         const safeName = String(normalized.id || 'model').replace(/[^\w.-]+/g, '_');
         const blob = new Blob([JSON.stringify(normalized, null, 2)], { type: 'application/json' });
-        const fileName = `tapnow-model-library-${safeName}.json`;
+        const fileName = `vodstudio-model-library-${safeName}.json`;
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
@@ -14869,7 +14925,7 @@ function TapnowApp() {
                 if (status === 'SUCCESS' || status === 'succeeded' || status === 'FINISHED' || status === 'completed') {
                     const videoUrl = data?.data?.output || data?.output || data?.data?.video_url || data?.video_url || data?.data?.data?.output;
                     if (!videoUrl) {
-                        console.warn('[Tapnow] Veo: 任务成功但未找到视频URL', data);
+                        console.warn('[VodStudio] Veo: 任务成功但未找到视频URL', data);
                         setHistory((prev) => prev.map((hItem) => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg: '未找到视频URL' } : hItem));
                         return;
                     }
@@ -14899,9 +14955,9 @@ function TapnowApp() {
                                         const actualRatio = actualW / actualH;
                                         const expectedRatio = 16 / 9;
                                         if (Math.abs(actualRatio - expectedRatio) > 0.1) {
-                                            console.warn(`[Tapnow] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 16:9 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
-                                            console.warn(`[Tapnow] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 16:9`);
-                                            console.warn(`[Tapnow] Veo: 强制使用请求的 16:9 比例，调整尺寸为: ${w}x${Math.round(w / (16 / 9))}`);
+                                            console.warn(`[VodStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 16:9 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
+                                            console.warn(`[VodStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 16:9`);
+                                            console.warn(`[VodStudio] Veo: 强制使用请求的 16:9 比例，调整尺寸为: ${w}x${Math.round(w / (16 / 9))}`);
                                             // 如果后端返回了错误的比例，强制使用请求的比例
                                             finalW = w;
                                             finalH = Math.round(w / (16 / 9));
@@ -14913,9 +14969,9 @@ function TapnowApp() {
                                         const actualRatio = actualW / actualH;
                                         const expectedRatio = 9 / 16;
                                         if (Math.abs(actualRatio - expectedRatio) > 0.1) {
-                                            console.warn(`[Tapnow] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 9:16 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
-                                            console.warn(`[Tapnow] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 9:16`);
-                                            console.warn(`[Tapnow] Veo: 强制使用请求的 9:16 比例，调整尺寸为: ${Math.round(h * (9 / 16))}x${h}`);
+                                            console.warn(`[VodStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 9:16 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
+                                            console.warn(`[VodStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 9:16`);
+                                            console.warn(`[VodStudio] Veo: 强制使用请求的 9:16 比例，调整尺寸为: ${Math.round(h * (9 / 16))}x${h}`);
                                             // 如果后端返回了错误的比例，强制使用请求的比例
                                             finalW = Math.round(h * (9 / 16));
                                             finalH = h;
@@ -14958,7 +15014,7 @@ function TapnowApp() {
                                     }
                                 }
                             } catch (e) {
-                                console.warn('[Tapnow] Veo: 无法获取视频实际尺寸，使用请求尺寸', e);
+                                console.warn('[VodStudio] Veo: 无法获取视频实际尺寸，使用请求尺寸', e);
                                 // 如果无法获取实际尺寸，使用请求的尺寸并根据 aspect_ratio 调整
                                 let fallbackW = w, fallbackH = h;
                                 if (originalRatio === '16:9') {
@@ -15020,7 +15076,7 @@ function TapnowApp() {
                             errorMsg = failReason || errorMsg;
                         }
                     }
-                    console.error('[Tapnow] Veo: 任务失败', { status, failReason, errorMsg });
+                    console.error('[VodStudio] Veo: 任务失败', { status, failReason, errorMsg });
                     setHistory((prev) => prev.map((hItem) => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg } : hItem));
 
                     // V3.7.33: Save duration even on failure for storyboard
@@ -15130,7 +15186,7 @@ function TapnowApp() {
                 try {
                     data = JSON.parse(text);
                 } catch (err) {
-                    console.error('[Tapnow] Sora/Grok Poll JSON 解析失败:', err, text);
+                    console.error('[VodStudio] Sora/Grok Poll JSON 解析失败:', err, text);
                     setTimeout(() => pollSoraJob(jobId, taskId, baseUrl, apiKey, w, h, modelId, attempt + 1), delayMs);
                     return;
                 }
@@ -15169,7 +15225,7 @@ function TapnowApp() {
                                     updatePreviewFromTask(taskId, videoUrl, 'video', updatedItem.sourceNodeId);
                                 }, 0);
                             } else {
-                                console.warn('[Tapnow] Sora: 未找到 sourceNodeId', { taskId, updatedItem });
+                                console.warn('[VodStudio] Sora: 未找到 sourceNodeId', { taskId, updatedItem });
                             }
                         }
                         return updated;
@@ -15201,7 +15257,7 @@ function TapnowApp() {
                 setTimeout(() => pollSoraJob(jobId, taskId, baseUrl, apiKey, w, h, modelId, attempt + 1), delayMs);
             })
             .catch(err => {
-                console.error('[Tapnow] Sora/Grok Poll 请求失败:', err);
+                console.error('[VodStudio] Sora/Grok Poll 请求失败:', err);
                 // 如果是网络错误，继续重试；如果是其他错误，标记为失败
                 if (attempt < maxAttempts - 5) {
                     // 前75次尝试继续重试
@@ -15245,7 +15301,7 @@ function TapnowApp() {
         });
     };
 
-    const splitMidjourneyImage = async (imageUrl, ratio = '1:1') => {
+    const splitMidjourneyImage = async (imageUrl, ratio = '16:9') => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -15337,6 +15393,62 @@ function TapnowApp() {
             .filter(Boolean);
     }, [characterLibrary, getCharacterImageUrl]);
 
+    const getCharacterSubjectInfos = useCallback((characterIds = []) => {
+        const ids = Array.isArray(characterIds) ? characterIds : [];
+        if (ids.length === 0) return [];
+        const selected = new Set(ids.map(String));
+        return characterLibrary
+            .filter((character) => selected.has(String(character.id)))
+            .map((character) => {
+                const id = String(character.klingSubjectId || character.subjectId || character.vodSubjectId || character.id || '').trim();
+                if (!id) return null;
+                const name = String(character.name || character.username || '').trim();
+                return { Id: id, ...(name ? { Name: name } : {}) };
+            })
+            .filter(Boolean);
+    }, [characterLibrary]);
+
+    const getCharacterDisplayName = useCallback((character) => {
+        return String(character?.name || character?.username || character?.id || '未命名角色').trim() || '未命名角色';
+    }, []);
+
+    const normalizeCharacterMatchText = useCallback((value) => {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[\s@{}「」《》【】\[\]（）()，,。.:：;；、_\-]+/g, '');
+    }, []);
+
+    const getCharacterMatchAliases = useCallback((character) => {
+        const rawAliases = [
+            character?.name,
+            character?.username,
+            character?.id,
+            character?.prompt
+        ];
+        return [...new Set(rawAliases
+            .map((item) => String(item || '').trim())
+            .filter(Boolean)
+            .filter((item) => !['未命名角色', 'character', 'manual'].includes(item.toLowerCase()))
+        )];
+    }, []);
+
+    const resolveStoryboardCharacterIdsFromText = useCallback((text, existingIds = []) => {
+        const preserved = Array.isArray(existingIds) ? existingIds.map(String).filter(Boolean) : [];
+        if (preserved.length > 0) return preserved;
+        const haystack = normalizeCharacterMatchText(text);
+        if (!haystack) return [];
+        return characterLibrary
+            .filter((character) => {
+                const aliases = getCharacterMatchAliases(character);
+                return aliases.some((alias) => {
+                    const needle = normalizeCharacterMatchText(alias);
+                    return needle && needle.length >= 2 && haystack.includes(needle);
+                });
+            })
+            .map((character) => String(character.id))
+            .filter(Boolean);
+    }, [characterLibrary, getCharacterMatchAliases, normalizeCharacterMatchText]);
+
     const makeCharacterUsername = useCallback((name) => {
         const base = String(name || 'character').trim() || 'character';
         const normalized = base
@@ -15393,6 +15505,26 @@ function TapnowApp() {
         });
         showToast(`已保存角色“${character.name}”到角色库`, 'success', 2200);
     }, [getCharacterImageUrl, makeCharacterUsername, showToast]);
+
+    useEffect(() => {
+        if (!Array.isArray(characterLibrary) || characterLibrary.length === 0) return;
+        setNodes((prevNodes) => {
+            let changed = false;
+            const nextNodes = prevNodes.map((node) => {
+                if (node?.type !== 'storyboard-node' || !Array.isArray(node.settings?.shots)) return node;
+                const nextShots = node.settings.shots.map((shot) => {
+                    if (Array.isArray(shot.selectedCharacterIds) && shot.selectedCharacterIds.length > 0) return shot;
+                    const text = `${shot.description || ''} ${shot.prompt || ''} ${(shot.tags || []).join(' ')}`;
+                    const matchedIds = resolveStoryboardCharacterIdsFromText(text, []);
+                    if (!matchedIds.length) return shot;
+                    changed = true;
+                    return { ...shot, selectedCharacterIds: matchedIds };
+                });
+                return nextShots === node.settings.shots ? node : { ...node, settings: { ...node.settings, shots: nextShots } };
+            });
+            return changed ? nextNodes : prevNodes;
+        });
+    }, [characterLibrary, resolveStoryboardCharacterIdsFromText]);
 
     // 异步图像生成任务轮询函数
     const pollImageTask = (taskId, taskIdForPoll, baseUrl, apiKey, w, h, sourceNodeId, attempt = 0, isBananaModel = false) => {
@@ -16577,7 +16709,7 @@ function TapnowApp() {
                             // 如果是Midjourney任务且有图片URL，切割成4张图（拓展图片任务不需要切割）
                             if (imageUrl && hItem.apiConfig?.modelId?.includes('mj') && hItem.apiConfig?.modelId !== 'mj-zoom') {
                                 // 获取比例信息（从prompt中提取或使用默认值）
-                                let ratio = '1:1';
+                                let ratio = '16:9';
                                 if (hItem.prompt && hItem.prompt.includes('--ar ')) {
                                     const arMatch = hItem.prompt.match(/--ar\s+([\d:]+)/);
                                     if (arMatch && arMatch[1]) {
@@ -16602,7 +16734,7 @@ function TapnowApp() {
                                         updatePreviewFromTask(taskId, imageUrl, 'image', sourceNodeIdForPreview);
                                     }, 0);
                                 } else {
-                                    console.warn('[Tapnow] Midjourney: 未找到 sourceNodeId，无法更新预览窗口', { taskId, hItem });
+                                    console.warn('[VodStudio] Midjourney: 未找到 sourceNodeId，无法更新预览窗口', { taskId, hItem });
                                 }
 
                                 // 延迟切割，确保UI先更新显示原图，避免白屏
@@ -16700,7 +16832,7 @@ function TapnowApp() {
                                     updatePreviewFromTask(taskId, imageUrl, 'image', hItem.sourceNodeId);
                                 }
                             } else {
-                                console.warn('[Tapnow] 图片生成: 未找到 sourceNodeId', { taskId, hItem });
+                                console.warn('[VodStudio] 图片生成: 未找到 sourceNodeId', { taskId, hItem });
                             }
 
                             // 计算并保存用时
@@ -16727,7 +16859,7 @@ function TapnowApp() {
                 setTimeout(() => pollMidjourneyJob(jobId, taskId, baseUrl, apiKey, mjMode, w, h, attempt + 1), delayMs);
             })
             .catch((err) => {
-                console.error(`[Tapnow] Midjourney Poll Fetch Error for task ${taskId}:`, err);
+                console.error(`[VodStudio] Midjourney Poll Fetch Error for task ${taskId}:`, err);
                 setHistory((prev) => prev.map((hItem) =>
                     hItem.id === taskId
                         ? { ...hItem, status: 'failed', errorMsg: `轮询请求失败: ${err.message}` }
@@ -16971,42 +17103,16 @@ function TapnowApp() {
                 : null;
             const vodProvider = normalizeProviderConfig(TENCENT_VOD_PROVIDER_KEY, providers[TENCENT_VOD_PROVIDER_KEY] || {});
             const vodUseProxy = true;
-            const isCloudDeployment = typeof window !== 'undefined' && window.location.hostname.includes('tcloudbaseapp.com');
-            let vodProxyBase = '';
-            let vodProxyViaCloudFunction = false;
             const vodStartTime = Date.now();
-            
-            if (isCloudDeployment) {
-                // 云端环境：使用 CloudBase JS SDK 调用云函数（确保已匿名登录）
-                try {
-                    await ensureTcbAuth();
-                    const pingResult = await tcb.callFunction({
-                        name: 'vodstudio-proxy',
-                        data: {
-                            httpMethod: 'GET',
-                            path: '/ping',
-                            headers: {},
-                            body: ''
-                        }
-                    });
-                    if (!pingResult.result || pingResult.result.statusCode !== 200) {
-                        throw new Error('Cloud function ping failed');
-                    }
-                    vodProxyViaCloudFunction = true;
-                } catch (err) {
-                    alert(`云端环境：无法调用云函数 vodstudio-proxy\n${err?.message || err}`);
-                    return;
-                }
-            } else {
-                // 本地环境：使用本地代理
-                vodProxyBase = (localServerUrl || 'http://127.0.0.1:9527').trim().replace(/\/+$/, '');
-                try {
-                    const pingResp = await fetch(`${vodProxyBase}/ping`, { method: 'GET' });
-                    if (!pingResp.ok) throw new Error(`HTTP ${pingResp.status}`);
-                } catch (err) {
-                    alert(`腾讯云 VOD 调用需要启动本地 CORS 转发服务：\n\nnode proxy-server.mjs\n\n当前无法连接 ${vodProxyBase}/ping：${err?.message || err}`);
-                    return;
-                }
+
+            // 统一使用本地/可配置 CORS 转发代理（默认 http://127.0.0.1:9527）
+            const vodProxyBase = (localServerUrl || 'http://127.0.0.1:9527').trim().replace(/\/+$/, '');
+            try {
+                const pingResp = await fetch(`${vodProxyBase}/ping`, { method: 'GET' });
+                if (!pingResp.ok) throw new Error(`HTTP ${pingResp.status}`);
+            } catch (err) {
+                alert(`腾讯云 VOD 调用需要启动本地 CORS 转发服务：\n\nnode proxy-server.mjs\n\n当前无法连接 ${vodProxyBase}/ping：${err?.message || err}`);
+                return;
             }
             let vodCreds;
             try {
@@ -17022,7 +17128,91 @@ function TapnowApp() {
                 return;
             }
             // 仅接受 blob/url 形式的参考图（已由 startGeneration 开头解析过）
-            const vodSourceImages = Array.isArray(connectedImages) ? connectedImages : [];
+            let vodSourceImages = Array.isArray(connectedImages) ? connectedImages : [];
+            let vodSourceFileInfos = null;
+            let vodLastFrameSourceIndex = -1;
+            const vodExtraTaskParams = {};
+            const vodKlingSubjectInfoCandidates = type === 'video'
+                && String(vodSubModel.modelName || '').trim().toLowerCase() === 'kling'
+                && ['o1', '3.0-omni'].includes(normalizeVodKlingVersion(vodSubModel.modelVersion))
+                ? (Array.isArray(options.vodSubjectInfos) && options.vodSubjectInfos.length > 0
+                    ? options.vodSubjectInfos
+                    : parseVodKlingSubjectInfos(options.vodKlingSubjectInfos || node?.settings?.vodKlingSubjectInfos))
+                : [];
+            const vodKlingReferenceFeature = vodKlingSubjectInfoCandidates.length > 0
+                ? 'subjectReference'
+                : (type === 'video' ? getVodKlingReferenceFeature(vodSubModel.modelName, vodSubModel.modelVersion) : '');
+            // 智能分镜视频：使用上层传入的精确角色信息（首帧/参考图/尾帧）构建 FileInfos，
+            // 避免角色参考图被误当成首帧或尾帧、以及拖入的首帧被截断丢弃。
+            const storyboardImageRoles = (type === 'video' && options.storyboardImageRoles) ? options.storyboardImageRoles : null;
+            if (storyboardImageRoles) {
+                const sbFirst = storyboardImageRoles.firstFrame || '';
+                const sbLast = storyboardImageRoles.lastFrame || '';
+                const sbRefs = Array.isArray(storyboardImageRoles.references)
+                    ? storyboardImageRoles.references.filter((img) => img && img !== sbFirst && img !== sbLast)
+                    : [];
+                if (vodKlingReferenceFeature === 'firstLastFrame') {
+                    // Kling 3.0 首尾帧：只支持首帧 + 尾帧，不支持角色参考图。
+                    const entries = [];
+                    if (sbFirst) entries.push({ image: sbFirst, fileInfo: { Usage: 'FirstFrame' }, isLast: false });
+                    if (sbLast) entries.push({ image: sbLast, fileInfo: null, isLast: true });
+                    vodSourceImages = entries.map((e) => e.image);
+                    vodSourceFileInfos = entries.map((e) => e.fileInfo);
+                    vodLastFrameSourceIndex = entries.findIndex((e) => e.isLast);
+                } else if (vodKlingReferenceFeature === 'multiReference') {
+                    // Kling 3.0-Omni 多图参考：首帧与角色参考图都以 Usage=Reference 传入。
+                    const entries = [];
+                    if (sbFirst) entries.push({ image: sbFirst, fileInfo: { Usage: 'Reference', Category: 'Image' } });
+                    sbRefs.forEach((r) => entries.push({ image: r, fileInfo: { Usage: 'Reference', Category: 'Image' } }));
+                    const sliced = entries.slice(0, 10);
+                    vodSourceImages = sliced.map((e) => e.image);
+                    vodSourceFileInfos = sliced.map((e) => e.fileInfo);
+                    vodLastFrameSourceIndex = -1;
+                } else if (vodKlingReferenceFeature === 'subjectReference') {
+                    // Kling O1 固定主体：角色走 SubjectInfos，首帧仍以 FirstFrame 传入。
+                    if (vodKlingSubjectInfoCandidates.length > 0) {
+                        vodExtraTaskParams.subjectInfos = vodKlingSubjectInfoCandidates;
+                    }
+                    const entries = [];
+                    if (sbFirst) entries.push({ image: sbFirst, fileInfo: { Usage: 'FirstFrame' } });
+                    vodSourceImages = entries.map((e) => e.image);
+                    vodSourceFileInfos = entries.length ? entries.map((e) => e.fileInfo) : null;
+                    vodLastFrameSourceIndex = -1;
+                } else {
+                    // 通用 VOD 视频模型：首帧排在 index 0（作为图生视频首帧），其后角色参考图，尾帧用 LastFrameFileId。
+                    const ordered = [];
+                    if (sbFirst) ordered.push(sbFirst);
+                    sbRefs.forEach((r) => { if (!ordered.includes(r)) ordered.push(r); });
+                    let lastIdx = -1;
+                    if (sbLast) {
+                        if (!ordered.includes(sbLast)) ordered.push(sbLast);
+                        lastIdx = ordered.indexOf(sbLast);
+                    }
+                    vodSourceImages = ordered.slice(0, 10);
+                    vodSourceFileInfos = null;
+                    vodLastFrameSourceIndex = (lastIdx >= 0 && lastIdx < vodSourceImages.length) ? lastIdx : -1;
+                }
+            } else if (vodKlingReferenceFeature === 'firstLastFrame') {
+                const useFirstLastFrame = !!(node?.settings?.useFirstLastFrame || node?.settings?.veoFramesMode);
+                const startFrame = useFirstLastFrame ? getConnectedImageForInput(vodSourceNodeId, 'veo_start') : null;
+                const endFrame = useFirstLastFrame ? getConnectedImageForInput(vodSourceNodeId, 'veo_end') : null;
+                const frameEntries = [];
+                if (startFrame || vodSourceImages[0]) frameEntries.push({ image: startFrame || vodSourceImages[0], fileInfo: { Usage: 'FirstFrame' } });
+                if (endFrame || vodSourceImages[1]) frameEntries.push({ image: endFrame || vodSourceImages[1], fileInfo: null, isLastFrame: true });
+                vodSourceImages = frameEntries.map((entry) => entry.image).filter(Boolean);
+                vodSourceFileInfos = frameEntries.map((entry) => entry.fileInfo);
+                vodLastFrameSourceIndex = frameEntries.findIndex((entry) => entry.isLastFrame);
+            } else if (vodKlingReferenceFeature === 'multiReference') {
+                vodSourceImages = vodSourceImages.slice(0, 10);
+                vodSourceFileInfos = vodSourceImages.map(() => ({ Usage: 'Reference', Category: 'Image' }));
+            } else if (vodKlingReferenceFeature === 'subjectReference') {
+                if (vodKlingSubjectInfoCandidates.length > 0) {
+                    vodExtraTaskParams.subjectInfos = vodKlingSubjectInfoCandidates;
+                    vodSourceImages = [];
+                    vodSourceFileInfos = null;
+                    vodLastFrameSourceIndex = -1;
+                }
+            }
             // 节点选择的比例（Auto 时不传，让后端默认）
             const vodRatio = (options.ratio || node?.settings?.ratio || '').trim();
             const aspectRatio = vodRatio && vodRatio !== 'Auto' ? vodRatio : null;
@@ -17059,24 +17249,36 @@ function TapnowApp() {
             (async () => {
                 try {
                     const vodAudioGenerationEnabled = type === 'video' && node?.settings?.vodAudioGeneration !== false;
+                    const vodDurationRaw = String(options.duration || node?.settings?.duration || '').trim();
+                    const vodDurationValue = Number(vodDurationRaw.replace(/[^0-9.]/g, ''));
+                    const vodResolutionValue = type === 'video'
+                        ? normalizeVideoResolution(options.resolution || node?.settings?.resolution || lastUsedVideoResolution || '1080P')
+                        : '';
+                    const vodVideoOutputConfig = type === 'video'
+                        ? {
+                            ...(Number.isFinite(vodDurationValue) && vodDurationValue > 0 ? { Duration: vodDurationValue } : {}),
+                            ...(vodResolutionValue && vodResolutionValue !== 'Auto' ? { Resolution: vodResolutionValue } : {}),
+                            AudioGeneration: vodAudioGenerationEnabled ? 'Enabled' : 'Disabled'
+                        }
+                        : {};
                     const { urls } = await runVodAigcPipeline({
                         type,
                         prompt,
                         modelName: vodSubModel.modelName,
                         modelVersion: vodSubModel.modelVersion,
                         sourceImages: vodSourceImages,
+                        sourceFileInfos: vodSourceFileInfos,
+                        lastFrameSourceIndex: vodLastFrameSourceIndex,
                         aspectRatio: aspectRatio || undefined,
+                        extraTaskParams: vodExtraTaskParams,
                         extraConfig: {
                             StorageMode: aigcStorageMode,
-                            ...(type === 'video'
-                                ? { AudioGeneration: vodAudioGenerationEnabled ? 'Enabled' : 'Disabled' }
-                                : {})
+                            ...vodVideoOutputConfig
                         }
                     }, {
                         credentials: vodCreds,
                         useProxy: vodUseProxy,
-                        localServerUrl: vodProxyViaCloudFunction ? '' : (vodProxyBase || localServerUrl),
-                        tcb: vodProxyViaCloudFunction ? tcb : null,
+                        localServerUrl: vodProxyBase || localServerUrl,
                         onStage: (stage, info) => {
                             let progress = 10;
                             if (stage === 'upload_start') progress = 10 + Math.round((info.index / Math.max(1, info.total)) * 20);
@@ -17090,24 +17292,52 @@ function TapnowApp() {
                     });
                     const primaryUrl = urls[0] || '';
                     const durationMs = Date.now() - vodStartTime;
-                    setHistory((prev) => prev.map((h) => {
-                        if (h.id !== vodTaskId) return h;
-                        if (type === 'image' && h.characterLibraryMeta && !h.characterLibrarySaved) {
-                            addGeneratedCharacterToLibrary(h.characterLibraryMeta, urls);
+                    setHistory((prev) => {
+                        const nextHistory = prev.map((h) => {
+                            if (h.id !== vodTaskId) return h;
+                            if (type === 'image' && h.characterLibraryMeta && !h.characterLibrarySaved) {
+                                addGeneratedCharacterToLibrary(h.characterLibraryMeta, urls);
+                            }
+                            return {
+                                ...h,
+                                status: 'completed',
+                                progress: 100,
+                                url: primaryUrl,
+                                originalUrl: primaryUrl || h.originalUrl || h.url || '',
+                                output_images: type === 'image' ? urls : undefined,
+                                durationMs,
+                                characterLibrarySaved: type === 'image' && h.characterLibraryMeta ? true : h.characterLibrarySaved
+                            };
+                        });
+                        persistHistorySnapshot(nextHistory);
+                        return nextHistory;
+                    });
+                    const vodStoryboardTask = parseStoryboardSourceNodeId(vodSourceNodeId);
+                    if (vodStoryboardTask) {
+                        if (type === 'video') {
+                            updateShot(vodStoryboardTask.nodeId, vodStoryboardTask.shotId, {
+                                video_url: primaryUrl,
+                                output_url: primaryUrl,
+                                output_images: [],
+                                selectedImageIndex: -1,
+                                status: 'done',
+                                durationCost: durationMs / 1000
+                            }, { onlyIfStatus: 'generating', sourceTaskId: vodTaskId });
+                        } else {
+                            updateShot(vodStoryboardTask.nodeId, vodStoryboardTask.shotId, {
+                                output_images: urls,
+                                output_url: primaryUrl,
+                                selectedImageIndex: 0,
+                                outputEnabled: false,
+                                status: 'done',
+                                durationCost: durationMs / 1000
+                            }, { onlyIfStatus: 'generating', sourceTaskId: vodTaskId });
                         }
-                        return {
-                            ...h,
-                            status: 'completed',
-                            progress: 100,
-                            url: primaryUrl,
-                            output_images: type === 'image' ? urls : undefined,
-                            durationMs,
-                            characterLibrarySaved: type === 'image' && h.characterLibraryMeta ? true : h.characterLibrarySaved
-                        };
-                    }));
-                    // 写回节点：只需清除 isGenerating 标记；实际结果由画布节点
-                    // 自行通过 history.find(h => h.sourceNodeId === node.id && h.status === 'completed') 读取
-                    if (vodSourceNodeId) {
+                        storyboardTaskMapRef.current.delete(vodTaskId);
+                        storyboardHistoryMapRef.current.delete(vodTaskId);
+                    }
+                    // 写回普通画布节点：分镜虚拟节点的结果已通过 updateShot 回填
+                    if (vodSourceNodeId && !vodStoryboardTask) {
                         setNodes((prev) => prev.map((n) => n.id === vodSourceNodeId
                             ? { ...n, isGenerating: false }
                             : n));
@@ -17116,10 +17346,24 @@ function TapnowApp() {
                     console.error('[VOD Pipeline] failed:', err);
                     const msg = err?.message || '腾讯云 VOD 任务失败';
                     const durationMs = Date.now() - vodStartTime;
-                    setHistory((prev) => prev.map((h) => h.id === vodTaskId
-                        ? { ...h, status: 'failed', errorMsg: msg, durationMs }
-                        : h));
-                    if (vodSourceNodeId) {
+                    setHistory((prev) => {
+                        const nextHistory = prev.map((h) => h.id === vodTaskId
+                            ? { ...h, status: 'failed', errorMsg: msg, durationMs }
+                            : h);
+                        persistHistorySnapshot(nextHistory);
+                        return nextHistory;
+                    });
+                    const vodStoryboardTask = parseStoryboardSourceNodeId(vodSourceNodeId);
+                    if (vodStoryboardTask) {
+                        updateShot(vodStoryboardTask.nodeId, vodStoryboardTask.shotId, {
+                            status: 'failed',
+                            errorMsg: msg,
+                            durationCost: durationMs / 1000
+                        }, { onlyIfStatus: 'generating' });
+                        storyboardTaskMapRef.current.delete(taskId);
+                        storyboardHistoryMapRef.current.delete(taskId);
+                    }
+                    if (vodSourceNodeId && !vodStoryboardTask) {
                         setNodes((prev) => prev.map((n) => n.id === vodSourceNodeId ? { ...n, isGenerating: false } : n));
                     }
                     showToast(`VOD: ${msg}`, 'error', 4500);
@@ -17985,9 +18229,9 @@ function TapnowApp() {
                                     const maxSide = Math.max(sourceDims.w, sourceDims.h);
                                     jimengResolution = maxSide <= 1024 ? '1k' : (maxSide <= 2048 ? '2k' : '4k');
                                 }
-                            } catch (e) { jimengRatio = '1:1'; }
+                            } catch (e) { jimengRatio = '16:9'; }
                         } else {
-                            jimengRatio = ratio === 'Auto' ? '1:1' : ratio;
+                            jimengRatio = ratio === 'Auto' ? '16:9' : ratio;
                         }
 
                         if (resolution !== 'Auto') {
@@ -18023,7 +18267,7 @@ function TapnowApp() {
                     } else {
                         // 文生图 (使用 generations)
                         endpoint = `${baseUrl}/v1/images/generations`;
-                        const jimengRatio = ratio === 'Auto' ? '1:1' : ratio;
+                        const jimengRatio = ratio === 'Auto' ? '16:9' : ratio;
                         let jimengResolution = '2k';
                         if (resolution === '1K') jimengResolution = '1k';
                         else if (resolution === '2K') jimengResolution = '2k';
@@ -19199,7 +19443,7 @@ function TapnowApp() {
                     const baseDuration = normalizeJimengVideoDuration(durationValueNum, allowedDurations);
                     const ratioOptions = isJimengSora2
                         ? { defaultRatio: 'auto', allowedRatios: ['16:9', '9:16', 'auto'] }
-                        : { defaultRatio: '1:1' };
+                        : { defaultRatio: '16:9' };
                     const jimengRatio = normalizeJimengVideoRatio(ratio, ratioOptions);
                     const modelKey = config?.modelName || modelId || 'jimeng-video-3.0';
                     const supportsResolution = supportsJimengVideoResolution(modelKey);
@@ -19425,7 +19669,7 @@ function TapnowApp() {
                                 : (isJimengSora2 ? [4, 8, 12] : [5, 10]);
                             const ratioOptions = isJimengSora2
                                 ? { defaultRatio: 'auto', allowedRatios: ['16:9', '9:16', 'auto'] }
-                                : { defaultRatio: '1:1' };
+                                : { defaultRatio: '16:9' };
                             const jimengDuration = normalizeJimengVideoDuration(durationValueNum, allowedDurations);
                             const rawJimengRatio = normalizeJimengVideoRatio(ratio, ratioOptions);
                             const jimengRatio = (isJimengSora2 && rawJimengRatio === 'auto') ? undefined : rawJimengRatio;
@@ -19663,7 +19907,7 @@ function TapnowApp() {
                                     updatePreviewFromTask(taskId, immediateUrl, 'video', updatedItem.sourceNodeId);
                                 }, 0);
                             } else {
-                                console.warn('[Tapnow] 视频立即返回: 未找到 sourceNodeId', { taskId, updatedItem });
+                                console.warn('[VodStudio] 视频立即返回: 未找到 sourceNodeId', { taskId, updatedItem });
                             }
                         }
                         return updated;
@@ -20183,7 +20427,7 @@ function TapnowApp() {
         setBatchGroups([]);
         if (!options.keepAssetBundle) resetAssetBundleState();
         if (!options.keepAutoSave) await clearAutoSaveStorage();
-        try { localStorage.removeItem('tapnow_project_name'); } catch (e) { }
+        try { localStorage.removeItem('vodstudio_project_name'); } catch (e) { }
     }, [resetAssetBundleState, clearAutoSaveStorage]);
 
     // 功能5：保存项目到JSON文件（流式写入，支持超大文件）
@@ -20261,7 +20505,7 @@ function TapnowApp() {
                     const bundleName = `${projectName || '未命名项目'}_${timestamp}.zip`;
                     const handle = await window.showSaveFilePicker({
                         suggestedName: bundleName,
-                        types: [{ description: 'Tapnow Bundle', accept: { 'application/zip': ['.zip'] } }],
+                        types: [{ description: 'VodStudio Bundle', accept: { 'application/zip': ['.zip'] } }],
                     });
                     const projectData = {
                         version: '2.5.7',
@@ -21968,15 +22212,24 @@ function TapnowApp() {
         return ['5s', '10s'];
     };
 
-    const getStoryboardDefaultPromptByMode = (mode) => {
+    const getStoryboardDefaultPromptByMode = (mode, nodeSettings = {}) => {
         const normalizedMode = STORYBOARD_LLM_PROMPT_MODES.includes(mode) ? mode : 'script';
-        if (normalizedMode === 'novel') return DEFAULT_STORYBOARD_NOVEL_PROMPT;
-        if (normalizedMode === STORYBOARD_TABLE_PROMPT_MODE) return DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT;
+        const storyboardModeForPrompt = normalizeStoryboardMode(nodeSettings?.mode);
+        const isVideoStoryboard = storyboardModeForPrompt === 'video';
+        // 两阶段分镜：脚本/小说/自定义拆分统一让 LLM 同时产出静态图片提示词与动态视频提示词，
+        // 供「生成分镜图片」「生成视频片段」两个子功能分别使用。
+        if (normalizedMode === 'novel') return DEFAULT_STORYBOARD_NOVEL_PROMPT_DUAL;
+        if (normalizedMode === STORYBOARD_TABLE_PROMPT_MODE) return isVideoStoryboard ? DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT_VIDEO : DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT_IMAGE;
         if (normalizedMode === 'custom') {
-            return '你是分镜提示词设计助手。请将输入内容拆分为镜头提示词 JSON 数组。只输出 JSON，不要解释。';
+            return '你是分镜提示词设计助手。请将输入内容拆成一组镜头卡片 JSON 数组，每个卡片同时给出 image_prompt（静态画面提示词）与 video_prompt（动态视频提示词），两者描述同一镜头同一场景。只输出 JSON，不要解释。';
         }
-        return DEFAULT_STORYBOARD_SCRIPT_PROMPT;
+        return DEFAULT_STORYBOARD_SCRIPT_PROMPT_DUAL;
     };
+    const getStoryboardNovelTablePromptByMode = (mode) => (
+        normalizeStoryboardMode(mode) === 'video'
+            ? DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT_VIDEO
+            : DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT_IMAGE
+    );
     const getStoryboardPromptSlotKey = (mode, nodeSettings = {}) => {
         const normalizedMode = STORYBOARD_LLM_PROMPT_MODES.includes(mode) ? mode : 'script';
         const selectionMap = nodeSettings?.llmPromptSlotSelection;
@@ -21993,7 +22246,7 @@ function TapnowApp() {
     const getStoryboardPromptTemplate = (mode, nodeSettings = {}) => {
         const normalizedMode = STORYBOARD_LLM_PROMPT_MODES.includes(mode) ? mode : 'script';
         const activeSlot = getStoryboardPromptSlotKey(normalizedMode, nodeSettings);
-        const defaultPrompt = getStoryboardDefaultPromptByMode(normalizedMode);
+        const defaultPrompt = getStoryboardDefaultPromptByMode(normalizedMode, nodeSettings);
         if (activeSlot === 'default') return defaultPrompt;
         const memoryMap = nodeSettings?.llmPromptSlots;
         const memoryKey = getStoryboardPromptMemoryStorageKey(normalizedMode, activeSlot);
@@ -22157,45 +22410,6 @@ function TapnowApp() {
         const body = JSON.stringify({ model, messages, stream: false });
         const requestInit = { method: 'POST', headers, body };
         const isTokenHubProvider = providerKey === TOKENHUB_PROVIDER_KEY;
-        const isCloudDeployment = typeof window !== 'undefined' && window.location.hostname.includes('tcloudbaseapp.com');
-        let configuredIsTokenHub = false;
-        try {
-            configuredIsTokenHub = new URL(configuredEndpoint).hostname === 'tokenhub.tencentmaas.com';
-        } catch { }
-        const cloudFunctionEndpoint = (isTokenHubProvider || configuredIsTokenHub) ? tokenHubEndpoint : '';
-        const callCloudFunctionProxy = async (endpoint) => {
-            await ensureTcbAuth();
-            const proxyResult = await tcb.callFunction({
-                name: 'vodstudio-proxy',
-                data: {
-                    httpMethod: 'POST',
-                    path: '/proxy',
-                    queryString: { url: endpoint },
-                    url: endpoint,
-                    headers,
-                    body
-                }
-            });
-            const { statusCode, headers: respHeaders, body: respBody, isBase64Encoded } = proxyResult.result || {};
-            const bodyText = isBase64Encoded ? atob(respBody || '') : (respBody || '');
-            return {
-                ok: statusCode >= 200 && statusCode < 300,
-                status: statusCode || 500,
-                headers: new Headers(respHeaders || {}),
-                text: async () => bodyText,
-                json: async () => {
-                    try { return JSON.parse(bodyText || '{}'); } catch { return {}; }
-                }
-            };
-        };
-
-        if (isCloudDeployment && cloudFunctionEndpoint) {
-            try {
-                return await callCloudFunctionProxy(cloudFunctionEndpoint);
-            } catch (error) {
-                console.warn('[StoryboardChat] Cloud function proxy failed, fallback to browser fetch:', error);
-            }
-        }
 
         const fetchUrls = Array.from(new Set([
             buildProxyUrl(configuredEndpoint, providerKey),
@@ -22217,23 +22431,15 @@ function TapnowApp() {
             }
         }
 
-        if (cloudFunctionEndpoint) {
-            try {
-                return await callCloudFunctionProxy(cloudFunctionEndpoint);
-            } catch (proxyError) {
-                const directMessage = lastFetchError?.message || String(lastFetchError || 'browser fetch failed');
-                const proxyMessage = proxyError?.message || String(proxyError || 'cloud function proxy failed');
-                throw new Error(`大模型请求失败：浏览器请求失败，云函数代理也失败（${directMessage}；${proxyMessage}）`);
-            }
-        }
-
         throw new Error(`大模型请求失败：${lastFetchError?.message || 'Failed to fetch'}`);
     }, [buildProxyUrl]);
 
-    const runStoryboardLlmSplit = async (nodeId, mode = 'script') => {
+    const runStoryboardLlmSplit = async (nodeId, mode = 'script', options = {}) => {
         const node = nodesMap.get(nodeId);
         if (!node || node.type !== 'storyboard-node') return;
         const normalizedMode = STORYBOARD_LLM_SPLIT_MODES.includes(mode) ? mode : 'script';
+        const modeOverride = options?.modeOverride ? normalizeStoryboardMode(options.modeOverride) : null;
+        const modeForShot = modeOverride || normalizeStoryboardMode(node.settings?.mode);
         const connectedNovelText = normalizedMode === 'novel' ? getConnectedNovelInputText(nodeId) : '';
         let scriptText = connectedNovelText || node.settings?.scriptText || '';
         if (!scriptText.trim()) {
@@ -22262,8 +22468,8 @@ function TapnowApp() {
 
         try {
             saveToUndoStack();
-            updateNodeSettings(nodeId, { isGenerating: true, errorMsg: '', llmPromptMode: normalizedMode, scriptText });
-            const systemPrompt = getStoryboardPromptTemplate(normalizedMode, node.settings);
+            updateNodeSettings(nodeId, { isGenerating: true, errorMsg: '', llmPromptMode: normalizedMode, scriptText, mode: modeForShot });
+            const systemPrompt = getStoryboardPromptTemplate(normalizedMode, { ...(node.settings || {}), mode: modeForShot });
             const response = await fetchStoryboardChatCompletion({
                 baseUrl,
                 apiKey,
@@ -22284,7 +22490,6 @@ function TapnowApp() {
                 throw new Error('AI 未返回可用镜头');
             }
 
-            const modeForShot = normalizeStoryboardMode(node.settings?.mode);
             const defaultModel = getStoryboardDefaultModelKey(modeForShot);
             const defaultRatio = getPreferredModelRatio(defaultModel, modeForShot);
             const defaultResolution = modeForShot === 'image'
@@ -22293,27 +22498,82 @@ function TapnowApp() {
             const defaultDuration = modeForShot === 'video' ? getDefaultDurationForModel(defaultModel) : undefined;
             const defaultCustomParams = getDefaultCustomParamsForModel(defaultModel, null, { preserveByName: false });
 
-            const newShots = parsedShots.map((item, idx) => ({
-                id: `shot-${Date.now()}-${idx}`,
-                scene_index: idx + 1,
-                prompt: item?.prompt || item?.description || '',
-                description: item?.description || item?.prompt || '',
-                image_url: '',
-                video_url: '',
-                output_url: '',
-                model: defaultModel,
-                ratio: defaultRatio,
-                resolution: defaultResolution,
-                duration: defaultDuration,
-                customParams: { ...defaultCustomParams },
-                status: 'draft',
-                outputEnabled: false,
-                selectedImageIndex: -1
-            }));
+            const newShots = parsedShots.map((item, idx) => {
+                const value = item && typeof item === 'object' ? item : { prompt: String(item || '') };
+                const rawImagePrompt = pickStoryboardPromptValue(value, ['image_prompt', 'imagePrompt', 'still_prompt', 'stillPrompt', 'prompt', '生图提示词', '图片提示词']);
+                const rawVideoPrompt = pickStoryboardPromptValue(value, ['video_prompt', 'videoPrompt', 'motion_prompt', 'motionPrompt', '生视频提示词', '视频提示词']);
+                // 两阶段分镜：每条镜头同时保留静态图片提示词与动态视频提示词，缺失时互相兜底。
+                const imagePrompt = rawImagePrompt || rawVideoPrompt;
+                const videoPrompt = rawVideoPrompt || rawImagePrompt;
+                const description = pickStoryboardPromptValue(value, ['description', 'scene_description', 'video_scene_description', '场景描述', '视频场景描述', '镜头描述']) || imagePrompt || videoPrompt;
+                const sourceImageIndices = pickStoryboardPromptValue(value, ['source_image_indices', 'sourceImageIndices', '合并图片镜号']);
+                const frameRole = pickStoryboardPromptValue(value, ['frame_role', 'frameRole', '画面类型']);
+                const dialogue = pickStoryboardPromptValue(value, ['dialogue', '台词和旁白', '对白', '独白']);
+                // 视频片段需要的结构化导演信息：运镜 / 连续动作 / 人物情绪 / 景别。
+                const camera = pickStoryboardPromptValue(value, ['camera', 'camera_movement', 'cameraMovement', '运镜', '镜头运动']);
+                const action = pickStoryboardPromptValue(value, ['action', '连续动作', '人物动作', '动作']);
+                const emotion = pickStoryboardPromptValue(value, ['emotion', '人物情绪', '情绪']);
+                const shotSize = pickStoryboardPromptValue(value, ['shotSize', 'shot_size', '景别']);
+                const duration = modeForShot === 'video'
+                    ? normalizeStoryboardVideoDurationText(pickStoryboardPromptValue(value, ['duration', '时长', 'time_range', 'timeRange']), defaultDuration || '5s')
+                    : defaultDuration;
+                const selectedCharacterIds = resolveStoryboardCharacterIdsFromText(`${description} ${imagePrompt} ${videoPrompt} ${dialogue}`);
+                const primaryPrompt = modeForShot === 'video' ? (videoPrompt || imagePrompt || description) : (imagePrompt || videoPrompt || description);
+                return {
+                    id: `shot-${Date.now()}-${idx}`,
+                    scene_index: idx + 1,
+                    prompt: primaryPrompt,
+                    imagePrompt,
+                    videoPrompt,
+                    description,
+                    selectedCharacterIds,
+                    sourceImageIndices,
+                    frameRole,
+                    dialogue,
+                    camera,
+                    action,
+                    emotion,
+                    shotSize,
+                    image_url: '',
+                    video_url: '',
+                    output_url: '',
+                    model: defaultModel,
+                    ratio: defaultRatio,
+                    resolution: defaultResolution,
+                    duration,
+                    customParams: { ...defaultCustomParams },
+                    status: 'draft',
+                    outputEnabled: false,
+                    selectedImageIndex: -1
+                };
+            });
 
             const finalShots = shouldAppend ? [...existingShots, ...newShots] : newShots;
+            // 合并「小说转分镜图 + 小说转视频」：同一批镜头一次性产出图片表与视频表，
+            // 两套表分别存入 imageTableData / videoTableData，互不覆盖。
+            const wantBothTables = !!options?.generateBothTables;
+            const primaryTable = (options?.generateTable || wantBothTables)
+                ? buildStoryboardTableDataFromShots(finalShots, modeForShot)
+                : null;
+            const otherMode = modeForShot === 'video' ? 'image' : 'video';
+            const otherTable = wantBothTables
+                ? buildStoryboardTableDataFromShots(finalShots, otherMode)
+                : null;
             updateNodeSettings(nodeId, {
+                mode: modeForShot,
                 shots: finalShots,
+                ...(primaryTable ? {
+                    tableData: primaryTable,
+                    tableMarkdown: stringifyMarkdownTable(primaryTable),
+                    [getStoryboardModeTableDataKey(modeForShot)]: primaryTable,
+                    [getStoryboardModeTableMarkdownKey(modeForShot)]: stringifyMarkdownTable(primaryTable),
+                    ...(otherTable ? {
+                        [getStoryboardModeTableDataKey(otherMode)]: otherTable,
+                        [getStoryboardModeTableMarkdownKey(otherMode)]: stringifyMarkdownTable(otherTable)
+                    } : {}),
+                    tableMarkdownCollapsed: false,
+                    viewMode: options?.viewModeAfter || 'table'
+                } : {}),
                 scriptExpanded: false,
                 isGenerating: false
             });
@@ -22322,7 +22582,7 @@ function TapnowApp() {
             updateNodeSettings(nodeId, { isGenerating: false, errorMsg: err.message || 'LLM 拆分失败' });
         }
     };
-    const normalizeStoryboardTableData = useCallback((tableInput) => {
+    const normalizeStoryboardTableData = useCallback((tableInput, mode = STORYBOARD_DEFAULT_MODE) => {
         const sourceHeaders = Array.isArray(tableInput?.headers) ? tableInput.headers : [];
         let headers = sourceHeaders
             .map((header, idx) => {
@@ -22330,7 +22590,7 @@ function TapnowApp() {
                 return value || `列${idx + 1}`;
             })
             .filter(Boolean);
-        if (!headers.length) headers = [...STORYBOARD_DEFAULT_TABLE_HEADERS];
+        if (!headers.length) headers = getStoryboardDefaultTableHeaders(mode);
         let rows = Array.isArray(tableInput?.rows)
             ? tableInput.rows.map((row) => headers.map((_, colIdx) => String(Array.isArray(row) ? (row[colIdx] ?? '') : '')))
             : [];
@@ -22353,6 +22613,7 @@ function TapnowApp() {
         const headers = Array.isArray(tableData?.headers) ? tableData.headers : [];
         const existingShots = Array.isArray(node.settings?.shots) ? node.settings.shots : [];
         const promptColumnIndex = getStoryboardTablePromptColumnIndex(headers);
+        const videoPromptColumnIndex = getStoryboardTableVideoPromptColumnIndex(headers);
         const descriptionColumnIndex = getStoryboardTableDescriptionColumnIndex(headers);
         const shotColumnIndex = getStoryboardTableShotColumnIndex(headers);
         const promptBySceneIndex = options?.promptBySceneIndex instanceof Map ? options.promptBySceneIndex : new Map();
@@ -22371,15 +22632,29 @@ function TapnowApp() {
             const baseShot = existingShots[rowIdx] ? { ...existingShots[rowIdx] } : {};
             const sceneIndex = normalizeStoryboardSceneIndex(shotColumnIndex >= 0 ? row[shotColumnIndex] : '', rowIdx + 1);
             const tablePrompt = promptColumnIndex >= 0 ? String(row[promptColumnIndex] || '').trim() : '';
+            const tableVideoPrompt = videoPromptColumnIndex >= 0 ? String(row[videoPromptColumnIndex] || '').trim() : '';
             const tableDescription = descriptionColumnIndex >= 0 ? String(row[descriptionColumnIndex] || '').trim() : '';
-            const prompt = String(promptBySceneIndex.get(sceneIndex) || tablePrompt || baseShot.prompt || '').trim();
-            const description = String(tableDescription || prompt || baseShot.description || '').trim();
+            const promptBundleRaw = promptBySceneIndex.get(sceneIndex);
+            const promptBundle = promptBundleRaw && typeof promptBundleRaw === 'object' ? promptBundleRaw : null;
+            const imagePrompt = String(
+                promptBundle?.imagePrompt || promptBundle?.image_prompt || promptBundle?.prompt || tablePrompt || baseShot.imagePrompt || baseShot.image_prompt || baseShot.prompt || ''
+            ).trim();
+            const videoPrompt = String(
+                promptBundle?.videoPrompt || promptBundle?.video_prompt || tableVideoPrompt || baseShot.videoPrompt || baseShot.video_prompt || baseShot.prompt || imagePrompt || ''
+            ).trim();
+            const prompt = imagePrompt || videoPrompt;
+            const description = String(tableDescription || baseShot.description || prompt || '').trim();
+            const characterMatchText = [imagePrompt, videoPrompt, description, ...(Array.isArray(row) ? row : [])].join(' ');
+            const selectedCharacterIds = resolveStoryboardCharacterIdsFromText(characterMatchText, baseShot.selectedCharacterIds);
             return {
                 ...baseShot,
                 id: baseShot.id || `shot-${nowSeed}-${rowIdx}`,
                 scene_index: sceneIndex,
                 prompt,
+                imagePrompt,
+                videoPrompt,
                 description,
+                selectedCharacterIds,
                 model: baseShot.model || defaultModel,
                 ratio: baseShot.ratio || defaultRatio,
                 resolution: baseShot.resolution || defaultResolution,
@@ -22390,30 +22665,54 @@ function TapnowApp() {
                 selectedImageIndex: Number.isInteger(baseShot.selectedImageIndex) ? baseShot.selectedImageIndex : -1
             };
         });
-    }, [getDefaultDurationForModel, getDefaultCustomParamsForModel, getStoryboardDefaultModelKey, getPreferredImageResolutionForModel, getPreferredModelRatio, getPreferredVideoResolutionForModel]);
+    }, [getDefaultDurationForModel, getDefaultCustomParamsForModel, getStoryboardDefaultModelKey, getPreferredImageResolutionForModel, getPreferredModelRatio, getPreferredVideoResolutionForModel, resolveStoryboardCharacterIdsFromText]);
     const buildStoryboardTableSyncPatch = useCallback((node, tableInput, options = {}) => {
-        const normalized = normalizeStoryboardTableData(tableInput);
+        const modeForTable = normalizeStoryboardMode(node?.settings?.mode);
+        const normalized = normalizeStoryboardTableData(tableInput, modeForTable);
         let headers = [...normalized.headers];
         let rows = normalized.rows.map((row) => [...row]);
         const promptBySceneIndex = options?.promptBySceneIndex instanceof Map ? options.promptBySceneIndex : null;
         if (promptBySceneIndex && promptBySceneIndex.size > 0) {
+            const promptValues = Array.from(promptBySceneIndex.values());
+            const hasImagePrompt = promptValues.some((value) => {
+                if (value && typeof value === 'object') return !!String(value.imagePrompt || value.image_prompt || value.prompt || '').trim();
+                return modeForTable === 'image' && !!String(value || '').trim();
+            });
+            const hasVideoPrompt = promptValues.some((value) => {
+                if (value && typeof value === 'object') return !!String(value.videoPrompt || value.video_prompt || '').trim();
+                return modeForTable === 'video' && !!String(value || '').trim();
+            });
             let promptColumnIndex = getStoryboardTablePromptColumnIndex(headers);
-            if (promptColumnIndex < 0) {
+            if (hasImagePrompt && promptColumnIndex < 0) {
                 headers.push('生图提示词');
                 rows = rows.map((row) => [...row, '']);
                 promptColumnIndex = headers.length - 1;
+            }
+            let videoPromptColumnIndex = getStoryboardTableVideoPromptColumnIndex(headers);
+            if (hasVideoPrompt && videoPromptColumnIndex < 0) {
+                headers.push('生视频提示词');
+                rows = rows.map((row) => [...row, '']);
+                videoPromptColumnIndex = headers.length - 1;
             }
             const shotColumnIndex = getStoryboardTableShotColumnIndex(headers);
             rows = rows.map((row, rowIdx) => {
                 const nextRow = headers.map((_, colIdx) => String(Array.isArray(row) ? (row[colIdx] ?? '') : ''));
                 const sceneIndex = normalizeStoryboardSceneIndex(shotColumnIndex >= 0 ? nextRow[shotColumnIndex] : '', rowIdx + 1);
                 if (promptBySceneIndex.has(sceneIndex)) {
-                    nextRow[promptColumnIndex] = String(promptBySceneIndex.get(sceneIndex) || '').trim();
+                    const value = promptBySceneIndex.get(sceneIndex);
+                    if (value && typeof value === 'object') {
+                        if (promptColumnIndex >= 0) nextRow[promptColumnIndex] = String(value.imagePrompt || value.image_prompt || value.prompt || '').trim();
+                        if (videoPromptColumnIndex >= 0) nextRow[videoPromptColumnIndex] = String(value.videoPrompt || value.video_prompt || '').trim();
+                    } else if (modeForTable === 'video') {
+                        if (videoPromptColumnIndex >= 0) nextRow[videoPromptColumnIndex] = String(value || '').trim();
+                    } else if (promptColumnIndex >= 0) {
+                        nextRow[promptColumnIndex] = String(value || '').trim();
+                    }
                 }
                 return nextRow;
             });
         }
-        const finalTable = normalizeStoryboardTableData({ headers, rows });
+        const finalTable = normalizeStoryboardTableData({ headers, rows }, modeForTable);
         return {
             tableData: finalTable,
             tableMarkdown: stringifyMarkdownTable(finalTable),
@@ -22423,10 +22722,12 @@ function TapnowApp() {
     const runStoryboardTablePromptMerge = useCallback(async (nodeId) => {
         const node = nodesMap.get(nodeId);
         if (!node || node.type !== 'storyboard-node') return;
+        const storyboardModeForPrompt = normalizeStoryboardMode(node.settings?.mode);
         const normalizedTable = normalizeStoryboardTableData(
             node.settings?.tableData
             || parseMarkdownTable(node.settings?.tableMarkdown || node.settings?.scriptText || '')
-            || { headers: [...STORYBOARD_DEFAULT_TABLE_HEADERS], rows: [] }
+            || { headers: getStoryboardDefaultTableHeaders(storyboardModeForPrompt), rows: [] },
+            storyboardModeForPrompt
         );
         if (!Array.isArray(normalizedTable.rows) || normalizedTable.rows.length === 0) {
             showToast('请先填写至少一行表格数据', 'warning', 2400);
@@ -22453,11 +22754,19 @@ function TapnowApp() {
                 llmPromptMode: STORYBOARD_TABLE_PROMPT_MODE
             });
             const systemPrompt = getStoryboardPromptTemplate(STORYBOARD_TABLE_PROMPT_MODE, node.settings || {});
-            const userPrompt = [
-                '请按 scene_index 一一对应地汇总提示词。',
-                '必须返回 JSON 数组，每项至少包含 scene_index 和 prompt 字段。',
-                JSON.stringify(tableRowsForPrompt, null, 2)
-            ].join('\n\n');
+            const userPrompt = storyboardModeForPrompt === 'video'
+                ? [
+                    '请按 scene_index 一一对应地汇总视频场景提示词。',
+                    '必须返回 JSON 数组，每项至少包含 scene_index、video_prompt 字段。',
+                    'video_prompt 偏动态视频/运镜/连续动作/人物对白；每一行是一个合并后的视频场景，不要拆成图片分镜。',
+                    JSON.stringify(tableRowsForPrompt, null, 2)
+                ].join('\n\n')
+                : [
+                    '请按 scene_index 一一对应地汇总图片分镜提示词。',
+                    '必须返回 JSON 数组，每项至少包含 scene_index、image_prompt 字段。',
+                    'image_prompt 偏静态分镜图/首尾帧/场景图；不要合并多行，不要输出视频提示词。',
+                    JSON.stringify(tableRowsForPrompt, null, 2)
+                ].join('\n\n');
             const response = await fetchStoryboardChatCompletion({
                 baseUrl,
                 apiKey,
@@ -22484,10 +22793,13 @@ function TapnowApp() {
                     ? idx + 1
                     : (value.scene_index ?? value.sceneIndex ?? value.scene ?? value.shot ?? value.shot_index ?? value['场次镜号'] ?? value['镜号'] ?? idx + 1);
                 const sceneIndex = normalizeStoryboardSceneIndex(sceneCandidate, idx + 1);
-                const promptText = typeof item === 'string'
-                    ? String(item || '').trim()
-                    : String(value.prompt ?? value['生图提示词'] ?? value['提示词'] ?? value.description ?? value['描述'] ?? '').trim();
-                if (promptText) promptBySceneIndex.set(sceneIndex, promptText);
+                const imagePrompt = typeof item === 'string'
+                    ? (storyboardModeForPrompt === 'image' ? String(item || '').trim() : '')
+                    : String(value.image_prompt ?? value.imagePrompt ?? value.prompt ?? value['生图提示词'] ?? value['图片提示词'] ?? value.description ?? value['描述'] ?? '').trim();
+                const videoPrompt = typeof item === 'string'
+                    ? (storyboardModeForPrompt === 'video' ? String(item || '').trim() : '')
+                    : String(value.video_prompt ?? value.videoPrompt ?? value.motion_prompt ?? value.motionPrompt ?? value['生视频提示词'] ?? value['视频提示词'] ?? '').trim();
+                if (imagePrompt || videoPrompt) promptBySceneIndex.set(sceneIndex, { imagePrompt, videoPrompt });
             });
             if (promptBySceneIndex.size === 0) {
                 throw new Error('AI 返回中未找到可用提示词');
@@ -22524,9 +22836,17 @@ function TapnowApp() {
             return false;
         }
         const shouldSwitchView = options?.switchToTable !== false;
-        const patch = buildStoryboardTableSyncPatch(node, parsedTable);
+        const modeOverride = options?.modeOverride ? normalizeStoryboardMode(options.modeOverride) : null;
+        const modeForTable = modeOverride || normalizeStoryboardMode(node.settings?.mode);
+        const nodeForTable = { ...node, settings: { ...(node.settings || {}), mode: modeForTable } };
+        const patch = buildStoryboardTableSyncPatch(nodeForTable, parsedTable);
+        const tableDataKey = getStoryboardModeTableDataKey(modeForTable);
+        const tableMarkdownKey = getStoryboardModeTableMarkdownKey(modeForTable);
         updateNodeSettings(nodeId, {
+            ...(modeOverride ? { mode: modeOverride } : {}),
             ...patch,
+            [tableDataKey]: patch.tableData,
+            [tableMarkdownKey]: patch.tableMarkdown,
             ...(shouldSwitchView ? { viewMode: 'table' } : {})
         });
         const formatLabel = parsedResult?.format === 'tsv'
@@ -22538,9 +22858,11 @@ function TapnowApp() {
         return true;
     }, [buildStoryboardTableSyncPatch, nodesMap, showToast, updateNodeSettings]);
 
-    const runStoryboardNovelTableGenerate = useCallback(async (nodeId) => {
+    const runStoryboardNovelTableGenerate = useCallback(async (nodeId, options = {}) => {
         const node = nodesMap.get(nodeId);
         if (!node || node.type !== 'storyboard-node') return;
+        const modeOverride = options?.modeOverride ? normalizeStoryboardMode(options.modeOverride) : null;
+        const modeForTable = modeOverride || normalizeStoryboardMode(node.settings?.mode);
         const novelText = getConnectedNovelInputText(nodeId);
         if (!novelText) {
             showToast('请先把“小说输入”节点连接到智能分镜', 'warning', 2800);
@@ -22561,6 +22883,7 @@ function TapnowApp() {
                 errorMsg: '',
                 llmPromptMode: 'novel',
                 scriptText: novelText,
+                mode: modeForTable,
                 viewMode: 'table'
             });
             const response = await fetchStoryboardChatCompletion({
@@ -22569,7 +22892,7 @@ function TapnowApp() {
                 providerKey,
                 model: modelName || storyboardChatModel,
                 messages: [
-                    { role: 'system', content: DEFAULT_STORYBOARD_NOVEL_TABLE_PROMPT },
+                    { role: 'system', content: getStoryboardNovelTablePromptByMode(modeForTable) },
                     { role: 'user', content: novelText.substring(0, 30000) }
                 ]
             });
@@ -22577,10 +22900,34 @@ function TapnowApp() {
             if (!response.ok) {
                 throw new Error(data?.error?.message || data?.message || `请求失败 (${response.status})`);
             }
-            const content = String(data.choices?.[0]?.message?.content || data.content || '').replace(/```(?:markdown|md)?/gi, '').replace(/```/g, '').trim();
-            if (!content) throw new Error('AI 未返回可用 Markdown 表格');
-            const imported = importStoryboardMarkdownTable(nodeId, content, { switchToTable: true });
-            if (!imported) throw new Error('AI 返回内容不是有效 Markdown 表格');
+            const rawContent = String(data.choices?.[0]?.message?.content || data.content || '').trim();
+            const content = rawContent.replace(/```[a-zA-Z0-9_-]*\s*/g, '').replace(/```/g, '').trim();
+            if (!content) throw new Error('AI 未返回可用表格内容');
+            let imported = importStoryboardMarkdownTable(nodeId, content, { switchToTable: true, modeOverride: modeForTable });
+            if (!imported) {
+                const parsedRows = parseJsonArrayFromText(rawContent) || parseJsonArrayFromText(content);
+                if (Array.isArray(parsedRows) && parsedRows.length > 0) {
+                    const tableData = buildStoryboardTableDataFromShots(parsedRows, modeForTable);
+                    const tableMarkdown = stringifyMarkdownTable(tableData);
+                    const nodeForTable = { ...node, settings: { ...(node.settings || {}), mode: modeForTable } };
+                    const patch = buildStoryboardTableSyncPatch(nodeForTable, tableData);
+                    updateNodeSettings(nodeId, {
+                        mode: modeForTable,
+                        ...patch,
+                        [getStoryboardModeTableDataKey(modeForTable)]: patch.tableData,
+                        [getStoryboardModeTableMarkdownKey(modeForTable)]: tableMarkdown,
+                        tableMarkdown,
+                        tableMarkdownCollapsed: false,
+                        scriptText: novelText,
+                        llmPromptMode: 'novel',
+                        viewMode: 'table',
+                        isGenerating: false,
+                        errorMsg: ''
+                    });
+                    imported = true;
+                }
+            }
+            if (!imported) throw new Error('AI 返回内容不是有效 Markdown 表格或 JSON 数组');
             updateNodeSettings(nodeId, {
                 isGenerating: false,
                 errorMsg: '',
@@ -22588,14 +22935,14 @@ function TapnowApp() {
                 scriptText: novelText,
                 llmPromptMode: 'novel'
             });
-            showToast('已根据小说生成 Markdown 分镜表', 'success', 2600);
+            showToast(`已根据小说生成${modeForTable === 'video' ? '视频提示词' : 'Markdown 分镜'}表`, 'success', 2600);
         } catch (err) {
             console.error('[NovelToStoryboardTable] Error:', err);
             const message = err?.message || '小说分镜表生成失败';
             updateNodeSettings(nodeId, { isGenerating: false, errorMsg: message });
             showToast(message, 'error', 3200);
         }
-    }, [fetchStoryboardChatCompletion, getConnectedNovelInputText, importStoryboardMarkdownTable, nodesMap, resolveStoryboardChatCredentials, saveToUndoStack, showToast, updateNodeSettings]);
+    }, [buildStoryboardTableSyncPatch, fetchStoryboardChatCompletion, getConnectedNovelInputText, importStoryboardMarkdownTable, nodesMap, resolveStoryboardChatCredentials, saveToUndoStack, showToast, updateNodeSettings]);
     const pasteStoryboardTableFromClipboard = useCallback(async (nodeId) => {
         const node = nodesMap.get(nodeId);
         if (!node || node.type !== 'storyboard-node') return;
@@ -22640,12 +22987,14 @@ function TapnowApp() {
         input.click();
     }, [importStoryboardMarkdownTable, nodesMap, showToast]);
     const getStoryboardTableDraft = useCallback((node) => {
-        const parsed = node?.settings?.tableData
-            || parseStoryboardTableInput(node?.settings?.tableMarkdown || node?.settings?.scriptText || '')?.table;
+        const mode = normalizeStoryboardMode(node?.settings?.mode);
+        const tableSource = getStoryboardModeTableSource(node?.settings || {}, mode);
+        const parsed = tableSource.tableData
+            || parseStoryboardTableInput(tableSource.tableMarkdown || node?.settings?.scriptText || '')?.table;
         if (parsed && Array.isArray(parsed.headers) && parsed.headers.length > 0) {
-            return normalizeStoryboardTableData(parsed);
+            return normalizeStoryboardTableData(parsed, mode);
         }
-        return normalizeStoryboardTableData({ headers: [...STORYBOARD_DEFAULT_TABLE_HEADERS], rows: [] });
+        return normalizeStoryboardTableData({ headers: getStoryboardDefaultTableHeaders(mode), rows: [] }, mode);
     }, [normalizeStoryboardTableData]);
     const mutateStoryboardTable = useCallback((nodeId, mutator) => {
         const node = nodesMap.get(nodeId);
@@ -22665,10 +23014,13 @@ function TapnowApp() {
         if (!headers.length) return false;
         const rows = (Array.isArray(next.rows) ? next.rows : draft.rows)
             .map((row) => headers.map((_, colIdx) => String(Array.isArray(row) ? (row[colIdx] ?? '') : '')));
-        const normalized = normalizeStoryboardTableData({ headers, rows });
+        const mode = normalizeStoryboardMode(node.settings?.mode);
+        const normalized = normalizeStoryboardTableData({ headers, rows }, mode);
         const patch = buildStoryboardTableSyncPatch(node, normalized);
         updateNodeSettings(nodeId, {
             ...patch,
+            [getStoryboardModeTableDataKey(mode)]: patch.tableData,
+            [getStoryboardModeTableMarkdownKey(mode)]: patch.tableMarkdown,
             viewMode: 'table'
         });
         return true;
@@ -22677,16 +23029,19 @@ function TapnowApp() {
         if (!node || node.type !== 'storyboard-node') return null;
         const settings = node.settings || {};
         if (normalizeStoryboardViewMode(settings.viewMode) === 'table') return null;
-        const hasTableSource = !!(settings.tableData?.headers && settings.tableData.headers.length > 0)
-            || !!String(settings.tableMarkdown || '').trim();
+        const mode = normalizeStoryboardMode(settings.mode);
+        const tableSource = getStoryboardModeTableSource(settings, mode);
+        const hasTableSource = !!(tableSource.tableData?.headers && tableSource.tableData.headers.length > 0)
+            || !!String(tableSource.tableMarkdown || '').trim();
         if (!hasTableSource) return null;
         const shots = Array.isArray(settings.shots) ? settings.shots : [];
         if (shots.length === 0) return null;
 
         const sourceTable = normalizeStoryboardTableData(
-            settings.tableData
-            || parseStoryboardTableInput(settings.tableMarkdown || '')?.table
-            || { headers: [...STORYBOARD_DEFAULT_TABLE_HEADERS], rows: [] }
+            tableSource.tableData
+            || parseStoryboardTableInput(tableSource.tableMarkdown || '')?.table
+            || { headers: getStoryboardDefaultTableHeaders(mode), rows: [] },
+            mode
         );
         let headers = [...sourceTable.headers];
         let rows = sourceTable.rows.map((row) => headers.map((_, colIdx) => String(Array.isArray(row) ? (row[colIdx] ?? '') : '')));
@@ -22697,6 +23052,7 @@ function TapnowApp() {
             shotColumnIndex = 0;
         }
         const promptColumnIndex = getStoryboardTablePromptColumnIndex(headers);
+        const videoPromptColumnIndex = getStoryboardTableVideoPromptColumnIndex(headers);
         const descriptionColumnIndex = getStoryboardTableDescriptionColumnIndex(headers);
         const rowBySceneIndex = new Map();
         rows.forEach((row, rowIdx) => {
@@ -22711,20 +23067,25 @@ function TapnowApp() {
             const nextRow = headers.map((_, colIdx) => String(Array.isArray(seedRow) ? (seedRow[colIdx] ?? '') : ''));
             nextRow[shotColumnIndex] = String(sceneIndex);
             if (promptColumnIndex >= 0) {
-                nextRow[promptColumnIndex] = String(shot?.prompt ?? '');
+                nextRow[promptColumnIndex] = getStoryboardShotImagePrompt(shot);
+            }
+            if (videoPromptColumnIndex >= 0) {
+                nextRow[videoPromptColumnIndex] = getStoryboardShotVideoPrompt(shot);
             }
             if (descriptionColumnIndex >= 0) {
                 nextRow[descriptionColumnIndex] = String(shot?.description ?? '');
             }
             return nextRow;
         });
-        const finalTable = normalizeStoryboardTableData({ headers, rows: nextRows });
+        const finalTable = normalizeStoryboardTableData({ headers, rows: nextRows }, mode);
         const nextMarkdown = stringifyMarkdownTable(finalTable);
         const currentMarkdown = stringifyMarkdownTable(sourceTable);
         if (currentMarkdown === nextMarkdown) return null;
         return {
             tableData: finalTable,
-            tableMarkdown: nextMarkdown
+            tableMarkdown: nextMarkdown,
+            [getStoryboardModeTableDataKey(mode)]: finalTable,
+            [getStoryboardModeTableMarkdownKey(mode)]: nextMarkdown
         };
     }, [normalizeStoryboardTableData]);
     useEffect(() => {
@@ -22840,6 +23201,9 @@ function TapnowApp() {
             image_url: '',
             description: '',
             prompt: '',
+            imagePrompt: '',
+            videoPrompt: '',
+            selectedCharacterIds: [],
             camera: '',
             tags: [],
             status: 'draft',
@@ -23084,13 +23448,15 @@ function TapnowApp() {
                 });
             }
 
+            const prompt = mjPrompt || jimengPrompt;
             return {
                 id: `shot - ${Date.now()} -${idx} `,
                 scene_index: idx + 1,
                 time_range: result.time_range || '',
                 image_url: '',
                 description: description,
-                prompt: mjPrompt || jimengPrompt,
+                prompt,
+                selectedCharacterIds: resolveStoryboardCharacterIdsFromText(`${description} ${prompt}`),
                 camera: tags.find(t => ['推', '拉', '摇', '移', '跟', 'Dolly', 'Pan', 'Tilt', 'Zoom'].some(k => t.includes(k))) || '',
                 tags: tags,
                 status: 'draft'
@@ -23134,13 +23500,15 @@ function TapnowApp() {
                 tags.find(t => ['推', '拉', '摇', '移', '跟', 'Dolly', 'Pan', 'Tilt', 'Zoom'].some(k => t.includes(k))) ||
                 '';
 
+            const prompt = mjPrompt || jimengPrompt;
             return {
                 id: `shot - ${Date.now()} -${idx} `,
                 scene_index: idx + 1,
                 time_range: result.time_range || '',
                 image_url: '',
                 description: description,
-                prompt: mjPrompt || jimengPrompt,
+                prompt,
+                selectedCharacterIds: resolveStoryboardCharacterIdsFromText(`${description} ${prompt}`),
                 camera: camera,
                 tags: tags,
                 status: 'draft'
@@ -23497,9 +23865,9 @@ function TapnowApp() {
     };
 
     const generateSingleShot = (nodeId, shot) => {
-        // 1. 构建更加丰富的 Prompt
-        // 优先级：提示词 > 画面描述 > 风格标签 > 运镜
-        let finalPrompt = shot.prompt || "";
+        // 1. 构建视频 Prompt：在动态视频提示词基础上，组合运镜、动作、情绪、对话/台词等导演信息
+        //    （与「生成分镜图片」的纯静态提示词区分开）。
+        let finalPrompt = buildStoryboardVideoGenerationPrompt(shot);
 
         // 如果提示词为空，尝试使用描述自动构建
         if (!finalPrompt && shot.description) {
@@ -23512,43 +23880,103 @@ function TapnowApp() {
             finalPrompt += `, ${styleText} `;
         }
 
-        // 拼接运镜 (Camera)
-        if (shot.camera) {
-            finalPrompt += `, ${shot.camera} camera movement`;
-        }
-
         if (!finalPrompt) {
             alert(t('请至少填写画面描述或提示词'));
             return;
         }
 
-        // 2. 获取选中的视频模型（必须选择视频模型）
-        const selectedModel = resolveModelKey(shot.model || (apiConfigs.find(c => c.type === 'Video' && c.id === 'sora-2')?.id || apiConfigs.find(c => c.type === 'Video')?.id || ''));
-        const modelConfig = getApiConfigByKey(selectedModel);
+        // 2. 获取选中的视频模型。若镜头残留了图片模型/失效模型，自动回退到默认视频模型。
+        const initialModel = resolveModelKey(shot.model || '');
+        const videoModelCandidates = [
+            initialModel,
+            getStoryboardDefaultModelKey('video'),
+            (() => {
+                try { return localStorage.getItem('vodstudio_last_video_model') || ''; } catch { return ''; }
+            })(),
+            getFirstEnabledModelKey('video'),
+            apiConfigs.find(c => c.type === 'Video' && c.id === 'sora-2')?.id || '',
+            apiConfigs.find(c => c.type === 'Video')?.id || ''
+        ].filter(Boolean);
+        let selectedModel = '';
+        let modelConfig = null;
+        for (const candidate of Array.from(new Set(videoModelCandidates))) {
+            const resolved = resolveModelKey(candidate);
+            const config = getApiConfigByKey(resolved);
+            if (config && !config.disabled && config.type === 'Video') {
+                selectedModel = resolved;
+                modelConfig = config;
+                break;
+            }
+        }
 
-        if (!modelConfig || modelConfig.type !== 'Video') {
+        if (!modelConfig || !selectedModel) {
             alert(t('请先选择一个视频模型'));
             return;
         }
+        const shouldPatchVideoModel = initialModel !== selectedModel || getApiConfigByKey(initialModel)?.type !== 'Video';
+        const videoModelPatch = shouldPatchVideoModel ? {
+            model: selectedModel,
+            ratio: getPreferredModelRatio(selectedModel, 'video'),
+            resolution: getPreferredVideoResolutionForModel(selectedModel),
+            duration: getDefaultDurationForModel(selectedModel),
+            customParams: getDefaultCustomParamsForModel(selectedModel, null, { preserveByName: false })
+        } : null;
+
+        const videoCustomParams = videoModelPatch?.customParams || shot.customParams || null;
+        const selectedVodSubModel = modelConfig?.provider === TENCENT_VOD_PROVIDER_KEY
+            ? resolveVodSubModel('video', videoCustomParams, Array.isArray(modelConfig?.customParams) ? modelConfig.customParams : [])
+            : null;
+        const selectedVodKlingVersion = selectedVodSubModel ? normalizeVodKlingVersion(selectedVodSubModel.modelVersion) : '';
+        const selectedCharacterSubjectInfos = selectedVodSubModel
+            && String(selectedVodSubModel.modelName || '').trim().toLowerCase() === 'kling'
+            && ['o1', '3.0-omni'].includes(selectedVodKlingVersion)
+            ? getCharacterSubjectInfos(shot.selectedCharacterIds || [])
+            : [];
+        const useKlingSubjectInfos = selectedCharacterSubjectInfos.length > 0;
+        if (useKlingSubjectInfos) {
+            const subjectTokens = selectedCharacterSubjectInfos
+                .map((item) => String(item.Name || item.Id || '').trim())
+                .filter(Boolean)
+                .map((name) => `<<<${name}>>>`);
+            if (subjectTokens.length > 0 && !subjectTokens.some((token) => finalPrompt.includes(token))) {
+                finalPrompt = `使用固定主体 ${subjectTokens.join('、')}。${finalPrompt}`;
+            }
+        }
 
         // 3. 准备参考图 (Image Input)
-        // 如果分镜格子里已经有图（比如用户拖入的参考图），则将其作为 img2img/img2vid 的输入
+        // V3.8.x 修复：智能分镜视频明确区分「首帧 / 角色参考图 / 尾帧」三种角色，避免互相覆盖或被丢弃。
+        // Kling 固定主体模式使用 SubjectInfos，不把角色图当参考图传入。
+        const characterReferenceImages = useKlingSubjectInfos ? [] : getCharacterReferenceImages(shot.selectedCharacterIds || []);
+        // 首帧：优先用用户在卡片里「拖入/粘贴/上传」的 image_url；
+        //       若没有，则自动回退到「① 生成分镜图片」阶段产出的分镜图（保留图→视频的衔接）。
+        const autoStoryboardImage = (Array.isArray(shot.output_images) && shot.output_images.length > 0)
+            ? (shot.output_images[shot.selectedImageIndex >= 0 ? shot.selectedImageIndex : 0] || '')
+            : '';
+        const firstFrameImage = shot.image_url || autoStoryboardImage || '';
+        // 尾帧：仅在显式开启首尾帧时使用 lastFrame。
+        const lastFrameImage = (shot.useFirstLastFrame && shot.lastFrame) ? shot.lastFrame : '';
+        // 扁平 sourceImages：首帧固定排在最前（index 0），其后角色参考图，最后尾帧。
+        // 这样即使下游按「第 0 张=首帧」的旧逻辑处理，用户拖入的首帧也一定生效。
         const sourceImages = [];
-        if (shot.image_url) {
-            sourceImages.push(shot.image_url);
-        }
-        // V3.7.5: Support lastFrame (Video End Frame)
-        if (shot.useFirstLastFrame && shot.lastFrame) {
-            sourceImages.push(shot.lastFrame);
-        }
+        const pushUniqueSource = (img) => { if (img && !sourceImages.includes(img)) sourceImages.push(img); };
+        pushUniqueSource(firstFrameImage);
+        characterReferenceImages.forEach(pushUniqueSource);
+        pushUniqueSource(lastFrameImage);
+        // 精确角色信息：下游 VOD 通路据此构建 FileInfos（FirstFrame / Reference / LastFrame），
+        // 不再把角色参考图误当成首帧或尾帧。
+        const storyboardImageRoles = {
+            firstFrame: firstFrameImage || '',
+            references: characterReferenceImages.filter((img) => img && img !== firstFrameImage && img !== lastFrameImage),
+            lastFrame: lastFrameImage || ''
+        };
 
         // 4. 更新 shot 状态为生成中
         const startAt = Date.now();
-        updateShot(nodeId, shot.id, { status: 'generating', generationStartTime: startAt });
+        updateShot(nodeId, shot.id, { ...(videoModelPatch || {}), status: 'generating', generationStartTime: startAt });
         scheduleStoryboardTimeout(nodeId, shot.id, startAt, 'video');
 
         // 5. 构建覆盖选项 - 确保 duration 格式正确
-        let durationValue = shot.duration || getDefaultDurationForModel(selectedModel);
+        let durationValue = videoModelPatch?.duration || shot.duration || getDefaultDurationForModel(selectedModel);
         // V3.5.5: 验证 duration 是否在模型支持的范围内
         const validDurations = getDefaultDurationsForModel(selectedModel);
         if (!validDurations.includes(durationValue)) {
@@ -23560,11 +23988,13 @@ function TapnowApp() {
 
         const overrideOptions = {
             model: selectedModel,
-            ratio: shot.ratio || '16:9',
+            ratio: videoModelPatch?.ratio || shot.ratio || getPreferredModelRatio(selectedModel, 'video') || '16:9',
             duration: normalizedDuration,
-            resolution: normalizeVideoResolutionLower(shot.resolution || '720p'),
+            resolution: normalizeVideoResolutionLower(videoModelPatch?.resolution || shot.resolution || getPreferredVideoResolutionForModel(selectedModel) || '720p'),
             isHD: !!shot.isHD,
-            customParams: shot.customParams || null
+            customParams: videoCustomParams,
+            storyboardImageRoles,
+            ...(selectedCharacterSubjectInfos.length > 0 ? { vodSubjectInfos: selectedCharacterSubjectInfos } : {})
         };
 
 
@@ -23587,8 +24017,8 @@ function TapnowApp() {
 
     // V3.6.1: 智能分镜图片生成函数
     const generateSingleImage = (nodeId, shot) => {
-        // 1. 构建 Prompt
-        let finalPrompt = shot.prompt || "";
+        // 1. 构建图片 Prompt：优先用 imagePrompt，回退到 prompt / description
+        let finalPrompt = getStoryboardShotImagePrompt(shot);
 
         // 如果提示词为空，尝试使用描述自动构建
         if (!finalPrompt && shot.description) {
@@ -23607,7 +24037,7 @@ function TapnowApp() {
         }
 
         // 2. 获取选中的图片模型
-        const selectedModel = resolveModelKey(shot.model || localStorage.getItem('tapnow_last_image_model') || (apiConfigs.find(c => isImageModelType(c.type))?.id || ''));
+        const selectedModel = resolveModelKey(shot.model || localStorage.getItem('vodstudio_last_image_model') || (apiConfigs.find(c => isImageModelType(c.type))?.id || ''));
         const modelConfig = getApiConfigByKey(selectedModel);
 
         if (!modelConfig || !isImageModelType(modelConfig.type)) {
@@ -23625,7 +24055,8 @@ function TapnowApp() {
         }
 
         // 3. 准备参考图 (Image Input)
-        const sourceImages = [];
+        const characterReferenceImages = getCharacterReferenceImages(shot.selectedCharacterIds || []);
+        const sourceImages = [...characterReferenceImages];
         if (shot.image_url) {
             sourceImages.push(shot.image_url);
         }
@@ -23642,7 +24073,7 @@ function TapnowApp() {
         // 5. 构建覆盖选项
         const overrideOptions = {
             model: selectedModel,
-            ratio: shot.ratio || '1:1',
+            ratio: shot.ratio || '16:9',
             resolution: normalizeImageResolution(shot.resolution || '2K'),
             customParams: shot.customParams || null
         };
@@ -23916,7 +24347,7 @@ function TapnowApp() {
             updateNodeSettings(nodeId, { model: modelId });
         }
         setLastUsedExtractModel(modelId);
-        try { localStorage.setItem('tapnow_last_extract_model', modelId); } catch { }
+        try { localStorage.setItem('vodstudio_last_extract_model', modelId); } catch { }
 
         // 3. 更新状态
         updateNodeSettings(nodeId, { isAnalyzing: true, progress: 5, errorMsg: null, analysisResults: null });
@@ -26633,7 +27064,7 @@ ${inputText.substring(0, 15000)} ... (截断)
             setDownloadProgress(prev => ({ ...prev, current: totalSteps }));
             const now = new Date();
             const timestamp = `${now.getFullYear().toString().slice(2)}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
-            saveAs(content, `tapnow-assets-${timestamp}.zip`);
+            saveAs(content, `vodstudio-assets-${timestamp}.zip`);
 
             // V3.5.12: Reset download progress
             setDownloadProgress({ active: false, current: totalSteps, total: totalSteps });
@@ -27331,7 +27762,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         const interactive = e.target.closest('input, textarea, select, button, a, [contenteditable="true"]');
                         if (!interactive) return;
                         touchNodeSelectionPriority(node.id);
-                        if (e.nativeEvent) e.nativeEvent.__tapnowSelectionHandled = true;
+                        if (e.nativeEvent) e.nativeEvent.__vodstudioSelectionHandled = true;
                         if (e.ctrlKey || e.metaKey) {
                             setSelectedNodeIds(prev => {
                                 const newSet = new Set(prev);
@@ -27358,7 +27789,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         }
                     }}
                     onMouseDown={(e) => {
-                        if (e.nativeEvent?.__tapnowSelectionHandled) return;
+                        if (e.nativeEvent?.__vodstudioSelectionHandled) return;
                         if (e.button === 0) {
                             touchNodeSelectionPriority(node.id);
                             e.stopPropagation();
@@ -27602,7 +28033,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                     const interactive = e.target.closest('input, textarea, select, button, a, [contenteditable="true"]');
                     if (!interactive) return;
                     touchNodeSelectionPriority(node.id);
-                    if (e.nativeEvent) e.nativeEvent.__tapnowSelectionHandled = true;
+                    if (e.nativeEvent) e.nativeEvent.__vodstudioSelectionHandled = true;
                     if (e.ctrlKey || e.metaKey) {
                         setSelectedNodeIds(prev => {
                             const newSet = new Set(prev);
@@ -27629,7 +28060,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                     }
                 }}
                 onMouseDown={(e) => {
-                    if (e.nativeEvent?.__tapnowSelectionHandled) return;
+                    if (e.nativeEvent?.__vodstudioSelectionHandled) return;
                     if (e.button === 0) {
                         touchNodeSelectionPriority(node.id);
                         e.stopPropagation();
@@ -27888,7 +28319,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         onClick={() => {
                                                                             updateNodeSettings(node.id, { model: modelKey });
                                                                             setLastUsedExtractModel(modelKey);
-                                                                            try { localStorage.setItem('tapnow_last_extract_model', modelKey); } catch { }
+                                                                            try { localStorage.setItem('vodstudio_last_extract_model', modelKey); } catch { }
                                                                             setActiveDropdown(null);
                                                                             setHoveredProvider(null);
                                                                         }}
@@ -28177,7 +28608,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { chatModel: modelKey });
                                                                                     setLastUsedExtractModel(modelKey);
-                                                                                    try { localStorage.setItem('tapnow_last_extract_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('vodstudio_last_extract_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -28418,7 +28849,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { model: modelKey });
                                                                                     setLastUsedVideoModel(modelKey);
-                                                                                    try { localStorage.setItem('tapnow_last_video_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('vodstudio_last_video_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -28492,7 +28923,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         updateNodeSettings(node.id, { resolution: nextValue });
                                                         if (nextValue !== 'Auto') {
                                                             setLastUsedVideoResolution(nextValue);
-                                                            try { localStorage.setItem('tapnow_last_video_res', nextValue); } catch { }
+                                                            try { localStorage.setItem('vodstudio_last_video_res', nextValue); } catch { }
                                                         }
                                                     }}
                                                     className={`w-full px-2 py-1 rounded text-xs border ${theme === 'dark'
@@ -28703,7 +29134,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { model: modelKey });
                                                                                     setLastUsedImageModel(modelKey);
-                                                                                    try { localStorage.setItem('tapnow_last_image_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('vodstudio_last_image_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -29948,7 +30379,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     const val = parseInt(e.target.value) || 3;
                                                                     updateNodeSettings(node.id, { segmentDuration: val });
                                                                     setLastUsedSegmentDuration(val.toString());
-                                                                    try { localStorage.setItem('tapnow_last_segment_duration', val.toString()); } catch { }
+                                                                    try { localStorage.setItem('vodstudio_last_segment_duration', val.toString()); } catch { }
                                                                 }}
                                                                 className={`w-16 px-2 py-1 text-[11px] rounded border ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5] text-zinc-800' : 'bg-white border-zinc-300 text-zinc-800'}`}
                                                                 onMouseDown={(e) => e.stopPropagation()}
@@ -30010,7 +30441,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                             onClick={() => {
                                                                                                 updateNodeSettings(node.id, { model: modelKey });
                                                                                                 setLastUsedAnalyzeModel(modelKey);
-                                                                                                try { localStorage.setItem('tapnow_last_analyze_model', modelKey); } catch { }
+                                                                                                try { localStorage.setItem('vodstudio_last_analyze_model', modelKey); } catch { }
                                                                                                 setActiveDropdown(null);
                                                                                                 setHoveredProvider(null);
                                                                                             }}
@@ -30453,7 +30884,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                             }
 
                             // 2. 尝试从左侧历史记录拖入 (dataTransfer)
-                            const rawPayload = e.dataTransfer.getData('application/x-tapnow-history');
+                            const rawPayload = e.dataTransfer.getData('application/x-vodstudio-history');
                             if (rawPayload) {
                                 try {
                                     const payload = JSON.parse(rawPayload);
@@ -30511,11 +30942,96 @@ ${inputText.substring(0, 15000)} ... (截断)
                             : theme === 'solarized'
                                 ? 'bg-[#fdf6e3] text-zinc-500 border border-[#d7cfb2] cursor-not-allowed'
                                 : 'bg-zinc-200 text-zinc-500 border border-zinc-300 cursor-not-allowed';
+                        const storyboardSelectClass = `h-6 max-w-28 text-[10px] px-1.5 rounded border outline-none transition-colors ${theme === 'dark'
+                            ? 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:border-zinc-600'
+                            : theme === 'solarized'
+                                ? 'bg-[#fdf6e3] border-[#d7cfb2] text-zinc-800 hover:border-[#bdae8a]'
+                                : 'bg-white border-zinc-300 text-zinc-800 hover:border-zinc-400'}`;
+                        const getStoryboardModelOptionsForMode = (mode) => Object.entries(groupedApiConfigs)
+                            .flatMap(([providerKey, group]) => (group.models || [])
+                                .filter((model) => model && !model.disabled && (mode === 'video' ? model.type === 'Video' : isImageModelType(model.type)))
+                                .map((model) => ({
+                                    providerKey,
+                                    providerName: getSettingsProviderDisplayName(providerKey, group.name),
+                                    model,
+                                    modelKey: model._uid || model.id
+                                })))
+                            .filter((item) => item.modelKey);
+                        const storyboardGlobalModelOptions = getStoryboardModelOptionsForMode(storyboardMode);
+                        const storyboardGlobalModelSettingKey = storyboardMode === 'video' ? 'storyboardGlobalVideoModel' : 'storyboardGlobalImageModel';
+                        const storyboardGlobalRatioSettingKey = storyboardMode === 'video' ? 'storyboardGlobalVideoRatio' : 'storyboardGlobalImageRatio';
+                        const storyboardGlobalModel = (() => {
+                            const requested = resolveModelKey(node.settings?.[storyboardGlobalModelSettingKey] || getStoryboardDefaultModelKey(storyboardMode));
+                            const config = getApiConfigByKey(requested);
+                            if (config && !config.disabled && (storyboardMode === 'video' ? config.type === 'Video' : isImageModelType(config.type))) return requested;
+                            return storyboardGlobalModelOptions[0]?.modelKey || '';
+                        })();
+                        const storyboardGlobalRatioOptions = getRatiosForModel(storyboardGlobalModel);
+                        const storyboardGlobalRatio = (() => {
+                            const requested = String(node.settings?.[storyboardGlobalRatioSettingKey] || '').trim();
+                            if (requested && storyboardGlobalRatioOptions.includes(requested)) return requested;
+                            return getPreferredModelRatio(storyboardGlobalModel, storyboardMode);
+                        })();
+                        const applyStoryboardGlobalGenerationParams = () => {
+                            const currentShots = node.settings?.shots || [];
+                            if (currentShots.length === 0) {
+                                showToast('请先解析或添加分镜卡片', 'warning', 2200);
+                                return;
+                            }
+                            const modelKey = storyboardGlobalModel;
+                            const modelConfig = getApiConfigByKey(modelKey);
+                            const matchesMode = modelConfig && (storyboardMode === 'video' ? modelConfig.type === 'Video' : isImageModelType(modelConfig.type));
+                            if (!matchesMode) {
+                                showToast(storyboardMode === 'video' ? '请先选择一个视频模型' : '请先选择一个图片模型', 'warning', 2200);
+                                return;
+                            }
+                            saveToUndoStack();
+                            const customParams = getDefaultCustomParamsForModel(modelKey, null, { preserveByName: false });
+                            const nextShots = currentShots.map((shot) => {
+                                if (storyboardMode === 'video') {
+                                    const resolutionOptions = getVideoResolutionsForModel(modelKey);
+                                    const fallbackResolution = getPreferredVideoResolutionForModel(modelKey);
+                                    const currentResolution = normalizeVideoResolution(shot.resolution || '');
+                                    const resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
+                                    return {
+                                        ...shot,
+                                        model: modelKey,
+                                        ratio: storyboardGlobalRatio,
+                                        resolution,
+                                        duration: shot.duration || getDefaultDurationForModel(modelKey),
+                                        customParams: { ...customParams }
+                                    };
+                                }
+                                const resolutionOptions = getResolutionsForModel(modelKey);
+                                const fallbackResolution = getPreferredImageResolutionForModel(modelKey);
+                                const currentResolution = normalizeImageResolution(shot.resolution || '');
+                                const resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
+                                return {
+                                    ...shot,
+                                    model: modelKey,
+                                    ratio: storyboardGlobalRatio,
+                                    resolution,
+                                    duration: undefined,
+                                    customParams: { ...customParams }
+                                };
+                            });
+                            try {
+                                localStorage.setItem(storyboardMode === 'video' ? 'vodstudio_last_video_model' : 'vodstudio_last_image_model', modelKey);
+                            } catch (error) { /* ignore storage errors */ }
+                            if (storyboardMode === 'video') setLastUsedVideoModel(modelKey);
+                            else setLastUsedImageModel(modelKey);
+                            updateNodeSettings(node.id, {
+                                [storyboardGlobalModelSettingKey]: modelKey,
+                                [storyboardGlobalRatioSettingKey]: storyboardGlobalRatio,
+                                shots: nextShots
+                            });
+                            showToast(`✓ 已应用${storyboardMode === 'video' ? '视频' : '图片'}参数到 ${nextShots.length} 个镜头`, 'success', 2600);
+                        };
 
                         return (
                             <div className="flex h-full">
                                 <div
-                                    className={`flex flex-col h-full rounded-xl overflow-hidden pointer-events-auto transition-colors flex-1 ${theme === 'dark'
+                                    className={`storyboard-node-container flex flex-col h-full rounded-xl overflow-hidden pointer-events-auto transition-colors flex-1 ${theme === 'dark'
                                         ? 'bg-zinc-950 border border-zinc-800'
                                         : theme === 'solarized'
                                             ? 'bg-[#eee8d5] border border-[#d7cfb2]'
@@ -30577,7 +31093,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             >
                                                 <Pencil size={12} />
                                             </button>
-                                            {/* V3.6.1: 图片/视频模式切换滑块 */}
+                                            {/* 两阶段分镜工作流：① 生成分镜图片 → ② 生成视频片段 */}
                                             <div className={`flex items-center ml-2 p-0.5 rounded-full ${storyboardSegmentTrackClass}`}>
                                                 <button
                                                     onClick={(e) => {
@@ -30606,9 +31122,9 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                     }}
                                                     className={`${storyboardSegmentButtonBaseClass} ${getStoryboardSegmentButtonClass(storyboardMode === 'image')}`}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    title={t('切换到图片生成模式')}
+                                                    title={t('① 分镜图片：用角色形象+场景生成静态分镜图')}
                                                 >
-                                                    {t('图片')}
+                                                    {t('① 分镜图片')}
                                                 </button>
                                                 <button
                                                     onClick={(e) => {
@@ -30637,9 +31153,9 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                     }}
                                                     className={`${storyboardSegmentButtonBaseClass} ${getStoryboardSegmentButtonClass(storyboardMode === 'video')}`}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    title={t('切换到视频生成模式')}
+                                                    title={t('② 视频片段：以分镜图+角色形象为参考生成动态片段')}
                                                 >
-                                                    {t('视频')}
+                                                    {t('② 视频片段')}
                                                 </button>
                                             </div>
                                             <div className={`flex items-center ml-2 p-0.5 rounded-full ${storyboardSegmentTrackClass}`}>
@@ -30662,11 +31178,13 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         if (hasTableData) {
                                                             updateNodeSettings(node.id, { viewMode: 'table' });
                                                         } else {
-                                                            const initialTable = { headers: [...STORYBOARD_DEFAULT_TABLE_HEADERS], rows: [] };
+                                                            const initialTable = { headers: getStoryboardDefaultTableHeaders(node.settings?.mode), rows: [] };
                                                             updateNodeSettings(node.id, {
                                                                 viewMode: 'table',
                                                                 tableData: initialTable,
-                                                                tableMarkdown: stringifyMarkdownTable(initialTable)
+                                                                tableMarkdown: stringifyMarkdownTable(initialTable),
+                                                                [getStoryboardModeTableDataKey(node.settings?.mode)]: initialTable,
+                                                                [getStoryboardModeTableMarkdownKey(node.settings?.mode)]: stringifyMarkdownTable(initialTable)
                                                             });
                                                         }
                                                     }}
@@ -30731,12 +31249,15 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             const defaultDuration = mode === 'video' ? getDefaultDurationForModel(defaultModel) : undefined;
                                                             matches.forEach((m, i) => {
                                                                 if (i < existingShots.length) {
-                                                                    mergedShots[i] = { ...mergedShots[i], prompt: m.text, description: m.text };
+                                                                    mergedShots[i] = { ...mergedShots[i], prompt: m.text, imagePrompt: m.text, videoPrompt: m.text, description: m.text, selectedCharacterIds: resolveStoryboardCharacterIdsFromText(m.text, mergedShots[i].selectedCharacterIds) };
                                                                 } else {
                                                                     mergedShots.push({
                                                                         id: Date.now() + Math.random() + i,
                                                                         prompt: m.text,
+                                                                        imagePrompt: m.text,
+                                                                        videoPrompt: m.text,
                                                                         description: m.text,
+                                                                        selectedCharacterIds: resolveStoryboardCharacterIdsFromText(m.text),
                                                                         model: defaultModel,
                                                                         ratio: defaultRatio,
                                                                         resolution: defaultResolution,
@@ -30765,34 +31286,27 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 <span className="whitespace-nowrap">{t('脚本')}</span>
                                             </button>
                                             {hasConnectedNovel && (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            runStoryboardLlmSplit(node.id, 'novel');
-                                                        }}
-                                                        className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${storyboardPrimaryButtonClass}`}
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                        disabled={!!node.settings?.isGenerating}
-                                                        title={t('根据已连接小说生成卡片分镜')}
-                                                    >
-                                                        <Sparkles size={12} />
-                                                        <span className="whitespace-nowrap">{node.settings?.isGenerating && node.settings?.llmPromptMode === 'novel' ? t('生成中...') : t('小说转卡片')}</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            runStoryboardNovelTableGenerate(node.id);
-                                                        }}
-                                                        className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${storyboardPrimaryButtonClass}`}
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                        disabled={!!node.settings?.isGenerating}
-                                                        title={t('根据已连接小说生成 Markdown 分镜表')}
-                                                    >
-                                                        <Sparkles size={12} />
-                                                        <span className="whitespace-nowrap">{node.settings?.isGenerating && storyboardViewMode === 'table' ? t('生成中...') : t('小说转表格')}</span>
-                                                    </button>
-                                                </>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // 合并「小说转分镜图 + 小说转视频」：一次拆分同时产出
+                                                        // 图片分镜（含生图提示词）与视频片段（含生视频提示词）两套表，
+                                                        // 后续分镜图生成的图片会自动作为视频片段首帧。
+                                                        runStoryboardLlmSplit(node.id, 'novel', {
+                                                            modeOverride: 'image',
+                                                            generateTable: true,
+                                                            generateBothTables: true,
+                                                            viewModeAfter: 'table'
+                                                        });
+                                                    }}
+                                                    className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${storyboardPrimaryButtonClass}`}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    disabled={!!node.settings?.isGenerating}
+                                                    title={t('根据已连接小说一次生成分镜图与视频片段（图片自动作为视频首帧）')}
+                                                >
+                                                    <Sparkles size={12} />
+                                                    <span className="whitespace-nowrap">{node.settings?.isGenerating && node.settings?.llmPromptMode === 'novel' ? t('生成中...') : t('小说转分镜')}</span>
+                                                </button>
                                             )}
                                             {/* V3.5.18: 导入关键帧按钮 */}
                                             {(() => {
@@ -30821,7 +31335,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 ...currentShots[i],
                                                                 prompt: currentShots[i]?.prompt ?? '',
                                                                 description: currentShots[i]?.description ?? '',
-                                                                model: resolveModelKey(currentShots[i]?.model || localStorage.getItem('tapnow_last_video_model') || ''),
+                                                                model: resolveModelKey(currentShots[i]?.model || localStorage.getItem('vodstudio_last_video_model') || ''),
                                                                 image_url: keyframes[i]?.url ?? currentShots[i]?.image_url ?? '',
                                                                 image_filename: keyframes[i]?.filename || currentShots[i]?.image_filename || '',
                                                                 status: currentShots[i]?.status || 'draft'
@@ -30903,6 +31417,126 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         <RefreshCw size={12} />
                                                         <span className="whitespace-nowrap">{t('参数')}</span>
                                                     </button>
+                                                );
+                                            })()}
+                                            {characterLibrary.length > 0 && (() => {
+                                                const sbBatchCharIds = Array.isArray(node.settings?.storyboardBatchCharacterIds)
+                                                    ? node.settings.storyboardBatchCharacterIds.map(String)
+                                                    : [];
+                                                const sbBatchCharSet = new Set(sbBatchCharIds);
+                                                const isSbCharDropdownOpen = activeDropdown?.nodeId === node.id && activeDropdown.type === 'storyboard-characters';
+                                                const applySbCharsToShots = (ids) => {
+                                                    const normalizedIds = Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+                                                    updateNodeSettings(node.id, {
+                                                        shots: (node.settings?.shots || []).map((shot) => ({ ...shot, selectedCharacterIds: normalizedIds })),
+                                                        storyboardBatchCharacterIds: normalizedIds
+                                                    });
+                                                };
+                                                const autoMatchSbChars = () => {
+                                                    const nextShots = (node.settings?.shots || []).map((shot) => {
+                                                        const text = `${shot.description || ''} ${getStoryboardShotImagePrompt(shot)} ${getStoryboardShotVideoPrompt(shot)} ${(shot.tags || []).join(' ')}`;
+                                                        const matchedIds = resolveStoryboardCharacterIdsFromText(text, []);
+                                                        return matchedIds.length ? { ...shot, selectedCharacterIds: matchedIds } : shot;
+                                                    });
+                                                    updateNodeSettings(node.id, { shots: nextShots });
+                                                    showToast('已自动匹配全部镜头角色', 'success', 1800);
+                                                };
+                                                return (
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setActiveDropdown(isSbCharDropdownOpen
+                                                                    ? null
+                                                                    : {
+                                                                        nodeId: node.id,
+                                                                        type: 'storyboard-characters',
+                                                                        anchor: {
+                                                                            top: rect.top,
+                                                                            left: rect.left,
+                                                                            right: rect.right,
+                                                                            bottom: rect.bottom,
+                                                                            width: rect.width,
+                                                                            height: rect.height
+                                                                        }
+                                                                    });
+                                                            }}
+                                                            className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${storyboardPrimaryButtonClass}`}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            title={t('批量选择当前分镜使用的人物角色')}
+                                                        >
+                                                            <Users size={12} />
+                                                            <span className="whitespace-nowrap">{t('角色')}</span>
+                                                            {sbBatchCharIds.length > 0 && <span className="text-[9px] opacity-80">{sbBatchCharIds.length}</span>}
+                                                        </button>
+                                                        {isSbCharDropdownOpen && activeDropdown.anchor && createPortal(
+                                                            <div
+                                                                className={`fixed mt-1 w-72 rounded-lg shadow-xl p-2 z-[9999] border ${theme === 'dark'
+                                                                    ? 'bg-[#18181b] border-zinc-700'
+                                                                    : theme === 'solarized' ? 'bg-[#eee8d5] border-[#d7cfb2]' : 'bg-white border-zinc-200'
+                                                                    }`}
+                                                                style={{
+                                                                    top: activeDropdown.anchor.bottom + 6,
+                                                                    left: activeDropdown.anchor.right,
+                                                                    transform: 'translateX(-100%)'
+                                                                }}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                            >
+                                                                <div className={`text-[10px] font-semibold mb-2 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>批量选择人物角色</div>
+                                                                <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                                                                    {characterLibrary.map((character) => {
+                                                                        const characterId = String(character.id);
+                                                                        const isSelected = sbBatchCharSet.has(characterId);
+                                                                        const imageUrl = getCharacterImageUrl(character);
+                                                                        return (
+                                                                            <button
+                                                                                key={characterId}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    const nextIds = isSelected
+                                                                                        ? sbBatchCharIds.filter((id) => id !== characterId)
+                                                                                        : [...sbBatchCharIds, characterId];
+                                                                                    updateNodeSettings(node.id, { storyboardBatchCharacterIds: nextIds });
+                                                                                }}
+                                                                                className={`rounded-lg border p-1 transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/40' : theme === 'dark' ? 'border-zinc-700 opacity-75 hover:opacity-100' : 'border-zinc-200 opacity-75 hover:opacity-100'}`}
+                                                                                title={getCharacterDisplayName(character)}
+                                                                            >
+                                                                                <div className="w-full aspect-square rounded overflow-hidden bg-zinc-800">
+                                                                                    {imageUrl ? <LazyBase64Image src={imageUrl} className="w-full h-full object-cover" /> : <User size={18} className="m-3 text-zinc-500" />}
+                                                                                </div>
+                                                                                <div className="mt-1 truncate text-[8px]">{getCharacterDisplayName(character)}</div>
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                                <div className="grid grid-cols-3 gap-1 mt-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => autoMatchSbChars()}
+                                                                        className={`text-[10px] px-2 py-1 rounded ${theme === 'dark' ? 'bg-blue-900/40 text-blue-200 hover:bg-blue-900/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                                                                    >
+                                                                        自动匹配全部
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => applySbCharsToShots(sbBatchCharIds)}
+                                                                        className={`text-[10px] px-2 py-1 rounded ${theme === 'dark' ? 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                                                                    >
+                                                                        应用到全部
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => applySbCharsToShots([])}
+                                                                        className={`text-[10px] px-2 py-1 rounded ${theme === 'dark' ? 'bg-red-900/40 text-red-200 hover:bg-red-900/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                                                                    >
+                                                                        清空全部
+                                                                    </button>
+                                                                </div>
+                                                            </div>,
+                                                            document.body
+                                                        )}
+                                                    </div>
                                                 );
                                             })()}
                                             {/* V3.5.24: Batch Generate */}
@@ -31441,14 +32075,20 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     mergedShots[i] = {
                                                                         ...mergedShots[i],
                                                                         prompt: m.text,
-                                                                        description: m.text
+                                                                        imagePrompt: m.text,
+                                                                        videoPrompt: m.text,
+                                                                        description: m.text,
+                                                                        selectedCharacterIds: resolveStoryboardCharacterIdsFromText(m.text, mergedShots[i].selectedCharacterIds)
                                                                     };
                                                                 } else {
                                                                     // Create new shot
                                                                     mergedShots.push({
                                                                         id: Date.now() + Math.random() + i,
                                                                         prompt: m.text,
+                                                                        imagePrompt: m.text,
+                                                                        videoPrompt: m.text,
                                                                         description: m.text,
+                                                                        selectedCharacterIds: resolveStoryboardCharacterIdsFromText(m.text),
                                                                         model: defaultModel,
                                                                         ratio: defaultRatio,
                                                                         resolution: defaultResolution,
@@ -31723,13 +32363,15 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     >
                                         {normalizeStoryboardViewMode(node.settings?.viewMode) === 'table' ? (
                                             (() => {
-                                                const markdownInputValue = String(node.settings?.tableMarkdown || '');
-                                                const rawTable = node.settings?.tableData
+                                                const tableSource = getStoryboardModeTableSource(node.settings || {}, node.settings?.mode);
+                                                const markdownInputValue = String(tableSource.tableMarkdown || '');
+                                                const rawTable = tableSource.tableData
                                                     || parseMarkdownTable(markdownInputValue || node.settings?.scriptText || '');
                                                 const tableData = normalizeStoryboardTableData(
                                                     rawTable && Array.isArray(rawTable.headers) && rawTable.headers.length > 0
                                                         ? rawTable
-                                                        : { headers: [...STORYBOARD_DEFAULT_TABLE_HEADERS], rows: [] }
+                                                        : { headers: getStoryboardDefaultTableHeaders(node.settings?.mode), rows: [] },
+                                                    node.settings?.mode
                                                 );
                                                 const isMarkdownCollapsed = !!node.settings?.tableMarkdownCollapsed;
                                                 return (
@@ -31849,9 +32491,12 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 </div>
                                                             </div>
                                                             {!isMarkdownCollapsed && (
-                                                                <textarea
+                                                                    <textarea
                                                                     value={markdownInputValue}
-                                                                    onChange={(e) => updateNodeSettings(node.id, { tableMarkdown: e.target.value })}
+                                                                    onChange={(e) => updateNodeSettings(node.id, {
+                                                                        tableMarkdown: e.target.value,
+                                                                        [tableSource.tableMarkdownKey]: e.target.value
+                                                                    })}
                                                                     className={`w-full min-h-[5rem] max-h-[14rem] p-2 text-xs rounded border resize-y overflow-y-auto custom-scrollbar ${theme === 'dark'
                                                                         ? 'bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500'
                                                                         : theme === 'solarized'
@@ -32003,8 +32648,76 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             })()
                                         ) : (
                                             node.settings?.shots?.length > 0 ? (
-                                            node.settings.shots.map((shot, idx) => {
+                                                <>
+                                                    {storyboardGlobalModelOptions.length > 0 && (
+                                                        <div className={`rounded-lg border p-2 flex items-center gap-2 flex-wrap ${theme === 'dark'
+                                                            ? 'border-zinc-800 bg-zinc-900/50'
+                                                            : theme === 'solarized'
+                                                                ? 'border-[#d7cfb2] bg-[#eee8d5]'
+                                                                : 'border-zinc-300 bg-zinc-50'
+                                                            }`} onMouseDown={(e) => e.stopPropagation()}>
+                                                            <span className={`text-[10px] font-semibold ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                                                {storyboardMode === 'video' ? t('全局视频生成') : t('全局图片生成')}
+                                                            </span>
+                                                            <span className={`text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>{t('模型')}</span>
+                                                            <select
+                                                                value={storyboardGlobalModel}
+                                                                onChange={(e) => {
+                                                                    const modelKey = resolveModelKey(e.target.value);
+                                                                    const ratioOptions = getRatiosForModel(modelKey);
+                                                                    const currentRatio = node.settings?.[storyboardGlobalRatioSettingKey] || storyboardGlobalRatio;
+                                                                    const nextRatio = ratioOptions.includes(currentRatio)
+                                                                        ? currentRatio
+                                                                        : getPreferredModelRatio(modelKey, storyboardMode);
+                                                                    try {
+                                                                        localStorage.setItem(storyboardMode === 'video' ? 'vodstudio_last_video_model' : 'vodstudio_last_image_model', modelKey);
+                                                                    } catch (error) { /* ignore storage errors */ }
+                                                                    if (storyboardMode === 'video') setLastUsedVideoModel(modelKey);
+                                                                    else setLastUsedImageModel(modelKey);
+                                                                    updateNodeSettings(node.id, {
+                                                                        [storyboardGlobalModelSettingKey]: modelKey,
+                                                                        [storyboardGlobalRatioSettingKey]: nextRatio
+                                                                    });
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className={storyboardSelectClass}
+                                                                title={storyboardMode === 'video' ? t('全局视频模型') : t('全局图片模型')}
+                                                            >
+                                                                {storyboardGlobalModelOptions.map(({ providerName, model, modelKey }) => (
+                                                                    <option key={modelKey} value={modelKey}>{providerName} / {model.id}</option>
+                                                                ))}
+                                                            </select>
+                                                            <span className={`text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>{t('比例')}</span>
+                                                            <select
+                                                                value={storyboardGlobalRatio}
+                                                                onChange={(e) => updateNodeSettings(node.id, { [storyboardGlobalRatioSettingKey]: e.target.value })}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className={storyboardSelectClass}
+                                                                title={storyboardMode === 'video' ? t('全局视频长宽比') : t('全局图片长宽比')}
+                                                            >
+                                                                {storyboardGlobalRatioOptions.map((ratio) => (
+                                                                    <option key={ratio} value={ratio}>{ratio}</option>
+                                                                ))}
+                                                            </select>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    applyStoryboardGlobalGenerationParams();
+                                                                }}
+                                                                className={`h-6 px-2 rounded text-[10px] transition-colors ${storyboardPrimaryButtonClass}`}
+                                                                title={storyboardMode === 'video' ? t('应用视频模型和比例到全部分镜') : t('应用图片模型和比例到全部分镜')}
+                                                            >
+                                                                {t('应用到全部卡片')}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {node.settings.shots.map((shot, idx) => {
                                                 const isActiveShot = activeShot?.nodeId === node.id && activeShot?.shotId === shot.id;
+                                                const shotImagePrompt = getStoryboardShotImagePrompt(shot);
+                                                const shotVideoPrompt = getStoryboardShotVideoPrompt(shot);
+                                                const shotPromptForMode = storyboardMode === 'video' ? shotVideoPrompt : shotImagePrompt;
+                                                const shotPromptField = storyboardMode === 'video' ? 'videoPrompt' : 'imagePrompt';
                                                 return (
                                                     <React.Fragment key={shot.id}>
                                                         {/* V3.5.20: Insert Shot Zone (T-junction) */}
@@ -32023,6 +32736,9 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 newShots.splice(idx, 0, {
                                                                     id: Date.now() + Math.random(),
                                                                     prompt: '',
+                                                                    imagePrompt: '',
+                                                                    videoPrompt: '',
+                                                                    selectedCharacterIds: [],
                                                                     description: '',
                                                                     model: defaultModel,
                                                                     ratio: defaultRatio,
@@ -32138,7 +32854,13 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         if (isVideo) {
                                                                             const renderVideoCard = (type, isMain) => {
                                                                                 const field = type === 'first' ? 'image_url' : 'lastFrame';
-                                                                                const imgUrl = shot[field];
+                                                                                // 首帧默认填充：未手动指定首帧时，自动使用「① 分镜图片」阶段生成的图片作为首帧，
+                                                                                // 与视频生成逻辑（generateSingleShot 的 autoStoryboardImage）保持一致。
+                                                                                const autoFirstFrame = (type === 'first' && !shot[field] && Array.isArray(shot.output_images) && shot.output_images.length > 0)
+                                                                                    ? (shot.output_images[shot.selectedImageIndex >= 0 ? shot.selectedImageIndex : 0] || '')
+                                                                                    : '';
+                                                                                const isAutoFilled = !!autoFirstFrame;
+                                                                                const imgUrl = shot[field] || autoFirstFrame;
                                                                                 const label = type === 'first' ? t('首帧') : t('尾帧');
                                                                                 // V3.7.5: H-Split Logic: Main = flex-1 (wider), Sub = w-14 (narrower)
                                                                                 const sizeClass = isMain ? 'flex-1 h-full' : 'w-14 h-full shrink-0';
@@ -32146,7 +32868,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 return (
                                                                                     <div key={type} className={`relative rounded-lg border overflow-hidden group ${sizeClass} ${bgColor} ${borderColor} flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition-all`} onClick={(e) => { e.stopPropagation(); if (!isMain) updateShot(node.id, shot.id, { activeInput: type }); }}>
                                                                                         {imgUrl ? <LazyBase64Image src={imgUrl} className={`w-full h-full object-cover ${!isMain ? 'opacity-60 hover:opacity-100' : ''}`} /> : <div className="flex flex-col items-center gap-1 text-zinc-500"><FolderOpen size={isMain ? 20 : 14} />{isMain && <span className="text-[10px]">选择{label}</span>}</div>}
-                                                                                        <div className="absolute top-0 left-0 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-br z-20 backdrop-blur-md pointer-events-none">{label}</div>
+                                                                                        <div className="absolute top-0 left-0 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-br z-20 backdrop-blur-md pointer-events-none">{label}{isAutoFilled ? ` · ${t('分镜图')}` : ''}</div>
 
                                                                                         {/* V3.7.5: Restore Preview (Maximize) Button */}
                                                                                         {imgUrl && (
@@ -32161,7 +32883,7 @@ ${inputText.substring(0, 15000)} ... (截断)
 
                                                                                         {isMain && (
                                                                                             <>
-                                                                                                {imgUrl && <button onClick={(e) => { e.stopPropagation(); updateShot(node.id, shot.id, { [field]: '' }); }} className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-30"><X size={12} /></button>}
+                                                                                                {shot[field] && <button onClick={(e) => { e.stopPropagation(); updateShot(node.id, shot.id, { [field]: '' }); }} className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-30"><X size={12} /></button>}
                                                                                                 <label className="absolute inset-0 z-10 flex items-center justify-center cursor-pointer opacity-0 hover:opacity-100">
                                                                                                     <input type="file" className="hidden" accept="image/*" onChange={(e) => handleUpload(e, field)} />
                                                                                                     <div className="p-2 rounded-full bg-black/50 text-white"><FolderOpen size={16} /></div>
@@ -32373,7 +33095,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 <span className="truncate font-mono text-[10px]">
                                                                                     {(() => {
                                                                                         const mode = normalizeStoryboardMode(node.settings?.mode);
-                                                                                        const lastModelKey = mode === 'image' ? 'tapnow_last_image_model' : 'tapnow_last_video_model';
+                                                                                        const lastModelKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
                                                                                         // V3.7.29: 只显示 shot.model，不 fallback 到 localStorage（避免假联动）
                                                                                         return getApiConfigByKey(shot.model)?.id || shot.model || '选择模型';
                                                                                     })()}
@@ -32438,7 +33160,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                                     customParams: getDefaultCustomParamsForModel(modelKey, null, { preserveByName: false })
                                                                                                                 });
                                                                                                                 // V3.6.0.fuckedup: 根据模式保存最后使用的模型
-                                                                                                                const lastModelKey = mode === 'image' ? 'tapnow_last_image_model' : 'tapnow_last_video_model';
+                                                                                                                const lastModelKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
                                                                                                                 localStorage.setItem(lastModelKey, modelKey);
                                                                                                                 // 同步到 state
                                                                                                                 if (mode === 'image') {
@@ -32657,6 +33379,67 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         );
                                                                     })()}
 
+                                                                    {characterLibrary.length > 0 && (() => {
+                                                                        const selectedIds = Array.isArray(shot.selectedCharacterIds) ? shot.selectedCharacterIds.map(String) : [];
+                                                                        const selectedSet = new Set(selectedIds);
+                                                                        const maxVisibleCharacters = 8;
+                                                                        const visibleCharacters = characterLibrary.slice(0, maxVisibleCharacters);
+                                                                        const autoMatchCharacters = () => {
+                                                                            const nextIds = resolveStoryboardCharacterIdsFromText(`${shot.description || ''} ${shotImagePrompt} ${shotVideoPrompt} ${(shot.tags || []).join(' ')}`, []);
+                                                                            updateShot(node.id, shot.id, { selectedCharacterIds: nextIds });
+                                                                        };
+                                                                        return (
+                                                                            <div className={`rounded-lg border p-2 ${theme === 'dark' ? 'bg-blue-950/10 border-blue-900/40' : 'bg-blue-50 border-blue-200'}`} onMouseDown={(e) => e.stopPropagation()}>
+                                                                                <div className="flex items-center justify-between mb-1.5">
+                                                                                    <div className={`text-[10px] font-semibold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>人物角色</div>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => { e.stopPropagation(); autoMatchCharacters(); }}
+                                                                                        className={`text-[9px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-blue-800 text-blue-300 hover:bg-blue-900/30' : 'border-blue-200 text-blue-700 hover:bg-blue-100'}`}
+                                                                                    >
+                                                                                        自动匹配
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+                                                                                    {visibleCharacters.map((character) => {
+                                                                                        const characterId = String(character.id);
+                                                                                        const isSelected = selectedSet.has(characterId);
+                                                                                        const imageUrl = getCharacterImageUrl(character);
+                                                                                        return (
+                                                                                            <button
+                                                                                                key={characterId}
+                                                                                                type="button"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    const nextIds = isSelected
+                                                                                                        ? selectedIds.filter((id) => id !== characterId)
+                                                                                                        : [...selectedIds, characterId];
+                                                                                                    updateShot(node.id, shot.id, { selectedCharacterIds: nextIds });
+                                                                                                }}
+                                                                                                className={`relative shrink-0 rounded-lg border p-1 transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/40' : theme === 'dark' ? 'border-zinc-700 opacity-75 hover:opacity-100' : 'border-zinc-200 opacity-75 hover:opacity-100'}`}
+                                                                                                title={getCharacterDisplayName(character)}
+                                                                                            >
+                                                                                                <div className="w-9 h-9 rounded overflow-hidden bg-zinc-800">
+                                                                                                    {imageUrl ? <LazyBase64Image src={imageUrl} className="w-full h-full object-cover" /> : <User size={16} className="m-2 text-zinc-500" />}
+                                                                                                </div>
+                                                                                                <div className="mt-1 w-9 truncate text-[8px]">{getCharacterDisplayName(character)}</div>
+                                                                                            </button>
+                                                                                        );
+                                                                                    })}
+                                                                                    {characterLibrary.length > maxVisibleCharacters && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={(e) => { e.stopPropagation(); setCharactersOpen(true); }}
+                                                                                            className={`shrink-0 w-10 h-12 rounded-lg border text-[9px] ${theme === 'dark' ? 'border-zinc-700 text-zinc-400 hover:bg-zinc-800' : 'border-zinc-200 text-zinc-500 hover:bg-zinc-100'}`}
+                                                                                        >
+                                                                                            +{characterLibrary.length - maxVisibleCharacters}
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
+
                                                                     <textarea
                                                                         className={`text-sm outline-none resize-none bg-transparent transition-all ${theme === 'dark'
                                                                             ? 'text-zinc-200 placeholder:text-zinc-700'
@@ -32701,70 +33484,112 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             transition: 'all 0.2s ease-in-out'
                                                                         }}
                                                                     />
-                                                                    <div className={`p-2 rounded text-xs font-mono border transition-all relative ${theme === 'dark'
-                                                                        ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                                                                        : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5] text-zinc-600' : 'bg-zinc-50 border-zinc-200 text-zinc-600'
-                                                                        }`}
-                                                                        style={{
-                                                                            minHeight: isActiveShot ? '8rem' : '2rem',
-                                                                            transition: 'all 0.2s ease-in-out'
-                                                                        }}>
-                                                                        <textarea
-                                                                            className="w-full bg-transparent outline-none resize-none placeholder:text-opacity-50 transition-all pr-8"
-                                                                            value={shot.prompt || ''}
-                                                                            placeholder={t('等待生成提示词...')}
-                                                                            onChange={(e) => updateShot(node.id, shot.id, { prompt: e.target.value })}
-                                                                            onClick={(e) => {
+                                                                    {/* 两阶段双提示词：图片区(静态场景) + 视频区(动态描述) 同时显示 */}
+                                                                    {(() => {
+                                                                        const promptBoxClass = theme === 'dark'
+                                                                            ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                                                                            : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5] text-zinc-600' : 'bg-zinc-50 border-zinc-200 text-zinc-600';
+                                                                        const sharedTextareaProps = {
+                                                                            className: 'w-full bg-transparent outline-none resize-none placeholder:text-opacity-50 transition-all pr-8',
+                                                                            onClick: (e) => {
                                                                                 e.stopPropagation();
-                                                                                // 确保点击文本框时也激活卡片
-                                                                                if (!isActiveShot) {
-                                                                                    setActiveShot({ nodeId: node.id, shotId: shot.id });
-                                                                                }
-                                                                            }}
-                                                                            onMouseDown={(e) => e.stopPropagation()}
-                                                                            onFocus={(e) => {
+                                                                                if (!isActiveShot) setActiveShot({ nodeId: node.id, shotId: shot.id });
+                                                                            },
+                                                                            onMouseDown: (e) => e.stopPropagation(),
+                                                                            onFocus: (e) => {
                                                                                 e.stopPropagation();
-                                                                                // 确保聚焦时激活卡片
-                                                                                if (!isActiveShot) {
-                                                                                    setActiveShot({ nodeId: node.id, shotId: shot.id });
-                                                                                }
-                                                                            }}
-                                                                            onInput={(e) => {
-                                                                                // 输入时自动调整高度（仅在激活状态下）
+                                                                                if (!isActiveShot) setActiveShot({ nodeId: node.id, shotId: shot.id });
+                                                                            },
+                                                                            onInput: (e) => {
                                                                                 if (isActiveShot) {
                                                                                     e.currentTarget.style.height = 'auto';
                                                                                     e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
                                                                                 }
-                                                                            }}
-                                                                            ref={(el) => {
-                                                                                // 当卡片激活时，自动调整高度以显示所有内容
+                                                                            },
+                                                                            ref: (el) => {
                                                                                 if (el && isActiveShot) {
                                                                                     el.style.height = 'auto';
                                                                                     el.style.height = el.scrollHeight + 'px';
                                                                                 }
-                                                                            }}
-                                                                            style={{
-                                                                                minHeight: isActiveShot ? '8rem' : '2rem',
+                                                                            },
+                                                                            style: {
+                                                                                minHeight: isActiveShot ? '6rem' : '2rem',
                                                                                 height: isActiveShot ? 'auto' : '2rem',
                                                                                 transition: 'all 0.2s ease-in-out'
-                                                                            }}
-                                                                        />
-                                                                        {(shot.model === 'sora-2' || shot.model === 'sora-2-pro') && characterLibrary.length > 0 && (
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setCharactersOpen(true);
-                                                                                }}
-                                                                                className={`absolute top-2 right-2 p-1 rounded transition-colors ${theme === 'dark'
-                                                                                    ? 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
-                                                                                    : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200'
-                                                                                    }`}
-                                                                                title={t('插入角色')}
-                                                                            >
-                                                                                <Users size={12} />
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
+                                                                            }
+                                                                        };
+                                                                        const imageActive = storyboardMode === 'image';
+                                                                        const videoActive = storyboardMode === 'video';
+                                                                        return (
+                                                                            <div className="flex flex-col gap-1.5">
+                                                                                {/* ① 图片提示词（静态场景） */}
+                                                                                <div className={`p-2 rounded text-xs font-mono border transition-all relative ${promptBoxClass} ${imageActive ? 'ring-1 ring-blue-500/60' : 'opacity-90'}`}>
+                                                                                    <div className="flex items-center gap-1 mb-1 select-none" onMouseDown={(e) => e.stopPropagation()}>
+                                                                                        <ImageIcon size={11} className="text-blue-500" />
+                                                                                        <span className="text-[10px] font-semibold text-blue-500">{t('图片提示词·静态场景')}</span>
+                                                                                    </div>
+                                                                                    <textarea
+                                                                                        {...sharedTextareaProps}
+                                                                                        value={shot.imagePrompt ?? shot.image_prompt ?? shot.prompt ?? ''}
+                                                                                        placeholder={t('静态画面/场景/构图/光线...')}
+                                                                                        onChange={(e) => updateShot(node.id, shot.id, { imagePrompt: e.target.value })}
+                                                                                    />
+                                                                                </div>
+                                                                                {/* ② 视频提示词（动态描述） */}
+                                                                                <div className={`p-2 rounded text-xs font-mono border transition-all relative ${promptBoxClass} ${videoActive ? 'ring-1 ring-green-500/60' : 'opacity-90'}`}>
+                                                                                    <div className="flex items-center gap-1 mb-1 select-none" onMouseDown={(e) => e.stopPropagation()}>
+                                                                                        <Zap size={11} className="text-green-500" fill="currentColor" />
+                                                                                        <span className="text-[10px] font-semibold text-green-500">{t('视频提示词·动态描述')}</span>
+                                                                                    </div>
+                                                                                    <textarea
+                                                                                        {...sharedTextareaProps}
+                                                                                        value={shot.videoPrompt ?? shot.video_prompt ?? shot.motionPrompt ?? shot.prompt ?? ''}
+                                                                                        placeholder={t('连续动作/运镜/台词/情绪变化...')}
+                                                                                        onChange={(e) => updateShot(node.id, shot.id, { videoPrompt: e.target.value })}
+                                                                                    />
+                                                                                    {/* 视频导演信息：运镜/动作/情绪/对话，将与动态提示词一并写入视频生成 */}
+                                                                                    {(isActiveShot || getStoryboardShotCamera(shot) || getStoryboardShotAction(shot) || getStoryboardShotEmotion(shot) || getStoryboardShotDialogue(shot)) && (
+                                                                                        <div className="grid grid-cols-2 gap-1 mt-1.5">
+                                                                                            {[
+                                                                                                { key: 'camera', label: t('运镜'), value: getStoryboardShotCamera(shot), ph: t('推近/环绕/跟拍...') },
+                                                                                                { key: 'action', label: t('动作'), value: getStoryboardShotAction(shot), ph: t('连续动作...') },
+                                                                                                { key: 'emotion', label: t('情绪'), value: getStoryboardShotEmotion(shot), ph: t('情绪变化...') },
+                                                                                                { key: 'dialogue', label: t('对话'), value: getStoryboardShotDialogue(shot), ph: t('台词/旁白...') }
+                                                                                            ].map((f) => (
+                                                                                                <div key={f.key} className="flex items-center gap-1">
+                                                                                                    <span className="text-[9px] text-green-500/80 shrink-0 w-6 text-right">{f.label}</span>
+                                                                                                    <input
+                                                                                                        type="text"
+                                                                                                        value={f.value}
+                                                                                                        placeholder={f.ph}
+                                                                                                        onChange={(e) => updateShot(node.id, shot.id, { [f.key]: e.target.value })}
+                                                                                                        onClick={(e) => { e.stopPropagation(); if (!isActiveShot) setActiveShot({ nodeId: node.id, shotId: shot.id }); }}
+                                                                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                                                                        className={`flex-1 min-w-0 px-1.5 py-0.5 rounded text-[10px] border outline-none bg-transparent ${theme === 'dark' ? 'border-zinc-800 text-zinc-300 placeholder:text-zinc-600' : 'border-zinc-200 text-zinc-600 placeholder:text-zinc-400'}`}
+                                                                                                    />
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {(shot.model === 'sora-2' || shot.model === 'sora-2-pro') && characterLibrary.length > 0 && (
+                                                                                        <button
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                setCharactersOpen(true);
+                                                                                            }}
+                                                                                            className={`absolute top-2 right-2 p-1 rounded transition-colors ${theme === 'dark'
+                                                                                                ? 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
+                                                                                                : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200'
+                                                                                                }`}
+                                                                                            title={t('插入角色')}
+                                                                                        >
+                                                                                            <Users size={12} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
 
                                                                     {/* 角色引用栏 (仅 Sora 模型) */}
                                                                     {(() => {
@@ -32773,7 +33598,7 @@ ${inputText.substring(0, 15000)} ... (截断)
 
                                                                         if (!isSora || characterLibrary.length === 0) return null;
 
-                                                                        const currentPrompt = shot.prompt || '';
+                                                                        const currentPrompt = getStoryboardShotVideoPrompt(shot) || '';
                                                                         const expandKey = `${node.id}-${shot.id}`;
                                                                         const isExpanded = characterReferenceBarExpanded[expandKey] || false;
                                                                         const maxVisible = 5; // 最多显示5个角色，超过则显示展开按钮
@@ -32803,7 +33628,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                             newPrompt = newPrompt.trim();
                                                                                                             newPrompt = newPrompt ? `${newPrompt} ${tag} ` : `${tag} `;
                                                                                                         }
-                                                                                                        updateShot(node.id, shot.id, { prompt: newPrompt });
+                                                                                                        updateShot(node.id, shot.id, { videoPrompt: newPrompt });
                                                                                                     }}
                                                                                                     className={`relative shrink-0 transition-all ${isActive ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
                                                                                                     title={char.username}
@@ -33479,7 +34304,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         </div>{/* Close Outer Wrapper */}
                                                     </React.Fragment>
                                                 );
-                                            })
+                                            })}
+                                                </>
                                         ) : (
                                             <div
                                                 className={`flex flex-col items-center justify-center h-40 gap-3 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${theme === 'dark'
@@ -34017,7 +34843,13 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     {/* 首尾帧 UI（仅支持首尾帧且开启时显示） */}
                                     {node.type === 'gen-video' && (() => {
                                         const currentModel = getApiConfigByKey(node.settings?.model);
-                                        const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame;
+                                        const vodSelection = currentModel?.id === VOD_VIDEO_MODEL_ID
+                                            ? resolveVodSubModel('video', node.settings?.customParams, currentModel.customParams)
+                                            : null;
+                                        const vodKlingFeature = vodSelection
+                                            ? getVodKlingReferenceFeature(vodSelection.modelName, vodSelection.modelVersion)
+                                            : '';
+                                        const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame || vodKlingFeature === 'firstLastFrame';
                                         const useFirstLastFrame = !!(node.settings?.useFirstLastFrame || node.settings?.veoFramesMode);
                                         if (!supportsFirstLastFrame || !useFirstLastFrame) return null;
 
@@ -34308,6 +35140,42 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     })()}
                                     {node.type === 'gen-video' && (() => {
                                         const vodConfig = getApiConfigByKey(node.settings?.model);
+                                        if (vodConfig?.id !== VOD_VIDEO_MODEL_ID) return null;
+                                        const vodSelection = resolveVodSubModel('video', node.settings?.customParams, vodConfig.customParams);
+                                        const vodKlingFeature = getVodKlingReferenceFeature(vodSelection.modelName, vodSelection.modelVersion);
+                                        if (!vodKlingFeature) return null;
+                                        const featureLabel = vodKlingFeature === 'firstLastFrame'
+                                            ? 'Kling 3.0 首尾帧'
+                                            : vodKlingFeature === 'multiReference'
+                                                ? 'Kling 3.0-Omni 多图参考'
+                                                : 'Kling O1 固定主体 ID';
+                                        return (
+                                            <div className={`mb-2 rounded-lg border p-2 space-y-2 ${theme === 'dark' ? 'bg-violet-950/20 border-violet-900/40 text-zinc-300' : 'bg-violet-50 border-violet-200 text-zinc-700'}`}>
+                                                <div className="text-[10px] font-semibold">{featureLabel}</div>
+                                                {vodKlingFeature === 'firstLastFrame' && (
+                                                    <div className={`text-[9px] leading-relaxed ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                                                        开启底部“首尾帧”后，可分别连接首帧/尾帧输入点；请求会传 FirstFrame + LastFrameFileId。
+                                                    </div>
+                                                )}
+                                                {vodKlingFeature === 'multiReference' && (
+                                                    <div className={`text-[9px] leading-relaxed ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                                                        默认连接的参考图会以 Usage=Reference 传入，可在提示词中使用 &lt;&lt;&lt;image_1&gt;&gt;&gt;、&lt;&lt;&lt;image_2&gt;&gt;&gt; 引用。
+                                                    </div>
+                                                )}
+                                                {vodKlingFeature === 'subjectReference' && (
+                                                    <textarea
+                                                        value={node.settings?.vodKlingSubjectInfos || ''}
+                                                        onChange={(e) => updateNodeSettings(node.id, { vodKlingSubjectInfos: e.target.value })}
+                                                        placeholder={'每行一个固定主体：主体ID|角色名\n例如：858477278396170315|猫猫'}
+                                                        className={`w-full min-h-[58px] resize-none rounded border px-2 py-1 text-[10px] outline-none ${theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-zinc-200 placeholder-zinc-600' : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'}`}
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                    {node.type === 'gen-video' && (() => {
+                                        const vodConfig = getApiConfigByKey(node.settings?.model);
                                         const isVodVideo = vodConfig?.provider === TENCENT_VOD_PROVIDER_KEY || vodConfig?.id === VOD_VIDEO_MODEL_ID;
                                         if (!isVodVideo) return null;
                                         const enabled = node.settings?.vodAudioGeneration !== false;
@@ -34315,7 +35183,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             <div className={`mb-2 rounded-lg border px-3 py-2 flex items-center justify-between gap-3 ${theme === 'dark' ? 'bg-cyan-950/20 border-cyan-900/40 text-zinc-300' : 'bg-cyan-50 border-cyan-200 text-zinc-700'}`}>
                                                 <div className="min-w-0">
                                                     <div className="text-[10px] font-semibold">VOD 音画同步</div>
-                                                    <div className={`text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>OutputConfig.AudioGeneration：{enabled ? 'Enabled' : 'Disabled'}</div>
+                                                    <div className={`text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>OutputConfig.AudioGeneration：{enabled ? 'Enabled' : 'Disabled'}；同时传 Duration / Resolution</div>
                                                 </div>
                                                 <label className="relative inline-flex items-center cursor-pointer shrink-0" onMouseDown={(e) => e.stopPropagation()}>
                                                     <input
@@ -34392,10 +35260,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             // V3.4.8: 记住上次使用的模型
                                                                             if (node.type === 'gen-image') {
                                                                                 setLastUsedImageModel(modelKey);
-                                                                                try { localStorage.setItem('tapnow_last_image_model', modelKey); } catch { }
+                                                                                try { localStorage.setItem('vodstudio_last_image_model', modelKey); } catch { }
                                                                             } else if (node.type === 'gen-video') {
                                                                                 setLastUsedVideoModel(modelKey);
-                                                                                try { localStorage.setItem('tapnow_last_video_model', modelKey); } catch { }
+                                                                                try { localStorage.setItem('vodstudio_last_video_model', modelKey); } catch { }
                                                                             }
                                                                             setActiveDropdown(null);
                                                                             setHoveredProvider(null);
@@ -34509,7 +35377,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     onClick={() => {
                                                                         updateNodeSettings(node.id, { ratio: r });
                                                                         setLastUsedRatio(r);
-                                                                        try { localStorage.setItem('tapnow_last_ratio', r); } catch { }
+                                                                        try { localStorage.setItem('vodstudio_last_ratio', r); } catch { }
                                                                         setActiveDropdown(null);
                                                                     }}
                                                                     className={`w-full text-center py-1 text-[10px] rounded ${theme === 'dark'
@@ -34572,7 +35440,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             updateNodeSettings(node.id, { resolution: r });
                                                                             if (r !== 'Auto') {
                                                                                 setLastUsedVideoResolution(r);
-                                                                                try { localStorage.setItem('tapnow_last_video_res', r); } catch { }
+                                                                                try { localStorage.setItem('vodstudio_last_video_res', r); } catch { }
                                                                             }
                                                                             setActiveDropdown(null);
                                                                         }}
@@ -34657,7 +35525,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         onClick={() => {
                                                                             updateNodeSettings(node.id, { resolution: r });
                                                                             setLastUsedImageResolution(r);
-                                                                            try { localStorage.setItem('tapnow_last_image_res', r); } catch { }
+                                                                            try { localStorage.setItem('vodstudio_last_image_res', r); } catch { }
                                                                             setActiveDropdown(null);
                                                                         }}
                                                                         className={`w-full text-center py-1 text-[10px] rounded ${theme === 'dark'
@@ -34748,7 +35616,13 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             </label>
                                                             )}
                                                             {node.type === 'gen-video' && (() => {
-                                                                const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame;
+                                                                const vodSelection = currentModel?.id === VOD_VIDEO_MODEL_ID
+                                                                    ? resolveVodSubModel('video', node.settings?.customParams, currentModel.customParams)
+                                                                    : null;
+                                                                const vodKlingFeature = vodSelection
+                                                                    ? getVodKlingReferenceFeature(vodSelection.modelName, vodSelection.modelVersion)
+                                                                    : '';
+                                                                const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame || vodKlingFeature === 'firstLastFrame';
                                                                 const useFirstLastFrame = !!(node.settings?.useFirstLastFrame || node.settings?.veoFramesMode);
                                                                 if (!supportsFirstLastFrame) return null;
                                                                 return (
@@ -34908,14 +35782,14 @@ ${inputText.substring(0, 15000)} ... (截断)
                                 onBlur={() => {
                                     setIsEditingProjectName(false);
                                     try {
-                                        localStorage.setItem('tapnow_project_name', projectName);
+                                        localStorage.setItem('vodstudio_project_name', projectName);
                                     } catch (e) { }
                                 }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         setIsEditingProjectName(false);
                                         try {
-                                            localStorage.setItem('tapnow_project_name', projectName);
+                                            localStorage.setItem('vodstudio_project_name', projectName);
                                         } catch (e) { }
                                     }
                                 }}
@@ -36230,7 +37104,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 const updated = characterLibrary.filter(c => c.id !== character.id);
                                                                 setCharacterLibrary(updated);
                                                                 try {
-                                                                    localStorage.setItem('tapnow_characters', JSON.stringify(updated));
+                                                                    localStorage.setItem('vodstudio_characters', JSON.stringify(updated));
                                                                 } catch (err) {
                                                                     console.error('保存角色库失败:', err);
                                                                 }
@@ -36546,7 +37420,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                     const finalPrompt = generateCharacterPrompt({ name, description: promptText });
                                                     await startGeneration(finalPrompt, 'image', [], `character-library-${Date.now()}`, {
                                                         model: modelId,
-                                                        ratio: '1:1',
+                                                        ratio: '16:9',
                                                         resolution: lastUsedImageResolution || '2K',
                                                         addToCharacterLibrary: true,
                                                         characterLibraryName: name,
@@ -37961,7 +38835,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 onChange={(e) => {
                                                                     const url = e.target.value;
                                                                     setLocalServerUrl(url);
-                                                                    localStorage.setItem('tapnow_local_server_url', url);
+                                                                    localStorage.setItem('vodstudio_local_server_url', url);
                                                                 }}
                                                                 placeholder="http://127.0.0.1:9527"
                                                                 className={`w-full text-xs rounded px-2 py-1 border outline-none ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-white border-zinc-300'}`}
@@ -38037,7 +38911,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 onChange={(e) => {
                                                                     const newValue = parseInt(e.target.value) || 5;
                                                                     setMaxUndoSteps(newValue);
-                                                                    localStorage.setItem('tapnow_max_undo_steps', String(newValue));
+                                                                    localStorage.setItem('vodstudio_max_undo_steps', String(newValue));
                                                                 }}
                                                                 className="w-20"
                                                                 onMouseDown={(e) => e.stopPropagation()}
@@ -38066,7 +38940,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 onChange={(e) => {
                                                                     const newValue = e.target.checked;
                                                                     setJimengUseLocalFile(newValue);
-                                                                    localStorage.setItem('tapnow_jimeng_use_local_file', String(newValue));
+                                                                    localStorage.setItem('vodstudio_jimeng_use_local_file', String(newValue));
                                                                 }}
                                                                 className="sr-only peer"
                                                             />
@@ -38114,7 +38988,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         const dd = now.getDate().toString().padStart(2, '0');
                                                         const hh = now.getHours().toString().padStart(2, '0');
                                                         const min = now.getMinutes().toString().padStart(2, '0');
-                                                        a.download = `tapnow-api-keys-${yy}${mm}${dd}-${hh}${min}.json`;
+                                                        a.download = `vodstudio-api-keys-${yy}${mm}${dd}-${hh}${min}.json`;
                                                         a.click();
                                                         URL.revokeObjectURL(url);
                                                     }}
@@ -38139,7 +39013,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 const data = JSON.parse(text);
                                                                 if (data.globalApiKey) {
                                                                     setGlobalApiKey(data.globalApiKey);
-                                                                    localStorage.setItem('tapnow_global_key', data.globalApiKey);
+                                                                    localStorage.setItem('vodstudio_global_key', data.globalApiKey);
                                                                 }
                                                                 if (data.providers) {
                                                                     const normalized = Object.fromEntries(
@@ -38158,7 +39032,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     collapsedLibraryStateLoadedRef.current = true;
                                                                     setCollapsedLibraryModels(collapsedSet);
                                                                     try {
-                                                                        localStorage.setItem('tapnow_model_library_collapsed', JSON.stringify(Array.from(collapsedSet)));
+                                                                        localStorage.setItem('vodstudio_model_library_collapsed', JSON.stringify(Array.from(collapsedSet)));
                                                                     } catch (e) {
                                                                         console.error('保存模型库折叠状态失败:', e);
                                                                     }
@@ -38582,7 +39456,7 @@ ${inputText.substring(0, 15000)} ... (截断)
 
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>{t('模型')}</div>
-                                                        <div className={`text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>{providerKey === TOKENHUB_PROVIDER_KEY ? '默认模型：hy3-preview' : '仅显示 VOD AIGC 模型'}</div>
+                                                        <div className={`text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>{providerKey === TOKENHUB_PROVIDER_KEY ? '可自由选择 tokenhub 模型' : '仅显示 VOD AIGC 模型'}</div>
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         {getSettingsProviderModels(providerKey, group.models).map(api => {
@@ -38857,7 +39731,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 apiType: entry.apiType || 'openai'
                                             };
                                             if (isImageModelType(entry.type)) {
-                                                previewBase.ratio = entry.defaultRatio || ratioDefaultOptions[0] || '1:1';
+                                                previewBase.ratio = entry.defaultRatio || ratioDefaultOptions[0] || '16:9';
                                                 previewBase.size = entry.defaultResolution || imageResolutionDefaultOptions[0] || '2K';
                                             }
                                             if (entry.type === 'Video') {
@@ -38878,7 +39752,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 const vars = {
                                                     modelName: entry.modelName || entry.id,
                                                     prompt: '示例提示词',
-                                                    ratio: entry.omitRatioOnSubmit ? '' : (previewBase.ratio || '1:1'),
+                                                    ratio: entry.omitRatioOnSubmit ? '' : (previewBase.ratio || '16:9'),
                                                     resolution: entry.omitResolutionOnSubmit ? '' : (previewBase.resolution || previewBase.size || '2K'),
                                                     size: (entry.omitRatioOnSubmit || entry.omitResolutionOnSubmit) ? '' : (previewBase.size || previewBase.resolution || '2K'),
                                                     duration: entry.omitDurationOnSubmit ? '' : (previewBase.duration || '5'),
@@ -40777,7 +41651,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             const filtered = prev.filter(item => !batchSelectedIds.has(item.id));
                                                             // 立即保存到 localStorage，不等待防抖
                                                             try {
-                                                                localStorage.setItem('tapnow_history', JSON.stringify(filtered));
+                                                                localStorage.setItem('vodstudio_history', JSON.stringify(filtered));
                                                             } catch (e) {
                                                                 console.error('立即保存历史记录失败:', e);
                                                             }
@@ -41220,7 +42094,7 @@ ${inputText.substring(0, 15000)} ... (截断)
     );
 }
 
-export default TapnowApp;
+export default VodStudioApp;
 
 
 

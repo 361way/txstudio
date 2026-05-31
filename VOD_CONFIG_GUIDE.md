@@ -184,9 +184,9 @@ ModelVersion = 3.1-fast
 
 | 数据 | localStorage Key |
 |------|------------------|
-| Provider 凭据（含 AK/SK） | `tapnow_providers` |
-| 模型配置列表 | `tapnow_api_configs` |
-| 模型库 | `tapnow_model_library` |
+| Provider 凭据（含 AK/SK） | `vodstudio_providers` |
+| 模型配置列表 | `vodstudio_api_configs` |
+| 模型库 | `vodstudio_model_library` |
 
 注意：
 

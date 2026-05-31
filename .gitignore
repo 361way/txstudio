@@ -34,6 +34,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local source backups
+src_backup_*/
+
 # Keep production artifact checked in intentionally
 !dist/
 !dist/index.html

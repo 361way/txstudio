@@ -104,7 +104,7 @@ const downloadSelectedHistory = async () => {
         const content = await zip.generateAsync({ type: 'blob' });
         const now = new Date();
         const timestamp = `${now.getFullYear().toString().slice(2)}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
-        saveAs(content, `tapnow-assets-${timestamp}.zip`);
+        saveAs(content, `vodstudio-assets-${timestamp}.zip`);
 
         toast.success(`${t('打包完成，已下载')} ${count} ${t('个文件')}`, { id: toastId });
     } catch (e) {

@@ -1,6 +1,6 @@
-# vodstuido
+# VodStudio
 
-这是一个探索 **"AI 结对编程"** 极限的产物——展示了如何仅通过自然语言交互，在一个**单文件 (Single HTML)** 中构建出包含节点编辑器、多模态 API 调用、视频分析算法等复杂功能的现代化应用。Fork 自 Tapnow-Studio-PP 项目，增加了腾讯云VOD和Tokenhub调用逻辑，用于运行测试。除了本地部署外，也增加了cloudbase云端部署方式。
+这是一个探索 **"AI 结对编程"** 极限的产物——展示了如何仅通过自然语言交互，在一个**单文件 (Single HTML)** 中构建出包含节点编辑器、多模态 API 调用、视频分析算法等复杂功能的现代化应用。Fork 自 Tapnow-Studio-PP 项目，增加了腾讯云VOD和Tokenhub调用逻辑，用于运行测试。当前版本运行时已不再依赖 CloudBase 云端能力，统一通过本地/可配置 CORS 转发代理调用上游 API。
 
 - 使用VOD时因为CORS跨域问题，必须要启用本地代理，可以直接 `go run proxy-server.go` 启动本地代理。虽然这里也有一个nodejs版本的代理，但不推荐用，因为nodejs版本的代理导致全局代理，有时会造成本地主机上网异常。后面会去修复这个问题，当前测试golang版本没这个问题；
 - 本地生文大模型不需要代理也可以直接运行。Base URL 直接使用 TokenHub地址就可以了：https://tokenhub.tencentmaas.com ，后面/v1/api/xxx这些不需要加。
@@ -197,15 +197,15 @@ Golang代理主要解决VOD服务安全问题，DeepSeek 能直连，是因为�
 
 <br>
 
-## CloudBase 部署信息
+## CloudBase 部署信息（已弃用 / 仅作历史参考）
+
+> 自当前版本起，前端运行时已**完全解耦 CloudBase**：不再引入 `@cloudbase/js-sdk`，所有 VOD / TokenHub / COS 调用统一改走本地/可配置 CORS 转发代理（默认 `http://127.0.0.1:9527`）。源码中此前硬编码并泄露的 CloudBase `accessKey` 已删除。`cloudbaserc.json` 与 `functions/` 目录暂保留，仅供需要自行部署的用户参考，前端已不再调用其中的云函数。
+
+历史部署信息（保留备查）：
 
 - 环境 ID：`test234-d0g5z9qyae01763f6`（地域：`ap-shanghai`）
-- 静态托管地址：`https://test234-d0g5z9qyae01763f6-1305660054.tcloudbaseapp.com/`
-- 当前验证访问地址：`https://test234-d0g5z9qyae01763f6-1305660054.tcloudbaseapp.com/?v=20260527-0926`
-- 最近部署时间：`2026-05-27 09:26`
-- 本次更新：VOD 上传媒体名使用 `vodstudio-` 前缀；顶部新增 AIGC 生成文件云端保存/临时文件切换，对应 `OutputConfig.StorageMode=Permanent/Temporary`。
-- 云函数：`vodstudio-proxy`，事件函数形态，通过 Web SDK `callFunction` 调用；本次音画同步更新未修改云函数代码，仅更新前端静态托管产物。
-- 部署命令：
+- 云函数：`vodstudio-proxy`，事件函数形态，旧版本通过 Web SDK `callFunction` 调用（现已不再使用）。
+- 历史部署命令：
 
 ```bash
 npm run build

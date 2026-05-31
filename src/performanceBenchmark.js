@@ -1,7 +1,7 @@
 import i18n from './i18n';
 
 /**
- * Tapnow V3.5.20-1 Performance Benchmark Test
+ * VodStudio V3.5.20-1 Performance Benchmark Test
  * 
  * 测试说明：
  * 1. 在浏览器 DevTools Console 中运行此脚本
@@ -129,7 +129,7 @@ const PerformanceBenchmark = {
 
     // 运行所有测试
     async runAll() {
-        console.log('🚀 Tapnow V3.5.20-1 Performance Benchmark');
+        console.log('🚀 VodStudio V3.5.20-1 Performance Benchmark');
         console.log('=========================================\n');
 
         console.log(`1️⃣ ${t('内存使用')}:`);
