@@ -347,6 +347,13 @@ function mimeToExt(mime) {
     if (m.includes('gif')) return 'gif';
     if (m.includes('bmp')) return 'bmp';
     if (m.includes('mp4')) return 'mp4';
+    if (m.includes('quicktime') || m.includes('mov')) return 'mov';
+    if (m.includes('webm')) return 'webm';
+    if (m.includes('mpeg') || m.includes('mp3')) return 'mp3';
+    if (m.includes('aac')) return 'aac';
+    if (m.includes('wav')) return 'wav';
+    if (m.includes('ogg')) return 'ogg';
+    if (m.includes('m4a')) return 'm4a';
     if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
     return 'jpg';
 }
@@ -555,7 +562,8 @@ export function extractVodResultUrls(taskDetail) {
     const fileIds = [];
     const taskType = taskDetail?.TaskType || '';
     const taskNode = taskDetail?.AigcImageTask || taskDetail?.AigcVideoTask
-        || taskDetail?.SceneAigcImageTask || taskDetail?.SceneAigcVideoTask;
+        || taskDetail?.SceneAigcImageTask || taskDetail?.SceneAigcVideoTask
+        || taskDetail?.ComposeMediaTask;
     if (!taskNode) return { urls, fileIds };
 
     const output = taskNode.Output || taskNode.output || {};
@@ -610,7 +618,8 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
         if (status === 'FINISH') {
             // 检查子任务错误码
             const taskNode = detail.AigcImageTask || detail.AigcVideoTask
-                || detail.SceneAigcImageTask || detail.SceneAigcVideoTask;
+                || detail.SceneAigcImageTask || detail.SceneAigcVideoTask
+                || detail.ComposeMediaTask;
             if (taskNode) {
                 const errCode = taskNode.ErrCodeExt || taskNode.ErrCode;
                 const hasError = errCode && errCode !== '0' && errCode !== 0 && errCode !== '';
@@ -797,4 +806,324 @@ export function resolveVodSubModel(type, customParamSelections, customParams = [
         modelName,
         modelVersion: modelVersion && versions.includes(modelVersion) ? modelVersion : fallbackVersion
     };
+}
+
+// ============================================================================
+// 视频合成（ComposeMedia）：把多个视频片段按 EDL 编辑指令合成一条成片
+// ----------------------------------------------------------------------------
+// 复用现有 上传(uploadImageToVod) / 签名(callVodApi) / 轮询(pollVodTask) 基建。
+// 支持：片段排序、裁剪(in/out)、转场(transition)、字幕(caption，渲染为透明 PNG 贴纸)、
+//      配乐(bgm，音频轨)。
+//
+// ComposeMedia 轨道结构（来自官方请求示例）：
+//   Tracks: [ { Type:'Video'|'Audio'|'Sticker', TrackItems:[ {Type, VideoItem|AudioItem|StickerItem|TransitionItem|EmptyItem} ] } ]
+//   VideoItem:      { SourceMedia(FileId), SourceMediaStartTime, Duration, ... }
+//   AudioItem:      { SourceMedia(FileId), SourceMediaStartTime, Duration, AudioOperations }
+//   StickerItem:    { SourceMedia(FileId), StartTime, Duration, CoordinateOrigin, XPos, YPos, Width, Height }
+//   TransitionItem: { Duration, MediaTransitions:[{Type:'ImageFadeInFadeOut'|...}] }
+//   EmptyItem:      { Duration }
+//   Output:         { Container:'mp4', FileName }
+//   Canvas:         { Width, Height, Color }
+// ============================================================================
+
+// 转场类型枚举（图像类转场，作用于视频轨）
+export const VOD_TRANSITION_TYPES = [
+    { id: 'none', label: '无', type: null },
+    { id: 'fade', label: '淡入淡出', type: 'ImageFadeInFadeOut' },
+    { id: 'fadeBlack', label: '淡出后淡入', type: 'ImageFadeOutThenFadeIn' },
+    { id: 'slideUp', label: '上滑', type: 'ImageSlideUp' },
+    { id: 'slideDown', label: '下滑', type: 'ImageSlideDown' },
+    { id: 'slideLeft', label: '左滑', type: 'ImageSlideLeft' },
+    { id: 'slideRight', label: '右滑', type: 'ImageSlideRight' }
+];
+
+function resolveTransitionType(id) {
+    const found = VOD_TRANSITION_TYPES.find((t) => t.id === id);
+    return found ? found.type : (id && id !== 'none' ? id : null);
+}
+
+/**
+ * 上传任意媒体（视频/音频/图片）到 VOD 并返回 FileId。
+ * 是 uploadImageToVod 的语义化别名（其底层已支持 mp4/音频扩展名）。
+ */
+export async function uploadMediaToVod(input, ctx) {
+    return uploadImageToVod(input, ctx);
+}
+
+/**
+ * 把字幕文字渲染成「透明背景 PNG」Blob（浏览器侧 canvas）。
+ * 作为 ComposeMedia 的 Sticker 贴纸叠加到视频轨，兼容性最好。
+ * @param {string} text
+ * @param {Object} opts { canvasWidth, canvasHeight, fontSize, color, strokeColor, bgColor, fontFamily }
+ * @returns {Promise<Blob>}
+ */
+export async function renderCaptionToPngBlob(text, opts = {}) {
+    if (typeof document === 'undefined') {
+        throw new Error('[VOD Compose] 字幕渲染需要浏览器环境');
+    }
+    const canvasWidth = Math.max(2, Math.round(opts.canvasWidth || 1280));
+    const fontSize = Math.max(8, Math.round(opts.fontSize || Math.round(canvasWidth / 28)));
+    const lineHeight = Math.round(fontSize * 1.35);
+    const paddingY = Math.round(fontSize * 0.5);
+    const fontFamily = opts.fontFamily || '"PingFang SC","Microsoft YaHei",sans-serif';
+    const color = opts.color || '#FFFFFF';
+    const strokeColor = opts.strokeColor || 'rgba(0,0,0,0.85)';
+    const bgColor = opts.bgColor || 'transparent';
+
+    // 简易自动换行（按字符宽度估算）
+    const measureCanvas = document.createElement('canvas');
+    const mctx = measureCanvas.getContext('2d');
+    mctx.font = `bold ${fontSize}px ${fontFamily}`;
+    const maxTextWidth = canvasWidth * 0.92;
+    const lines = [];
+    let current = '';
+    for (const ch of String(text || '')) {
+        if (ch === '\n') { lines.push(current); current = ''; continue; }
+        const test = current + ch;
+        if (mctx.measureText(test).width > maxTextWidth && current) {
+            lines.push(current);
+            current = ch;
+        } else {
+            current = test;
+        }
+    }
+    if (current) lines.push(current);
+    if (!lines.length) lines.push('');
+
+    const canvasHeight = lineHeight * lines.length + paddingY * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    if (bgColor && bgColor !== 'transparent') {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, Math.round(fontSize / 8));
+    lines.forEach((line, i) => {
+        const y = paddingY + lineHeight * i + lineHeight / 2;
+        ctx.strokeStyle = strokeColor;
+        ctx.strokeText(line, canvasWidth / 2, y);
+        ctx.fillStyle = color;
+        ctx.fillText(line, canvasWidth / 2, y);
+    });
+
+    return await new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('[VOD Compose] 字幕 PNG 生成失败'));
+        }, 'image/png');
+    });
+}
+
+const VOD_FILE_ID_RE = /^\d{10,}$/;
+
+/**
+ * 端到端执行一次视频合成。
+ *
+ * @param {Object} plan  编辑指令(EDL)
+ *   plan.canvas    {width,height,color}            画布，可选
+ *   plan.clips     [{ src, isFileId, in, out, transition, transitionDuration, caption }]
+ *                  - src: 片段视频的 FileId 或 URL/Blob/dataURL
+ *                  - in/out: 裁剪起止秒（out 缺省=整段）
+ *                  - transition: 与「上一个」片段之间的转场 id（首个片段忽略）
+ *                  - transitionDuration: 转场时长秒（默认 0.5）
+ *                  - caption: { text, fontSize, color, bottomPercent } | null
+ *   plan.bgm       { src, isFileId, volume(0~2), in } | null  配乐
+ *   plan.output    { fileName, container }
+ *
+ * @param {Object} ctx  { credentials, useProxy, localServerUrl, onStage(stage,info) }
+ * @returns {Promise<{urls:string[], taskId:string, taskDetail:Object, outputFileIds:string[]}>}
+ */
+export async function runVodComposePipeline(plan, ctx) {
+    const emit = (stage, info = {}) => {
+        if (typeof ctx.onStage === 'function') {
+            try { ctx.onStage(stage, info); } catch (_) {}
+        }
+    };
+    const clips = Array.isArray(plan?.clips) ? plan.clips.filter(Boolean) : [];
+    if (!clips.length) throw new Error('[VOD Compose] 没有可合成的视频片段');
+
+    const canvas = plan.canvas || {};
+    const canvasWidth = Math.round(canvas.width || 0) || 0;
+
+    // 待上传的媒体收集（去重）：clip 视频、字幕 PNG、bgm
+    const fileIdCache = new Map(); // key(src 字符串引用) -> fileId
+
+    const resolveToFileId = async (src, isFileId, label) => {
+        if (src == null) return null;
+        if (isFileId && typeof src === 'string' && src.trim()) return src.trim();
+        if (typeof src === 'string' && VOD_FILE_ID_RE.test(src.trim())) return src.trim();
+        const cacheKey = typeof src === 'string' ? src : src; // Blob 用引用
+        if (fileIdCache.has(cacheKey)) return fileIdCache.get(cacheKey);
+        const { fileId } = await uploadMediaToVod(src, ctx);
+        if (!fileId) throw new Error(`[VOD Compose] ${label || '媒体'}上传未返回 FileId`);
+        fileIdCache.set(cacheKey, fileId);
+        return fileId;
+    };
+
+    // 1) 上传所有片段视频
+    const total = clips.length + (plan.bgm ? 1 : 0);
+    let uploaded = 0;
+    const clipFileIds = [];
+    for (let i = 0; i < clips.length; i++) {
+        emit('upload_start', { index: uploaded, total, label: `片段${i + 1}` });
+        const fid = await resolveToFileId(clips[i].src, clips[i].isFileId, `片段${i + 1}`);
+        clipFileIds.push(fid);
+        uploaded += 1;
+        emit('upload_done', { index: uploaded - 1, total, fileId: fid });
+    }
+
+    // 2) 上传配乐
+    let bgmFileId = null;
+    if (plan.bgm && plan.bgm.src) {
+        emit('upload_start', { index: uploaded, total, label: '配乐' });
+        bgmFileId = await resolveToFileId(plan.bgm.src, plan.bgm.isFileId, '配乐');
+        uploaded += 1;
+        emit('upload_done', { index: uploaded - 1, total, fileId: bgmFileId });
+    }
+
+    // 3) 渲染并上传字幕 PNG（含输出时间轴起点计算）
+    emit('compose_build', {});
+    const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const videoTrackItems = [];
+    const stickerItems = [];
+    let timelineStart = 0; // 当前片段在成片时间轴上的起点（秒）
+    let totalTimeline = 0;
+
+    for (let i = 0; i < clips.length; i++) {
+        const clip = clips[i];
+        const inSec = Math.max(0, num(clip.in, 0));
+        const outSec = num(clip.out, NaN);
+        const hasDuration = Number.isFinite(outSec) && outSec > inSec;
+        const duration = hasDuration ? (outSec - inSec) : num(clip.duration, 0);
+
+        // 片段间转场（从第二个片段起）
+        let transitionDur = 0;
+        if (i > 0) {
+            const tType = resolveTransitionType(clip.transition);
+            if (tType) {
+                transitionDur = Math.max(0.1, num(clip.transitionDuration, 0.5));
+                videoTrackItems.push({
+                    Type: 'Transition',
+                    TransitionItem: {
+                        Duration: transitionDur,
+                        MediaTransitions: [{ Type: tType }]
+                    }
+                });
+                // 转场会让相邻片段重叠 transitionDur，时间轴回退
+                timelineStart = Math.max(0, timelineStart - transitionDur);
+            }
+        }
+
+        const videoItem = { SourceMedia: clipFileIds[i] };
+        if (inSec > 0) videoItem.SourceMediaStartTime = inSec;
+        if (duration > 0) videoItem.Duration = duration;
+        // 片段自身静音（由配乐控制时）
+        if (clip.mute) videoItem.AudioOperations = [{ Type: 'Volume', VolumeParam: { Mute: 1 } }];
+        videoTrackItems.push({ Type: 'Video', VideoItem: videoItem });
+
+        // 字幕贴纸（覆盖该片段时段）
+        if (clip.caption && String(clip.caption.text || '').trim() && canvasWidth > 0) {
+            const cap = clip.caption;
+            const pngBlob = await renderCaptionToPngBlob(cap.text, {
+                canvasWidth,
+                fontSize: cap.fontSize || Math.round(canvasWidth / 28),
+                color: cap.color || '#FFFFFF'
+            });
+            emit('upload_start', { index: uploaded, total: total, label: `字幕${i + 1}` });
+            const capFid = await uploadMediaToVod(pngBlob, ctx);
+            uploaded += 1;
+            emit('upload_done', { index: uploaded - 1, total, fileId: capFid?.fileId });
+            const bottomPercent = num(cap.bottomPercent, 12);
+            stickerItems.push({
+                Type: 'Sticker',
+                StickerItem: {
+                    SourceMedia: capFid.fileId,
+                    CoordinateOrigin: 'Center',
+                    XPos: '50%',
+                    YPos: `${Math.round(100 - bottomPercent)}%`,
+                    Width: '92%',
+                    StartTime: timelineStart,
+                    Duration: duration > 0 ? duration : undefined
+                }
+            });
+        }
+
+        timelineStart += (duration > 0 ? duration : 0);
+        totalTimeline = Math.max(totalTimeline, timelineStart);
+    }
+
+    // 4) 组装 Tracks
+    const tracks = [{ Type: 'Video', TrackItems: videoTrackItems }];
+    if (stickerItems.length) {
+        tracks.push({ Type: 'Sticker', TrackItems: stickerItems });
+    }
+    if (bgmFileId) {
+        const audioItem = { SourceMedia: bgmFileId };
+        const bgmIn = num(plan.bgm.in, 0);
+        if (bgmIn > 0) audioItem.SourceMediaStartTime = bgmIn;
+        if (totalTimeline > 0) audioItem.Duration = totalTimeline;
+        const vol = num(plan.bgm.volume, 1);
+        if (vol !== 1) {
+            audioItem.AudioOperations = [{ Type: 'Volume', VolumeParam: { Gain: vol } }];
+        }
+        tracks.push({ Type: 'Audio', TrackItems: [{ Type: 'Audio', AudioItem: audioItem }] });
+    }
+
+    // 5) 构建请求体
+    const body = {
+        SubAppId: ctx.credentials.subAppId,
+        Tracks: tracks,
+        Output: {
+            Container: (plan.output && plan.output.container) || 'mp4',
+            FileName: (plan.output && plan.output.fileName) || `vodstudio-compose-${Date.now()}`
+        }
+    };
+    if (canvasWidth > 0 && canvas.height > 0) {
+        body.Canvas = {
+            Width: Math.round(canvasWidth),
+            Height: Math.round(canvas.height)
+        };
+        // Canvas.Color 是可选字段；部分 VOD 环境会拒绝默认黑色值 0x000000，未显式设置时不传。
+        if (canvas.color && String(canvas.color).trim()) {
+            body.Canvas.Color = String(canvas.color).trim();
+        }
+    }
+
+    emit('create_task', { tracks: tracks.length });
+    const resp = await callVodApi('ComposeMedia', body, ctx);
+    const taskId = resp.TaskId;
+    if (!taskId) throw new Error('[VOD Compose] ComposeMedia 未返回 TaskId');
+    emit('task_created', { taskId });
+
+    // 6) 轮询
+    const taskDetail = await pollVodTask(taskId, ctx, {
+        pollIntervalMs: 5000,
+        maxAttempts: 360,
+        onProgress: (attempt, status) => emit('polling', { attempt, status, taskId })
+    });
+
+    // 7) 抽取成片 URL
+    let urls = [];
+    let outputFileIds = [];
+    const composeNode = taskDetail?.ComposeMediaTask;
+    const output = composeNode?.Output || {};
+    if (output.MediaUrl) urls.push(output.MediaUrl);
+    if (output.FileId) outputFileIds.push(output.FileId);
+    if (!urls.length) {
+        const ext = extractVodResultUrls(taskDetail);
+        urls = ext.urls;
+        outputFileIds = ext.fileIds;
+    }
+    emit('task_finish', { taskId, urls });
+
+    if (!urls.length && !outputFileIds.length) {
+        throw new Error('[VOD Compose] 合成完成但未返回可用的成片 URL/FileId');
+    }
+    return { urls, taskId, taskDetail, outputFileIds };
 }

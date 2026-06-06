@@ -61,6 +61,7 @@ import {
     Scissors, Layout, Download, Save, FolderOpen, Brush, Undo2, Eraser, HardDrive, ChevronDown, ChevronUp, UploadCloud,
     Monitor,
     Zap, // V3.5.24
+    Film, // 智能分镜视频合并编辑器
     Ban, Clock, Edit3, Pencil // V3.7.24: API management buttons + V3.7.25: Edit icons
 } from 'lucide-react';
 import JSZip from 'jszip';
@@ -80,8 +81,10 @@ import {
     isVodModel,
     parseVodCredentials,
     resolveVodSubModel,
-    runVodAigcPipeline
+    runVodAigcPipeline,
+    runVodComposePipeline
 } from './vodAdapter';
+import VideoEditor from './VideoEditor';
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
@@ -6950,6 +6953,8 @@ function VodStudioApp() {
     const [charactersOpen, setCharactersOpen] = useState(false);
     const [storyboardAssetsOpen, setStoryboardAssetsOpen] = useState(false);
     const [storyboardAssetTab, setStoryboardAssetTab] = useState('image');
+    // 分镜素材面板 · 视频多选合并（存放被选中视频 asset 的 id，保持点击顺序）
+    const [storyboardSelection, setStoryboardSelection] = useState([]);
     const [characterLibrary, setCharacterLibrary] = useState(() => {
         try {
             const saved = localStorage.getItem('vodstudio_characters');
@@ -6977,6 +6982,8 @@ function VodStudioApp() {
     const [chatSessionDropdownOpen, setChatSessionDropdownOpen] = useState(false);
     const [activeTool, setActiveTool] = useState('select');
     const [activeDropdown, setActiveDropdown] = useState(null);
+    // 智能分镜 · 视频合并 + 在线编辑器
+    const [videoEditor, setVideoEditor] = useState({ open: false, nodeId: null, clips: [], canvasSize: null });
     const [hoveredProvider, setHoveredProvider] = useState(null); // V3.4.6: Provider 二级菜单状态
     const [expandedProviders, setExpandedProviders] = useState({}); // V3.4.7: Settings Modal Provider 展开状态
     const [editingProvider, setEditingProvider] = useState(null); // V3.4.7: Settings Modal Provider 编辑状态
@@ -27075,6 +27082,113 @@ ${inputText.substring(0, 15000)} ... (截断)
         }
     };
 
+    // ========== 智能分镜 · 视频合并 + 在线编辑 ==========
+    // 把分镜节点中所有「已生成视频」的片段（按 shots 物理顺序）收集为可编辑 clips，
+    // 打开 VideoEditor。合成走腾讯云 VOD ComposeMedia（runVodComposePipeline）。
+    const openVideoEditorForNode = (node) => {
+        const mode = normalizeStoryboardMode(node.settings?.mode);
+        if (mode !== 'video') {
+            showToast(t('视频合并仅支持「视频」模式的分镜'), 'error', 4000);
+            return;
+        }
+        const shots = node.settings?.shots || [];
+        const clips = [];
+        shots.forEach((shot, idx) => {
+            const videoUrl = shot.video_url || shot.output_url;
+            if (!videoUrl || !isVideoUrl(videoUrl)) return;
+            const caption = (shot.dialogue || '').trim();
+            clips.push({
+                id: `${node.id}-shot-${idx}`,
+                srcUrl: videoUrl,
+                label: (shot.description || shot.prompt || '').trim().slice(0, 24),
+                caption
+            });
+        });
+        if (!clips.length) {
+            showToast(t('该分镜还没有已生成的视频片段'), 'error', 4000);
+            return;
+        }
+        // 由分镜比例推导画布尺寸
+        const ratio = String(node.settings?.ratio || '16:9').trim();
+        const ratioMap = {
+            '16:9': { width: 1920, height: 1080 },
+            '9:16': { width: 1080, height: 1920 },
+            '1:1': { width: 1080, height: 1080 },
+            '4:3': { width: 1440, height: 1080 },
+            '3:4': { width: 1080, height: 1440 }
+        };
+        const canvasSize = ratioMap[ratio] || { width: 1920, height: 1080 };
+        setVideoEditor({ open: true, nodeId: node.id, clips, canvasSize });
+    };
+
+    // 左侧「分镜」素材面板 · 把勾选的视频素材（按点击顺序）合并为 clips 并打开编辑器。
+    // 与节点入口不同：这里素材跨节点、无单一 nodeId，成片不回填到具体节点。
+    const openVideoEditorForSelectedAssets = () => {
+        const assetMap = new Map(storyboardVideoAssets.map((a) => [a.id, a]));
+        // 按「生成时间」升序合并：最先生成的在前，后生成的在后（而非勾选/列表顺序）
+        const selectedAssets = storyboardSelection
+            .map((id) => assetMap.get(id))
+            .filter(Boolean)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+        const clips = [];
+        selectedAssets.forEach((asset) => {
+            const srcUrl = resolveHistoryUrl(asset.item, asset.url) || asset.url;
+            if (!srcUrl || !isVideoUrl(srcUrl)) return;
+            const shotLabel = asset.storyboardInfo?.shotId ? `Shot ${asset.storyboardInfo.shotId}` : '';
+            clips.push({
+                id: `asset-${asset.id}`,
+                srcUrl,
+                label: (asset.prompt || shotLabel || '').trim().slice(0, 24),
+                caption: ''
+            });
+        });
+        if (clips.length < 2) {
+            showToast(t('请至少勾选 2 个视频片段再合并'), 'error', 4000);
+            return;
+        }
+        // 素材跨节点，画布比例未知，默认 16:9（编辑器内可调整）
+        setVideoEditor({ open: true, nodeId: null, clips, canvasSize: { width: 1920, height: 1080 } });
+    };
+
+    // VideoEditor 的合成入口：构建 VOD ctx，调用云端合成，回填成片 URL 到节点
+    const composeStoryboardVideos = async (plan, { onStage } = {}) => {
+        const nodeId = videoEditor.nodeId;
+        // 凭据
+        const vodProvider = normalizeProviderConfig(TENCENT_VOD_PROVIDER_KEY, providers[TENCENT_VOD_PROVIDER_KEY] || {});
+        let vodCreds;
+        try {
+            vodCreds = parseVodCredentials(vodProvider);
+        } catch (err) {
+            setSettingsOpen(true);
+            throw new Error(err.message);
+        }
+        // 本地 CORS 转发代理
+        const vodProxyBase = (localServerUrl || 'http://127.0.0.1:9527').trim().replace(/\/+$/, '');
+        try {
+            const pingResp = await fetch(`${vodProxyBase}/ping`, { method: 'GET' });
+            if (!pingResp.ok) throw new Error(`HTTP ${pingResp.status}`);
+        } catch (err) {
+            throw new Error(`腾讯云 VOD 合成需要启动本地 CORS 转发服务（node proxy-server.mjs）。无法连接 ${vodProxyBase}/ping：${err?.message || err}`);
+        }
+        const result = await runVodComposePipeline(plan, {
+            credentials: vodCreds,
+            useProxy: true,
+            localServerUrl: vodProxyBase,
+            onStage
+        });
+        const url = result?.urls?.[0] || '';
+        // 回填成片到节点 settings.mergedVideo（侧栏合并无 nodeId，仅在编辑器内预览/下载）
+        if (nodeId && url) {
+            setNodes((prev) => prev.map((n) => n.id === nodeId
+                ? { ...n, settings: { ...n.settings, mergedVideo: { url, taskId: result.taskId, time: Date.now() } } }
+                : n));
+            showToast(t('成片合成完成'), 'success', 4000);
+        } else if (url) {
+            showToast(t('成片合成完成，可在编辑器内预览/下载'), 'success', 4000);
+        }
+        return { url, taskId: result.taskId };
+    };
+
     const buildStoryboardDownloadItems = (node, scope = 'all') => {
         const mode = normalizeStoryboardMode(node.settings?.mode);
         const shots = node.settings?.shots || [];
@@ -31679,6 +31793,21 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         <span className="text-[10px] font-medium whitespace-nowrap">{t('批量')}</span>
                                                     </div>
                                                 </button>
+                                                {/* 智能分镜 · 视频合并 + 在线编辑（仅视频模式） */}
+                                                {(normalizeStoryboardMode(node.settings?.mode)) === 'video' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openVideoEditorForNode(node);
+                                                        }}
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        className={`p-1 rounded transition-colors flex items-center gap-0.5 ${theme === 'dark' ? 'bg-purple-700/80 hover:bg-purple-600 text-purple-100' : 'bg-purple-100 hover:bg-purple-200 text-purple-700'}`}
+                                                        title={t('合并并在线编辑视频片段')}
+                                                    >
+                                                        <Film size={12} />
+                                                        <span className="text-[10px] font-medium whitespace-nowrap">{t('合并')}</span>
+                                                    </button>
+                                                )}
                                                 {/* V3.8: 批量下载按钮（全部/选中） */}
                                                 <div className="relative">
                                                     <button
@@ -36092,6 +36221,17 @@ ${inputText.substring(0, 15000)} ... (截断)
                         </button>
                     </div>
 
+                    {/* 智能分镜 · 视频合并 + 在线编辑器 */}
+                    <VideoEditor
+                        open={videoEditor.open}
+                        onClose={() => setVideoEditor((prev) => ({ ...prev, open: false }))}
+                        theme={theme}
+                        t={t}
+                        initialClips={videoEditor.clips}
+                        canvasSize={videoEditor.canvasSize}
+                        onCompose={composeStoryboardVideos}
+                    />
+
                     {/* History Panel */}
                     {historyOpen && (
                         <div
@@ -36903,9 +37043,24 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     <h3 className={`font-bold text-xs ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
                                         {t('分镜')}
                                     </h3>
-                                    <button onClick={() => setStoryboardAssetsOpen(false)}>
-                                        <X size={12} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {storyboardAssetTab === 'video' && (
+                                            <button
+                                                onClick={openVideoEditorForSelectedAssets}
+                                                disabled={storyboardSelection.length < 2}
+                                                className={`px-2 py-1 text-[10px] rounded transition-colors flex items-center gap-1 ${storyboardSelection.length < 2
+                                                    ? theme === 'dark' ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                                                    : theme === 'dark' ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-purple-500 hover:bg-purple-600 text-white'}`}
+                                                title={t('合并所选视频并在线编辑/加字幕')}
+                                            >
+                                                <Film size={11} />
+                                                {t('合并')}{storyboardSelection.length > 0 ? ` (${storyboardSelection.length})` : ''}
+                                            </button>
+                                        )}
+                                        <button onClick={() => setStoryboardAssetsOpen(false)}>
+                                            <X size={12} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className={`grid grid-cols-2 gap-1 rounded-lg p-1 ${theme === 'dark' ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
                                     {[
@@ -36914,7 +37069,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     ].map((tab) => (
                                         <button
                                             key={tab.key}
-                                            onClick={() => setStoryboardAssetTab(tab.key)}
+                                            onClick={() => {
+                                                setStoryboardAssetTab(tab.key);
+                                                if (tab.key !== 'video') setStoryboardSelection([]);
+                                            }}
                                             className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${storyboardAssetTab === tab.key
                                                 ? theme === 'dark'
                                                     ? 'bg-blue-600 text-white'
@@ -36928,6 +37086,29 @@ ${inputText.substring(0, 15000)} ... (截断)
                                         </button>
                                     ))}
                                 </div>
+                                {storyboardAssetTab === 'video' && storyboardVideoAssets.length > 0 && (
+                                    <div className="flex items-center justify-between mt-2 px-0.5">
+                                        <span className={`text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                            {storyboardSelection.length > 0 ? `${t('已选')} ${storyboardSelection.length}` : t('勾选视频后合并')}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setStoryboardSelection(storyboardVideoAssets.map((a) => a.id))}
+                                                className={`text-[10px] ${theme === 'dark' ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
+                                            >
+                                                {t('全选')}
+                                            </button>
+                                            {storyboardSelection.length > 0 && (
+                                                <button
+                                                    onClick={() => setStoryboardSelection([])}
+                                                    className={`text-[10px] ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-200' : 'text-zinc-500 hover:text-zinc-700'}`}
+                                                >
+                                                    {t('清空')}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
                                 {(() => {
@@ -36944,10 +37125,20 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             {assets.map((asset) => {
                                                 const displayUrl = resolveHistoryUrl(asset.item, asset.url);
                                                 const shotLabel = asset.storyboardInfo?.shotId ? `Shot ${asset.storyboardInfo.shotId}` : 'Shot';
+                                                const selectable = asset.type === 'video';
+                                                const isSelected = selectable && storyboardSelection.includes(asset.id);
+                                                const toggleSelect = (e) => {
+                                                    e.stopPropagation();
+                                                    setStoryboardSelection((prev) => prev.includes(asset.id)
+                                                        ? prev.filter((id) => id !== asset.id)
+                                                        : [...prev, asset.id]);
+                                                };
                                                 return (
                                                     <div
                                                         key={asset.id}
-                                                        className={`group rounded-lg overflow-hidden border cursor-pointer hover:border-blue-500/50 transition-colors ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
+                                                        className={`group rounded-lg overflow-hidden border cursor-pointer transition-colors ${isSelected
+                                                            ? 'border-purple-500 ring-2 ring-purple-500/50'
+                                                            : `hover:border-blue-500/50 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}`}
                                                         onClick={() => {
                                                             if (!displayUrl) return;
                                                             const lightboxImages = asset.type === 'image'
@@ -36975,6 +37166,18 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             <div className="absolute left-1 top-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px]">
                                                                 {shotLabel}
                                                             </div>
+                                                            {selectable && (
+                                                                <button
+                                                                    onClick={toggleSelect}
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    className={`absolute right-1 top-1 w-5 h-5 rounded-full flex items-center justify-center border transition-colors z-10 ${isSelected
+                                                                        ? 'bg-purple-600 border-purple-400 text-white'
+                                                                        : 'bg-black/55 border-white/60 text-transparent hover:text-white/70'}`}
+                                                                    title={isSelected ? t('取消选择') : t('选择用于合并')}
+                                                                >
+                                                                    <Check size={12} />
+                                                                </button>
+                                                            )}
                                                             {asset.type === 'video' && (
                                                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                                                     <div className="w-8 h-8 rounded-full bg-black/55 flex items-center justify-center text-white">
