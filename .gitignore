@@ -38,6 +38,10 @@ yarn-error.log*
 # Local source backups
 src_backup_*/
 
+# Compiled binaries
+proxy-server-linux
+vodstudio-server
+
 # Keep production artifact checked in intentionally
 !dist/
 !dist/index.html
