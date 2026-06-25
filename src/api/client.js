@@ -6,7 +6,9 @@
  * - 渐进式降级：API 不可用时由调用方决定是否降级到 localStorage
  */
 
-const DEFAULT_BASE_URL = (import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8080';
+import { emitForceLogout } from './authEvents';
+
+const DEFAULT_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '';
 const TOKEN_STORAGE_KEY = 'vodstudio_saas_tokens';
 
 /** 读取本地存储的 token */
@@ -75,7 +77,7 @@ async function refreshAccessToken() {
  * @param {object} options - fetch options
  * @param {boolean} skipAuth - 跳过鉴权（登录/注册用）
  */
-export async function apiRequest(path, options = {}, skipAuth = false) {
+export async function apiRequest(path, options = {}, skipAuth = false, rawResponse = false) {
     const url = path.startsWith('http') ? path : `${DEFAULT_BASE_URL}${path}`;
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
 
@@ -94,6 +96,7 @@ export async function apiRequest(path, options = {}, skipAuth = false) {
             resp = await fetch(url, { ...options, headers });
         } catch {
             clearTokens();
+            emitForceLogout();
             // 抛出让上层处理跳转登录
             throw { status: 401, message: '登录已过期，请重新登录', needLogin: true };
         }
@@ -101,13 +104,20 @@ export async function apiRequest(path, options = {}, skipAuth = false) {
 
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok || json.success === false) {
+        // 重试后仍 401（token 依旧无效）也视为需要重新登录
+        if (resp.status === 401) {
+            clearTokens();
+            emitForceLogout();
+            throw { status: 401, message: '登录已过期，请重新登录', needLogin: true };
+        }
         throw {
             status: resp.status,
             message: json.error || json.message || `请求失败 (${resp.status})`,
             data: json.data,
         };
     }
-    return json.data;
+    // rawResponse: 返回完整响应体（用于 /api/vod/invoke 这类透传腾讯云原始 { Response } 的端点）
+    return rawResponse ? json : json.data;
 }
 
 /** GET */

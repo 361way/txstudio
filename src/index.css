@@ -1,16 +1,153 @@
-@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* FlowHome 标题手写体 */
-.font-script {
-    font-family: 'Dancing Script', 'Brush Script MT', cursive;
-}
 
+        body {
+            margin: 0; padding: 0;
+            background-color: #09090b;
+            color: #e4e4e7;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
 
-        body { margin: 0; padding: 0; background-color: #09090b; }
+        /* ===== 现代化设计基础 ===== */
+
+        /* 全站环境光背景：深色基底 + 顶部柔和品牌光晕 */
+        .app-surface {
+            position: relative;
+            background-color: #09090b;
+            background-image:
+                radial-gradient(60rem 40rem at 50% -10%, rgba(99,102,241,0.16), transparent 60%),
+                radial-gradient(50rem 30rem at 100% 0%, rgba(168,85,247,0.10), transparent 55%);
+        }
+
+        /* 玻璃拟态卡片 */
+        .glass-card {
+            background: rgba(24, 24, 27, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 12px 40px -16px rgba(0,0,0,0.6);
+        }
+
+        /* 输入控件统一深色风格 */
+        .field {
+            width: 100%;
+            background: rgba(39, 39, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 0.75rem;
+            color: #f4f4f5;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.875rem;
+            transition: border-color .15s, box-shadow .15s, background .15s;
+        }
+        .field::placeholder { color: #71717a; }
+        .field:hover { border-color: rgba(255,255,255,0.14); }
+        .field:focus {
+            outline: none;
+            border-color: #6366f1;
+            background: rgba(39, 39, 42, 0.85);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.25);
+        }
+        /* 原生 select 下拉箭头 */
+        select.field {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2371717a' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2.25rem;
+            cursor: pointer;
+        }
+
+        /* 主操作按钮：品牌渐变 + 光晕 */
+        .btn-primary {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #fff;
+            font-weight: 600;
+            border-radius: 0.75rem;
+            transition: transform .12s ease, box-shadow .2s ease, opacity .2s;
+            box-shadow: 0 8px 24px -10px rgba(99,102,241,0.7);
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 32px -8px rgba(99,102,241,0.85);
+        }
+        .btn-primary:active:not(:disabled) { transform: translateY(0); }
+        .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* 次级 / 幽灵按钮 */
+        .btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(39,39,42,0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #d4d4d8;
+            border-radius: 0.75rem;
+            font-weight: 500;
+            transition: background .15s, border-color .15s, color .15s;
+        }
+        .btn-ghost:hover { background: rgba(63,63,70,0.6); border-color: rgba(255,255,255,0.16); color: #fff; }
+
+        /* 段落式 tab / segmented control */
+        .segmented {
+            display: flex;
+            padding: 0.25rem;
+            gap: 0.25rem;
+            background: rgba(24,24,27,0.7);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 0.875rem;
+        }
+        .segmented > button {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.625rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #a1a1aa;
+            transition: all .15s;
+        }
+        .segmented > button:hover { color: #e4e4e7; }
+        .segmented > button[data-active="true"] {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            box-shadow: 0 6px 18px -8px rgba(99,102,241,0.7);
+        }
+
+        /* 虚线上传区 */
+        .dropzone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            border: 1.5px dashed rgba(255,255,255,0.14);
+            border-radius: 0.875rem;
+            color: #71717a;
+            cursor: pointer;
+            transition: border-color .15s, color .15s, background .15s;
+        }
+        .dropzone:hover {
+            border-color: #6366f1;
+            color: #a5b4fc;
+            background: rgba(99,102,241,0.06);
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); border: 2px solid transparent; background-clip: padding-box; }
+
         /* Prevent selection during drag - applied to canvas only mostly */
         .select-none { user-select: none; }
         /* Allow selection in chat */

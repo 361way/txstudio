@@ -1,6 +1,6 @@
 package frontend
 
-import "embed"
+import _ "embed"
 
 // dist 目录内嵌前端静态文件。
 // 构建前需将前端产物复制到本目录下的 dist/：

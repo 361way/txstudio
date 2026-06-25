@@ -38,6 +38,7 @@ func NewApp(cfg *Config) (*App, error) {
 	if err := model.SeedPlans(db); err != nil {
 		log.Printf("[warn] 种子套餐写入失败: %v", err)
 	}
+	bootstrapAdmin(db)
 
 	jwtSvc := service.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
 	cryptoSvc, err := service.NewCryptoService(cfg.Crypto.AESKey)
@@ -93,6 +94,9 @@ func (a *App) registerRoutes() {
 	assetH := &handler.AssetHandler{DB: a.DB, COS: a.COS}
 	billingH := &handler.BillingHandler{DB: a.DB}
 	proxyH := handler.NewProxyHandler()
+	adminH := &handler.AdminHandler{DB: a.DB}
+	templateH := &handler.TemplateHandler{DB: a.DB}
+	vodInvokeH := &handler.VODInvokeHandler{DB: a.DB, Crypto: a.Crypto}
 
 	api := r.Group("/api")
 	{
@@ -143,11 +147,38 @@ func (a *App) registerRoutes() {
 				creds.DELETE("/:id", credH.Delete)
 			}
 
+			// 模板公共读取（所有登录用户可见 active 模板）
+			templates := authed.Group("/templates")
+			{
+				templates.GET("", templateH.List)
+				templates.GET("/:id", templateH.Get)
+			}
+
+			// 管理员 API（跨租户，仅超级管理员）
+			admin := authed.Group("/admin")
+			admin.Use(middleware.SuperAdminRequired())
+			{
+				admin.GET("/users", adminH.ListUsers)
+				admin.PUT("/users/:id/quota", adminH.SetUserQuota)
+				admin.PUT("/users/:id/status", adminH.SetUserStatus)
+				admin.GET("/templates", adminH.ListTemplatesAdmin)
+				admin.POST("/templates", adminH.CreateTemplate)
+				admin.PUT("/templates/:id", adminH.UpdateTemplate)
+				admin.DELETE("/templates/:id", adminH.DeleteTemplate)
+			}
+
 			proxyGroup := authed.Group("")
 			proxyGroup.Use(middleware.QuotaCheck(a.DB, "proxy"))
 			{
 				proxyGroup.POST("/proxy", proxyH.Proxy)
 				proxyGroup.POST("/cos-put", proxyH.COSPut)
+			}
+
+			// VOD 调用代理端点：配额按 action 动态解析（生成计配额，轮询不计）
+			vodGroup := authed.Group("/vod")
+			vodGroup.Use(middleware.QuotaCheckWithResolver(a.DB, handler.VODUsageResolver(a.DB)))
+			{
+				vodGroup.POST("/invoke", vodInvokeH.Invoke)
 			}
 		}
 	}

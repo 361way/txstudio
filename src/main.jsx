@@ -1,9 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import FlowHome from './pages/FlowHome.jsx'
 import './index.css'
 import i18n from './i18n'
+import Login from './pages/Login.jsx'
+import AppShell from './pages/AppShell.jsx'
+import Admin from './pages/Admin.jsx'
+import { isLoggedIn, me } from './api/auth'
+import { onForceLogout } from './api/authEvents'
 
 const BOOT_TIMEOUT_MS = 5000
 const rootElement = document.getElementById('root')
@@ -154,29 +157,109 @@ const BootGuard = ({ children }) => {
 
 attachGlobalErrorHandlers()
 
+// AuthGate: 多态门禁 — 未登录显示 Login；已登录按角色显示工具选择页/管理后台/工具页/画布
+// needLogin 事件（token 失效）会强制回到登录态
+const AuthGate = () => {
+    const [authed, setAuthed] = React.useState(() => isLoggedIn())
+    const [view, setView] = React.useState('shell') // shell|admin
+    const [shellTab, setShellTab] = React.useState('image') // image|video|canvas|templates
+    const [currentProject, setCurrentProject] = React.useState(null)
+    const [appliedTemplate, setAppliedTemplate] = React.useState(null)
+    const [userProfile, setUserProfile] = React.useState(null) // {is_super_admin, quota, user}
+    const [theme, setTheme] = React.useState(() => {
+        try { return localStorage.getItem('vodstudio_theme') || 'dark' } catch { return 'dark' }
+    })
+
+    // 登录后拉取用户信息（角色 + 配额）
+    const refreshProfile = React.useCallback(async () => {
+        try {
+            const data = await me();
+            // me() 返回 {user, is_super_admin, quota}
+            setUserProfile(data);
+        } catch (e) { /* 静默，token 失效会被 forceLogout 处理 */ }
+    }, []);
+
+    React.useEffect(() => {
+        if (authed) refreshProfile();
+    }, [authed, view, refreshProfile]);
+
+    // 监听强制登出事件（api 层 401 刷新失败时触发）
+    React.useEffect(() => {
+        const unsub = onForceLogout(() => {
+            setAuthed(false)
+            setCurrentProject(null)
+            setUserProfile(null)
+            setView('shell')
+        })
+        return unsub
+    }, [])
+
+    // BootGuard 等待 App 设置 __APP_BOOTED__；但登录/工具态下 App 未挂载，
+    // AuthGate 一旦渲染就说明 React 启动成功，立即标记，避免 BootGuard 5s 超时误报。
+    React.useEffect(() => {
+        window.__APP_BOOTED__ = true
+        if (window.__APP_BOOT_TIMER__) { clearTimeout(window.__APP_BOOT_TIMER__); window.__APP_BOOT_TIMER__ = null }
+    }, [])
+
+    // 跟踪主题
+    React.useEffect(() => {
+        const sync = () => { try { setTheme(localStorage.getItem('vodstudio_theme') || 'dark') } catch { } }
+        window.addEventListener('storage', sync)
+        const interval = setInterval(sync, 1000)
+        return () => { window.removeEventListener('storage', sync); clearInterval(interval) }
+    }, [])
+
+    const handleLoginSuccess = () => {
+        setAuthed(true)
+        setView('shell')
+        setShellTab('image')
+        setCurrentProject(null)
+    }
+
+    // 画布：项目列表 → 编辑器，全部内嵌在 AppShell 的画布标签页中
+    const handleOpenProject = (project) => { setCurrentProject(project) }
+    const handleExitToProjects = () => { setCurrentProject(null) }
+    const forcedLogout = () => { setAuthed(false); setCurrentProject(null); setUserProfile(null); setView('shell') }
+
+    const quota = userProfile?.quota || null
+    const isSuperAdmin = userProfile?.is_super_admin || false
+
+    if (!authed) return <Login onLoginSuccess={handleLoginSuccess} />
+
+    // 管理员后台（独立页，超管专用）
+    if (view === 'admin') {
+        return <Admin onForcedLogout={forcedLogout} theme={theme} onBack={() => setView('shell')} />
+    }
+
+    // 默认主界面：侧边栏 Shell（图片/视频/画布/模板全部内联，仅管理后台跳转）
+    return <AppShell
+        active={shellTab}
+        onNavigate={(tab) => { setShellTab(tab); }}
+        onOpenAdmin={() => setView('admin')}
+        quota={quota}
+        theme={theme}
+        isSuperAdmin={isSuperAdmin}
+        onForcedLogout={forcedLogout}
+        appliedTemplate={appliedTemplate}
+        onApplyTemplate={(tpl) => { setAppliedTemplate(tpl); setShellTab(tpl.type === 'image' ? 'image' : 'video'); }}
+        canvasProject={currentProject}
+        onOpenProject={handleOpenProject}
+        onExitToProjects={handleExitToProjects}
+    />
+}
+
 try {
     if (!rootElement) throw new Error('Root element not found')
     const root = ReactDOM.createRoot(rootElement)
-    const previewPage = new URLSearchParams(window.location.search).get('page')
-    if (previewPage === 'flow') {
-        root.render(
-            <React.StrictMode>
-                <ErrorBoundary>
-                    <FlowHome />
-                </ErrorBoundary>
-            </React.StrictMode>
-        )
-    } else {
-        root.render(
-            <React.StrictMode>
-                <ErrorBoundary>
-                    <BootGuard>
-                        <App />
-                    </BootGuard>
-                </ErrorBoundary>
-            </React.StrictMode>
-        )
-    }
+    root.render(
+        <React.StrictMode>
+            <ErrorBoundary>
+                <BootGuard>
+                    <AuthGate />
+                </BootGuard>
+            </ErrorBoundary>
+        </React.StrictMode>
+    )
 } catch (error) {
     renderFallbackDom(error, { type: 'bootstrap' })
 }

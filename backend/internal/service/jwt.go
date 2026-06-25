@@ -26,21 +26,23 @@ func NewJWTService(secret string, accessTTL, refreshTTL time.Duration) *JWTServi
 
 // Claims 自定义 JWT 声明
 type Claims struct {
-	UserID   uint   `json:"uid"`
-	TenantID uint   `json:"tid"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID       uint   `json:"uid"`
+	TenantID     uint   `json:"tid"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	IsSuperAdmin bool   `json:"sa"`
 	jwt.RegisteredClaims
 }
 
 // GenerateAccessToken 签发 access token（短有效期）
-func (s *JWTService) GenerateAccessToken(userID, tenantID uint, email, role string) (string, error) {
+func (s *JWTService) GenerateAccessToken(userID, tenantID uint, email, role string, isSuperAdmin bool) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		UserID:   userID,
-		TenantID: tenantID,
-		Email:    email,
-		Role:     role,
+		UserID:       userID,
+		TenantID:     tenantID,
+		Email:        email,
+		Role:         role,
+		IsSuperAdmin: isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -52,13 +54,14 @@ func (s *JWTService) GenerateAccessToken(userID, tenantID uint, email, role stri
 }
 
 // GenerateRefreshToken 签发 refresh token（长有效期）
-func (s *JWTService) GenerateRefreshToken(userID, tenantID uint, email, role string) (string, error) {
+func (s *JWTService) GenerateRefreshToken(userID, tenantID uint, email, role string, isSuperAdmin bool) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		UserID:   userID,
-		TenantID: tenantID,
-		Email:    email,
-		Role:     role,
+		UserID:       userID,
+		TenantID:     tenantID,
+		Email:        email,
+		Role:         role,
+		IsSuperAdmin: isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),

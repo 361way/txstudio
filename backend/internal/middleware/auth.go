@@ -10,10 +10,11 @@ import (
 
 // Context keys
 const (
-	CtxUserID   = "user_id"
-	CtxTenantID = "tenant_id"
-	CtxEmail    = "email"
-	CtxRole     = "role"
+	CtxUserID       = "user_id"
+	CtxTenantID     = "tenant_id"
+	CtxEmail        = "email"
+	CtxRole         = "role"
+	CtxIsSuperAdmin = "is_super_admin"
 )
 
 // AuthRequired 校验 Bearer JWT，注入用户信息到 context
@@ -42,6 +43,7 @@ func AuthRequired(jwt *service.JWTService) gin.HandlerFunc {
 		c.Set(CtxTenantID, claims.TenantID)
 		c.Set(CtxEmail, claims.Email)
 		c.Set(CtxRole, claims.Role)
+		c.Set(CtxIsSuperAdmin, claims.IsSuperAdmin)
 		c.Next()
 	}
 }
@@ -64,4 +66,14 @@ func GetCurrentTenantID(c *gin.Context) uint {
 		}
 	}
 	return 0
+}
+
+// GetCurrentRole 从 context 取当前用户角色
+func GetCurrentRole(c *gin.Context) string {
+	if v, ok := c.Get(CtxRole); ok {
+		if r, ok := v.(string); ok {
+			return r
+		}
+	}
+	return ""
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -114,8 +115,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var user model.User
 	h.DB.Preload("TenantID").Where("email = ?", req.Email).First(&user)
 
-	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role)
-	refreshToken, _ := h.JWT.GenerateRefreshToken(user.ID, user.TenantID, user.Email, user.Role)
+	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role, user.IsSuperAdmin)
+	refreshToken, _ := h.JWT.GenerateRefreshToken(user.ID, user.TenantID, user.Email, user.Role, user.IsSuperAdmin)
 
 	Created(c, gin.H{
 		"user":          user,
@@ -151,8 +152,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	now := time.Now()
 	h.DB.Model(&user).Update("last_login_at", now)
 
-	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role)
-	refreshToken, _ := h.JWT.GenerateRefreshToken(user.ID, user.TenantID, user.Email, user.Role)
+	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role, user.IsSuperAdmin)
+	refreshToken, _ := h.JWT.GenerateRefreshToken(user.ID, user.TenantID, user.Email, user.Role, user.IsSuperAdmin)
 
 	OK(c, gin.H{
 		"user":          user,
@@ -190,7 +191,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role)
+	accessToken, _ := h.JWT.GenerateAccessToken(user.ID, user.TenantID, user.Email, user.Role, user.IsSuperAdmin)
 	OK(c, gin.H{"access_token": accessToken})
 }
 
@@ -202,7 +203,66 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		NotFound(c, "用户不存在")
 		return
 	}
-	OK(c, user)
+	// 返回配额摘要：今日图片/视频用量 vs 上限
+	quota := h.buildUserQuotaSummary(&user)
+	OK(c, gin.H{
+		"user":            user,
+		"is_super_admin":  user.IsSuperAdmin,
+		"quota":           quota,
+	})
+}
+
+// buildUserQuotaSummary 计算用户今日配额使用情况
+// 上限优先级：UserQuotaOverride > Plan.Quotas
+func (h *AuthHandler) buildUserQuotaSummary(user *model.User) gin.H {
+	today := time.Now().Format("2006-01-02")
+	limits := map[string]int{
+		"daily_image_gen": 0,
+		"daily_video_gen": 0,
+	}
+	// 查用户覆盖
+	var override model.UserQuotaOverride
+	if err := h.DB.Where("user_id = ?", user.ID).First(&override).Error; err == nil && override.Quotas != "" {
+		parseQuotaJSON(override.Quotas, limits)
+	} else {
+		// 回退到套餐
+		var sub model.Subscription
+		if err := h.DB.Where("tenant_id = ? AND status = ?", user.TenantID, "active").First(&sub).Error; err == nil {
+			var plan model.Plan
+			if err := h.DB.First(&plan, sub.PlanID).Error; err == nil {
+				parseQuotaJSON(plan.Quotas, limits)
+			}
+		}
+	}
+	// 查今日用量
+	var records []model.UserUsageRecord
+	h.DB.Where("user_id = ? AND date = ?", user.ID, today).Find(&records)
+	usage := map[string]int{}
+	for _, r := range records {
+		usage[r.Type] = r.Count
+	}
+	return gin.H{
+		"limits": limits,
+		"usage":  usage,
+		"date":   today,
+	}
+}
+
+// parseQuotaJSON 将 quota JSON 解析进 limits map（仅取认识的 key）
+func parseQuotaJSON(jsonStr string, limits map[string]int) {
+	// 简易解析：避免引入额外依赖，使用 golang 标准库
+	// JSON 形如 {"daily_video_gen":5,"daily_image_gen":20,"storage_mb":512,"max_projects":3}
+	type quotaShape struct {
+		DailyVideoGen int `json:"daily_video_gen"`
+		DailyImageGen int `json:"daily_image_gen"`
+		StorageMB     int `json:"storage_mb"`
+		MaxProjects   int `json:"max_projects"`
+	}
+	var q quotaShape
+	if err := json.Unmarshal([]byte(jsonStr), &q); err == nil {
+		limits["daily_video_gen"] = q.DailyVideoGen
+		limits["daily_image_gen"] = q.DailyImageGen
+	}
 }
 
 // generateSlug 从 email 生成租户 slug

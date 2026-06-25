@@ -251,64 +251,38 @@ function base64ToBlob(base64, mime = 'application/octet-stream') {
  * @param {Object} ctx  { credentials, useProxy, localServerUrl }
  * @returns {Promise<Object>} 解析后的 Response 对象
  */
-async function callVodApi(action, body, ctx) {
-    const { credentials, useProxy, localServerUrl } = ctx;
-    const { secretId, secretKey, region } = credentials;
-    const payload = JSON.stringify(body || {});
+// ============================================================================
+// VOD API 调用：走后端 /api/vod/invoke 代签转发（不再浏览器签名）
+// 后端负责：TC3-HMAC 签名 + SubAppId 注入 + 配额强制 + 用量记录
+// ============================================================================
+import { invokeVod } from './api/vod';
 
-    const headers = await signVodRequest({
-        secretId,
-        secretKey,
-        action,
-        version: VOD_API_VERSION,
-        region,
-        service: VOD_SERVICE,
-        host: VOD_API_HOST,
-        payload
-    });
-
-    // 浏览器侧 fetch 不允许自设 Host 头，去掉
-    const fetchHeaders = { ...headers };
-    delete fetchHeaders.Host;
-
-    const directUrl = `https://${VOD_API_HOST}`;
+/**
+ * 调用腾讯云 VOD API（经后端代签转发）
+ * @param {string} action - VOD API action
+ * @param {Object} body - 请求体
+ * @param {Object} ctx - 兼容旧签名（credentials/useProxy/localServerUrl 现已忽略，凭证由后端管理）
+ * @returns {Promise<Object>} 解析后的 Response 对象
+ */
+async function callVodApi(action, body, ctx = {}) {
+    const region = ctx?.credentials?.region || '';
     let resp;
-
-    // 通过 fetch 调用（本地代理或直接）
-    const finalUrl = wrapProxy(directUrl, { useProxy, localServerUrl });
     try {
-        resp = await fetch(finalUrl, {
-            method: 'POST',
-            headers: fetchHeaders,
-            body: payload
+        resp = await invokeVod({
+            action,
+            version: VOD_API_VERSION,
+            region,
+            payload: body || {},
         });
     } catch (err) {
-        if (!useProxy && localServerUrl) {
-            const proxyUrl = wrapProxy(directUrl, { useProxy: true, localServerUrl });
-            resp = await fetch(proxyUrl, {
-                method: 'POST',
-                headers: fetchHeaders,
-                body: payload
-            });
-        } else {
-            throw new Error(`[VOD/${action}] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
-        }
+        // apiRequest 抛出的错误已含 message；补 action 前缀
+        throw new Error(`[VOD/${action}] ${err?.message || '调用失败'}`);
     }
-
-    const text = await resp.text();
-    let json;
-    try {
-        json = JSON.parse(text);
-    } catch (e) {
-        throw new Error(`[VOD/${action}] 响应解析失败 (status=${resp.status}): ${text.slice(0, 300)}`);
-    }
-    const response = json?.Response || json;
+    // 后端透传腾讯云响应：通常是 { Response: {...} } 或裸对象
+    const response = resp?.Response || resp;
     if (response?.Error) {
-        const err = response.Error;
-        throw new Error(`[VOD/${action}] ${err.Code || 'Error'}: ${err.Message || 'Unknown error'}`);
-    }
-    if (!resp.ok) {
-        throw new Error(`[VOD/${action}] HTTP ${resp.status}: ${text.slice(0, 300)}`);
+        const e = response.Error;
+        throw new Error(`[VOD/${action}] ${e.Code || 'Error'}: ${e.Message || 'Unknown error'}`);
     }
     return response;
 }

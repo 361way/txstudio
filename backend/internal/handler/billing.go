@@ -74,9 +74,10 @@ func (h *BillingHandler) Subscribe(c *gin.Context) {
 	OK(c, gin.H{"subscription": sub, "plan": plan})
 }
 
-// Usage 当前租户用量统计（当日 + 本月汇总）
+// Usage 当前用户用量统计（当日 + 本月汇总）
+// 改为按用户统计（A8 配额改造后基于 UserUsageRecord）
 func (h *BillingHandler) Usage(c *gin.Context) {
-	tenantID := middleware.GetCurrentTenantID(c)
+	userID := middleware.GetCurrentUserID(c)
 	today := time.Now().Format("2006-01-02")
 	monthStart := time.Now().Format("2006-01") + "-01"
 
@@ -87,16 +88,16 @@ func (h *BillingHandler) Usage(c *gin.Context) {
 
 	// 当日用量
 	var todayUsage []usageRow
-	h.DB.Model(&model.UsageRecord{}).
+	h.DB.Model(&model.UserUsageRecord{}).
 		Select("type, count").
-		Where("tenant_id = ? AND date = ?", tenantID, today).
+		Where("user_id = ? AND date = ?", userID, today).
 		Scan(&todayUsage)
 
 	// 本月用量汇总
 	var monthUsage []usageRow
-	h.DB.Model(&model.UsageRecord{}).
+	h.DB.Model(&model.UserUsageRecord{}).
 		Select("type, SUM(count) as count").
-		Where("tenant_id = ? AND date >= ?", tenantID, monthStart).
+		Where("user_id = ? AND date >= ?", userID, monthStart).
 		Group("type").
 		Scan(&monthUsage)
 

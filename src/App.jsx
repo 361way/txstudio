@@ -85,6 +85,8 @@ import {
     runVodComposePipeline
 } from './vodAdapter';
 import VideoEditor from './VideoEditor';
+import { saveCanvas, getCanvas, createProject } from './api/project';
+import { logout as authLogout } from './api/auth';
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
@@ -5146,7 +5148,11 @@ const Lightbox = ({ item, onClose, onNavigate, onShotNavigate, onHistoryNavigate
     );
 };
 
-function VodStudioApp() {
+function VodStudioApp({ currentProject, onExitToProjects, onForcedLogout, embedded = false }) {
+    const currentProjectId = currentProject?.id || null;
+    const [cloudSaveError, setCloudSaveError] = useState(null);
+    // 云端画布加载完成标志：加载完成前禁止云保存，避免空画布覆盖云端
+    const cloudLoadedRef = useRef(false);
     const [theme, setTheme] = useState(() => {
         try {
             return localStorage.getItem('vodstudio_theme') || 'dark';
@@ -5259,7 +5265,9 @@ function VodStudioApp() {
     }, []);
 
     // V3.5.12-a: Auto-save interval for OOM protection (every 60 seconds)
+    // 云端项目下禁用本地 IDB/localStorage 自动保存（云端为唯一真相源）
     useEffect(() => {
+        if (currentProjectId) return;
         const saveInterval = setInterval(() => {
             const saveAuto = async () => {
                 const timestamp = Date.now();
@@ -5294,7 +5302,7 @@ function VodStudioApp() {
         }, 60000); // 60 seconds
 
         return () => clearInterval(saveInterval);
-    }, []);
+    }, [currentProjectId]);
 
     // V3.5.12-a: beforeunload warning to prevent accidental data loss
     useEffect(() => {
@@ -5312,6 +5320,8 @@ function VodStudioApp() {
     }, []);
 
     const [nodes, setNodes] = useState(() => {
+        // 云端项目：画布以云端为准，本地加载器跳过（由 cloud load effect 注入）
+        if (currentProjectId) return [];
         try {
             const meta = readAutoSaveMeta();
             if (meta?.storage === 'idb') return [];
@@ -5326,6 +5336,8 @@ function VodStudioApp() {
         } catch (e) { return []; }
     });
     const [connections, setConnections] = useState(() => {
+        // 云端项目：本地加载器跳过
+        if (currentProjectId) return [];
         try {
             const meta = readAutoSaveMeta();
             if (meta?.storage === 'idb') return [];
@@ -5341,6 +5353,8 @@ function VodStudioApp() {
     });
 
     useEffect(() => {
+        // 云端项目：不加载本地 IDB 快照
+        if (currentProjectId) return;
         const meta = readAutoSaveMeta();
         if (meta?.storage !== 'idb') return;
         let cancelled = false;
@@ -5356,6 +5370,30 @@ function VodStudioApp() {
         loadAutoSave();
         return () => { cancelled = true; };
     }, []);
+
+    // 云端项目：加载云端画布（cloud is source of truth）
+    useEffect(() => {
+        if (!currentProjectId) { cloudLoadedRef.current = false; return; }
+        let cancelled = false;
+        cloudLoadedRef.current = false;
+        setCloudSaveError(null);
+        getCanvas(currentProjectId)
+            .then(data => {
+                if (cancelled) return;
+                if (data && Array.isArray(data.nodes)) {
+                    setNodes(data.nodes);
+                    setConnections(Array.isArray(data.connections) ? data.connections : []);
+                }
+                cloudLoadedRef.current = true;
+            })
+            .catch(err => {
+                if (cancelled) return;
+                if (err?.needLogin) { onForcedLogout?.(); return; }
+                setCloudSaveError(err.message || '加载画布失败');
+                showToast(err.message || '加载画布失败', 'error', 0);
+            });
+        return () => { cancelled = true; };
+    }, [currentProjectId]);
 
     // === V3.4.7: Undo/Redo 功能 (可配置步数) ===
     const [maxUndoSteps, setMaxUndoSteps] = useState(() => {
@@ -7628,6 +7666,8 @@ function VodStudioApp() {
     }, [resolveAutoSaveUrl]);
 
     const persistAutoSaveSnapshot = useCallback(async (override = {}) => {
+        // 云端项目下不写本地快照
+        if (currentProjectId) return;
         const snapshotNodes = Array.isArray(override.nodes) ? override.nodes : (nodesRef.current || []);
         const snapshotConnections = Array.isArray(override.connections) ? override.connections : (connectionsRef.current || []);
         const timestamp = Date.now();
@@ -7657,7 +7697,40 @@ function VodStudioApp() {
                 console.warn('[AutoSave] 立即保存失败:', err.message || err);
             }
         }
-    }, [sanitizeObjectForAutoSave]);
+    }, [sanitizeObjectForAutoSave, currentProjectId]);
+
+    // 云端项目：debounce 云保存（2.5s），加载完成前不保存
+    const debouncedCloudSave = useMemo(() => debounce(async (nodesToSave, connectionsToSave) => {
+        if (!currentProjectId || !cloudLoadedRef.current) return;
+        try {
+            const safeNodes = await sanitizeObjectForAutoSave(nodesToSave);
+            await saveCanvas(currentProjectId, { nodes: safeNodes, connections: connectionsToSave });
+            setCloudSaveError(null);
+        } catch (err) {
+            if (err?.needLogin) { onForcedLogout?.(); return; }
+            setCloudSaveError(err.message || '云同步失败');
+            showToast('云同步失败: ' + (err.message || ''), 'error', 0);
+        }
+    }, 2500), [currentProjectId, sanitizeObjectForAutoSave, onForcedLogout]);
+
+    // 画布变更触发云保存
+    useEffect(() => {
+        if (!currentProjectId || !cloudLoadedRef.current) return;
+        debouncedCloudSave(nodesRef.current, connectionsRef.current);
+    }, [nodes, connections, currentProjectId, debouncedCloudSave]);
+
+    // 退出项目前同步保存一次（debounce 没有 flush，这里直接 await）
+    useEffect(() => {
+        return () => {
+            if (currentProjectId && cloudLoadedRef.current) {
+                try {
+                    sanitizeObjectForAutoSave(nodesRef.current).then(safeNodes =>
+                        saveCanvas(currentProjectId, { nodes: safeNodes, connections: connectionsRef.current })
+                    ).catch(() => { /* 退出时静默，错误已在主保存路径报过 */ });
+                } catch { }
+            }
+        };
+    }, [currentProjectId, sanitizeObjectForAutoSave]);
 
     const generateThumbnail = useCallback(async (imageUrl, quality = 'normal', options = {}) => {
         const config = quality === 'ultra'
@@ -20977,6 +21050,19 @@ function VodStudioApp() {
     };
 
     const handleNewProject = useCallback(async () => {
+        // 云端模式：创建新项目后返回项目列表，由用户打开
+        if (currentProjectId) {
+            const name = prompt(t('请输入新项目名称'), t('未命名项目'));
+            if (!name) return;
+            try {
+                await createProject(name.trim());
+                onExitToProjects?.();
+            } catch (err) {
+                if (err?.needLogin) { onForcedLogout?.(); return; }
+                showToast('创建项目失败: ' + (err.message || ''), 'error', 0);
+            }
+            return;
+        }
         const hasContent = (nodes?.length || 0) > 0
             || (connections?.length || 0) > 0
             || (history?.length || 0) > 0
@@ -20989,7 +21075,7 @@ function VodStudioApp() {
             }
         }
         await resetProjectState();
-    }, [nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState]);
+    }, [currentProjectId, nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState, onExitToProjects, onForcedLogout]);
 
     // 保存选中的工作流（框选节点后右键保存）
     const handleSaveSelectedWorkflow = async () => {
@@ -35966,7 +36052,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                 type={progressState.type}
             />
             <div
-                className={`w-full h-screen font-sans overflow-hidden select-none flex flex-col transition-colors duration-300 ${theme === 'dark'
+                className={`w-full ${embedded ? 'h-full' : 'h-screen'} font-sans overflow-hidden select-none flex flex-col transition-colors duration-300 ${theme === 'dark'
                     ? 'bg-[#09090b] text-white'
                     : theme === 'solarized'
                         ? 'bg-[#fdf6e3] text-[#586e75]'
@@ -36163,6 +36249,35 @@ ${inputText.substring(0, 15000)} ... (截断)
                         >
                             <span>{language === 'zh' ? t('中文') : t('英文')}</span>
                         </button>
+                        {currentProjectId && (
+                            <>
+                                <button
+                                    onClick={() => onExitToProjects?.()}
+                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${theme === 'dark'
+                                        ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                                        : theme === 'solarized'
+                                            ? 'bg-[#616161] border-[#525252] text-[#fdf6e3] hover:bg-[#555555]'
+                                            : 'bg-zinc-100 border-zinc-300 text-zinc-700 hover:bg-zinc-200'
+                                        }`}
+                                    title={t('返回项目列表')}
+                                >
+                                    <Layers size={14} />
+                                    <span>{t('项目列表')}</span>
+                                </button>
+                                <button
+                                    onClick={() => { authLogout(); onForcedLogout?.(); }}
+                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${theme === 'dark'
+                                        ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                                        : theme === 'solarized'
+                                            ? 'bg-[#616161] border-[#525252] text-[#fdf6e3] hover:bg-[#555555]'
+                                            : 'bg-zinc-100 border-zinc-300 text-zinc-700 hover:bg-zinc-200'
+                                        }`}
+                                    title={t('退出登录')}
+                                >
+                                    <span>{t('退出')}</span>
+                                </button>
+                            </>
+                        )}
                         {/* V3.4.6: 撤销/重做按钮 */}
                         <button
                             onClick={undo}
@@ -42423,6 +42538,36 @@ ${inputText.substring(0, 15000)} ... (截断)
                             />
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* 云端同步错误横幅（阻断式，需用户处理） */}
+            {currentProjectId && cloudSaveError && (
+                <div className="fixed top-0 left-0 right-0 z-[10000] bg-red-700 text-white px-4 py-2 flex items-center justify-between text-sm">
+                    <span>{t('云端同步失败')}: {cloudSaveError}</span>
+                    <button
+                        onClick={() => {
+                            setCloudSaveError(null);
+                            // 重新触发加载（用户处理网络/登录后）
+                            if (currentProjectId) {
+                                getCanvas(currentProjectId)
+                                    .then(data => {
+                                        if (data && Array.isArray(data.nodes)) {
+                                            setNodes(data.nodes);
+                                            setConnections(Array.isArray(data.connections) ? data.connections : []);
+                                            cloudLoadedRef.current = true;
+                                        }
+                                    })
+                                    .catch(err => {
+                                        if (err?.needLogin) { onForcedLogout?.(); return; }
+                                        setCloudSaveError(err.message || '加载画布失败');
+                                    });
+                            }
+                        }}
+                        className="ml-3 px-3 py-1 bg-red-900 hover:bg-red-800 rounded text-xs font-medium"
+                    >
+                        {t('重试')}
+                    </button>
                 </div>
             )}
 

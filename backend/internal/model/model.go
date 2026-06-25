@@ -25,13 +25,14 @@ type Tenant struct {
 // User 用户
 type User struct {
 	Base
-	TenantID     uint   `gorm:"index;not null" json:"tenant_id"`
-	Email        string `gorm:"size:255;uniqueIndex;not null" json:"email"`
-	PasswordHash string `gorm:"size:255;not null" json:"-"`
-	DisplayName  string `gorm:"size:128" json:"display_name"`
-	Role         string `gorm:"size:32;default:owner" json:"role"` // owner | admin | member | viewer
-	Status       string `gorm:"size:32;default:active" json:"status"`
-	LastLoginAt  *time.Time `json:"last_login_at"`
+	TenantID      uint   `gorm:"index;not null" json:"tenant_id"`
+	Email         string `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	PasswordHash  string `gorm:"size:255;not null" json:"-"`
+	DisplayName   string `gorm:"size:128" json:"display_name"`
+	Role          string `gorm:"size:32;default:owner" json:"role"` // owner | admin | member | viewer
+	Status        string `gorm:"size:32;default:active" json:"status"`
+	IsSuperAdmin  bool   `gorm:"default:false;index" json:"is_super_admin"`
+	LastLoginAt   *time.Time `json:"last_login_at"`
 }
 
 // Plan 套餐定义
@@ -117,6 +118,41 @@ type Credential struct {
 	// tokenhub: {api_key, base_url}
 }
 
+// UserQuotaOverride 用户级配额覆盖（管理员为单个用户设定）
+// 优先级：UserQuotaOverride.Quotas > Plan.Quotas（租户套餐）
+type UserQuotaOverride struct {
+	Base
+	UserID uint   `gorm:"uniqueIndex;not null" json:"user_id"`
+	Quotas string `gorm:"type:json" json:"quotas"` // 与 Plan.Quotas 同结构
+}
+
+// UserUsageRecord 用户级用量记录（按用户+类型+日期聚合）
+// 替代租户级 UsageRecord，配额检查基于此表
+type UserUsageRecord struct {
+	Base
+	UserID uint   `gorm:"index:idx_user_date,unique;not null" json:"user_id"`
+	Type   string `gorm:"size:64;index:idx_user_date,unique;not null" json:"type"` // image_gen | video_gen | proxy
+	Count  int    `gorm:"default:0" json:"count"`
+	Date   string `gorm:"size:10;index:idx_user_date,unique;not null" json:"date"` // YYYY-MM-DD
+}
+
+// Template 场景模板（电商/游戏/影视等参考生图模板）
+// TenantID 为 nil 表示全局模板（管理员创建，所有用户可见）
+type Template struct {
+	Base
+	TenantID      *uint  `gorm:"index" json:"tenant_id,omitempty"`
+	Name          string `gorm:"size:128;not null" json:"name"`
+	Category      string `gorm:"size:64;index" json:"category"` // 电商 | 游戏 | 影视 | 动漫 | ...
+	Type          string `gorm:"size:16;not null" json:"type"`  // image | video
+	Prompt        string `gorm:"type:text" json:"prompt"`
+	ModelName     string `gorm:"size:128" json:"model_name"`
+	ModelVersion  string `gorm:"size:64" json:"model_version"`
+	Ratio         string `gorm:"size:32" json:"ratio"`
+	RefImageCount int    `gorm:"default:0" json:"ref_image_count"`
+	Description   string `gorm:"type:text" json:"description"`
+	Status        string `gorm:"size:32;default:active" json:"status"` // active | archived
+}
+
 // AutoMigrateAll 自动迁移所有表
 func AutoMigrateAll(db *gorm.DB) error {
 	return db.AutoMigrate(
@@ -130,6 +166,9 @@ func AutoMigrateAll(db *gorm.DB) error {
 		&ProjectHistory{},
 		&Asset{},
 		&Credential{},
+		&UserQuotaOverride{},
+		&UserUsageRecord{},
+		&Template{},
 	)
 }
 
