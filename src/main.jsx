@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import FlowHome from './pages/FlowHome.jsx'
 import './index.css'
 import i18n from './i18n'
 
@@ -156,15 +157,26 @@ attachGlobalErrorHandlers()
 try {
     if (!rootElement) throw new Error('Root element not found')
     const root = ReactDOM.createRoot(rootElement)
-    root.render(
-        <React.StrictMode>
-            <ErrorBoundary>
-                <BootGuard>
-                    <App />
-                </BootGuard>
-            </ErrorBoundary>
-        </React.StrictMode>
-    )
+    const previewPage = new URLSearchParams(window.location.search).get('page')
+    if (previewPage === 'flow') {
+        root.render(
+            <React.StrictMode>
+                <ErrorBoundary>
+                    <FlowHome />
+                </ErrorBoundary>
+            </React.StrictMode>
+        )
+    } else {
+        root.render(
+            <React.StrictMode>
+                <ErrorBoundary>
+                    <BootGuard>
+                        <App />
+                    </BootGuard>
+                </ErrorBoundary>
+            </React.StrictMode>
+        )
+    }
 } catch (error) {
     renderFallbackDom(error, { type: 'bootstrap' })
 }

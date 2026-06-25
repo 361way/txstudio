@@ -1,7 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* FlowHome 标题手写体 */
+.font-script {
+    font-family: 'Dancing Script', 'Brush Script MT', cursive;
+}
 
 
         body { margin: 0; padding: 0; background-color: #09090b; }
