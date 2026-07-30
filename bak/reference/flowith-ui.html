@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flow with ideas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --sidebar-w: 232px;
+    --text-main: #1f2329;
+    --text-sub: #6b7280;
+    --text-mute: #9ca3af;
+    --border: #ececef;
+    --hover: #f4f4f5;
+    --accent-dark: #1f2329;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-main);
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ============ 侧边栏 ============ */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 12px;
+    background: #fff;
+  }
+  .sb-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 18px;
+  }
+  .logo {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #2b2b2b, #000);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  .icon-btn {
+    color: var(--text-mute);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    border-radius: 6px;
+    width: 28px; height: 28px;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text-sub); }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 8px 9px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--text-sub);
+    cursor: pointer;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--hover); color: var(--text-main); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .section-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 9px 6px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--text-mute);
+  }
+  .section-label .left { display: flex; align-items: center; gap: 6px; }
+  .section-label .icons { display: flex; gap: 2px; }
+
+  .history-list { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; overflow-y: auto; }
+  .history-item {
+    display: flex; gap: 9px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .history-item:hover { background: var(--hover); }
+  .hi-thumb {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    background: #f0f0f2;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: var(--text-mute);
+    text-align: center; line-height: 1.1;
+    overflow: hidden;
+  }
+  .hi-info { min-width: 0; }
+  .hi-title {
+    font-size: 13px; color: var(--text-main);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 150px;
+  }
+  .hi-time { font-size: 11px; color: var(--text-mute); margin-top: 2px; }
+
+  /* ============ 主区域 ============ */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+  /* 顶部公告条 */
+  .announce-bar {
+    height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #3f7a6a;
+    background: linear-gradient(90deg, #effaf4, #f0f9ff);
+    border-bottom: 1px solid #eef4f1;
+  }
+  .announce-bar .infinity { font-size: 15px; color: #34a07f; }
+  .announce-bar .emo { font-size: 13px; }
+
+  /* 主头部右侧 */
+  .top-actions {
+    position: absolute;
+    top: 44px; right: 22px;
+    display: flex; align-items: center; gap: 16px;
+    z-index: 5;
+  }
+  .ta-item { display: flex; align-items: center; gap: 5px; color: var(--text-sub); font-size: 13px; cursor: pointer; }
+  .ta-item svg { width: 17px; height: 17px; }
+  .credit { display: flex; align-items: center; gap: 4px; color: var(--text-sub); font-size: 13px; }
+  .coin {
+    width: 15px; height: 15px; border-radius: 50%;
+    background: linear-gradient(135deg, #ffe08a, #f5b942);
+    display: inline-block;
+  }
+  .btn-pack {
+    display: flex; align-items: center; gap: 5px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12.5px; color: var(--text-main);
+    cursor: pointer; background: #fff;
+  }
+  .btn-pack:hover { background: var(--hover); }
+  .btn-pack .star { color: #f5b942; }
+
+  /* Hero 内容 */
+  .hero {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 24px;
+    margin-top: -40px;
+  }
+  .hero-title {
+    font-size: 46px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  .hero-title .script {
+    font-family: "Dancing Script", cursive;
+    font-weight: 600;
+    font-size: 58px;
+    background: linear-gradient(120deg, #4cc2c4, #4a90d9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1;
+  }
+  .hero-sub { margin-top: 14px; color: var(--text-mute); font-size: 14px; }
+
+  /* 输入卡片 */
+  .composer {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 30px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.03);
+    background: #fff;
+  }
+  .chip-style {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-size: 13px; color: var(--text-sub);
+    cursor: pointer;
+  }
+  .chip-style:hover { background: var(--hover); }
+  .composer-input {
+    margin-top: 16px;
+    min-height: 40px;
+    font-size: 14px;
+    color: var(--text-mute);
+  }
+  .composer-bar {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 22px;
+    color: var(--text-sub);
+    font-size: 13px;
+  }
+  .cb-item { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .cb-item svg { width: 16px; height: 16px; }
+  .cb-item:hover { color: var(--text-main); }
+  .model-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 9px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .model-pill:hover { background: var(--hover); }
+  .dot-purple { width: 13px; height: 13px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #818cf8); }
+  .spacer { flex: 1; }
+  .ratio-tag, .res-tag, .mode-tag { color: var(--text-sub); }
+  .mode-tag { display: flex; align-items: center; gap: 4px; }
+  .send-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--accent-dark);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: #000; }
+  .send-btn svg { width: 17px; height: 17px; }
+
+  .sep { width: 1px; height: 14px; background: var(--border); }
+
+  /* 底部模式标签 */
+  .modes {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 34px;
+  }
+  .mode-btn {
+    display: flex; align-items: center; gap: 7px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    color: var(--text-sub);
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .mode-btn:hover { background: var(--hover); }
+  .mode-btn svg { width: 16px; height: 16px; }
+  .mode-btn.active {
+    background: #fef6e0;
+    color: #b8860b;
+  }
+  .mode-btn.active svg { color: #d99a1c; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ 侧边栏 ============ -->
+    <aside class="sidebar">
+      <div class="sb-top">
+        <div class="logo">n</div>
+        <div class="icon-btn" title="收起">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建 Flow
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+          画布管理
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>
+          媒体历史
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c4 3 6 6 6 10a6 6 0 0 1-12 0c0-4 2-7 6-10z"/></svg>
+          知识花园
+        </div>
+        <div class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>
+          知识市集
+        </div>
+      </nav>
+
+      <div class="section-label">
+        <span class="left">项目 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="icons">
+          <span class="icon-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+        </span>
+      </div>
+
+      <div class="section-label">
+        <span class="left">历史记录 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="icons">
+          <span class="icon-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18M6 12h12M10 20h4"/></svg></span>
+        </span>
+      </div>
+
+      <div class="history-list">
+        <div class="history-item">
+          <div class="hi-thumb">Flow</div>
+          <div class="hi-info">
+            <div class="hi-title">未命名 Flow</div>
+            <div class="hi-time">上次编辑 2026/4/1</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="hi-thumb">New</div>
+          <div class="hi-info">
+            <div class="hi-title">New Chat</div>
+            <div class="hi-time">上次编辑 2026/4/1</div>
+          </div>
+        </div>
+        <div class="history-item">
+          <div class="hi-thumb">Welc<br/>ome</div>
+          <div class="hi-info">
+            <div class="hi-title">Welcome to flowith 2....</div>
+            <div class="hi-time">上次编辑 2026/1/17</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ 主区域 ============ -->
+    <main class="main">
+      <!-- 公告条 -->
+      <div class="announce-bar">
+        <span class="infinity">∞</span>
+        <span>解锁无限生成能力，重直</span>
+        <span class="emo">🎬</span><span class="emo">⚡</span><span class="emo">✨</span>
+        <span>等热门模型</span>
+      </div>
+
+      <!-- 右上操作区 -->
+      <div class="top-actions">
+        <div class="ta-item" title="通知">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </div>
+        <div class="credit"><span class="coin"></span> 0</div>
+        <div class="ta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/></svg>
+        </div>
+        <div class="btn-pack"><span class="star">✦</span> 新无限创作包</div>
+      </div>
+
+      <!-- Hero -->
+      <section class="hero">
+        <h1 class="hero-title"><span class="script">Flow</span> with ideas</h1>
+        <p class="hero-sub">好的灵感，从这里开始</p>
+
+        <!-- 输入卡片 -->
+        <div class="composer">
+          <div class="chip-style">
+            风格
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div class="composer-input">每个伟大的想法都始于一个念头...</div>
+          <div class="composer-bar">
+            <div class="cb-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>
+              图像
+            </div>
+            <div class="model-pill">
+              <span class="dot-purple"></span> Nano Banana 2
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <div class="cb-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.4 11.05 12.4 20a4 4 0 0 1-5.66-5.66l8.49-8.49a2.5 2.5 0 0 1 3.54 3.54l-8.5 8.49a1 1 0 0 1-1.41-1.41l7.78-7.78"/></svg>
+            </div>
+            <div class="cb-item" style="color:#f5b942">★</div>
+            <span class="ratio-tag">16:9</span>
+            <span class="res-tag">512</span>
+            <span class="mode-tag">无限模式 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+            <span class="ratio-tag" style="opacity:.4">▭▭</span>
+            <div class="spacer"></div>
+            <span class="ratio-tag">1x</span>
+            <div class="send-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部模式标签 -->
+        <div class="modes">
+          <div class="mode-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.5 8.5 0 0 1-12.5 7.5L3 21l2-5.5A8.5 8.5 0 1 1 21 11.5z"/></svg>
+            对话
+          </div>
+          <div class="mode-btn active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>
+            图像
+          </div>
+          <div class="mode-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>
+            视频
+          </div>
+          <div class="mode-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            幻灯片
+          </div>
+          <div class="mode-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 4v5"/></svg>
+            网页
+          </div>
+          <div class="mode-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/><path d="M10 12h4"/></svg>
+            Neo Agent
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // 模式切换交互
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+    // 历史项点击高亮
+    document.querySelectorAll('.history-item, .nav-item').forEach(el => {
+      el.addEventListener('click', () => el.blur());
+    });
+  </script>
+</body>
+</html>
