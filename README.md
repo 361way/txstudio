@@ -1,258 +1,86 @@
 # VodStudio
 
-这是一个探索 **"AI 结对编程"** 极限的产物——展示了如何仅通过自然语言交互，在一个**单文件 (Single HTML)** 中构建出包含节点编辑器、多模态 API 调用、视频分析算法等复杂功能的现代化应用。Fork 自 Tapnow-Studio-PP 项目，增加了腾讯云VOD和Tokenhub调用逻辑，用于运行测试。当前版本运行时已不再依赖 CloudBase 云端能力，统一通过本地/可配置 CORS 转发代理调用上游 API。
+VodStudio 是一个本地单用户 AI 图片、视频与节点画布工作台。项目由 React/Vite 前端和单一 Go 后端组成；项目、画布过程、生成历史和加密 API 凭证统一保存在本地 SQLite。
 
-- 使用VOD时因为CORS跨域问题，必须要启用本地代理，可以直接 `go run proxy-server.go` 启动本地代理。虽然这里也有一个nodejs版本的代理，但不推荐用，因为nodejs版本的代理导致全局代理，有时会造成本地主机上网异常。后面会去修复这个问题，当前测试golang版本没这个问题；
-- 本地生文大模型不需要代理也可以直接运行。Base URL 直接使用 TokenHub地址就可以了：https://tokenhub.tencentmaas.com ，后面/v1/api/xxx这些不需要加。
+## 当前能力
 
+- 图片生成与参考图上传
+- 视频生成（首尾帧、多图模式）
+- AI 画布：小说输入、角色/场景提取、分镜、生图、生视频、AI 对话
+- 场景化能力：电商助手、AI 编辑、画质提升、版权保护
+- 腾讯云 MPS AI 换装：模特图 + 服装图、WAND 1.0 模型、1K/2K/4K 输出
+- 腾讯云 MPS 图片水印智能擦除：COS 输入转存、文字水印编排 `ScheduleId=30000`
+- 腾讯云 MPS 老照片清晰修复：基于公开的超分辨率图像增强能力提升清晰度
+- 本地项目、完整画布过程和生成历史持久化
+- 全局 API 设置：TokenHub/OpenAI 兼容接口、腾讯云 VOD
+- 本地缓存与通用 HTTP 代理
 
-## 更新记录
+## 技术结构
 
-3.0版本做了一个大的更新，只保留了腾讯云VOD和Tokenhub调用逻辑，用于运行测试。其他provider已经移除。如果需要使用其他平台，可以回退到2.x.x版本。
-
-## 🌟 核心工作内容 (Highlights)
-相比于原始项目，我们在以下方面进行了重大改进：
-*   **工程化重构**: 将原始单 HTML 架构利用 Vite + React 进行现代化重构，提升了 10 倍以上的加载速度。
-*   **黑名单与容错机制**: 实现了多 API Key 智能轮换，自动拉黑积分耗尽（1006）或失效的 Key，确保大规模生成任务不中断。
-*   **智能分镜系统 (Smart Storyboard)**: 开发了完整的可视化分镜编辑器，支持批量生成、首尾帧控制、多图参考及实时预览。
-*   **性能专项优化**: 针对超大规模节点图和数千条历史记录进行了渲染优化，支持“极致”性能模式。
-*   **数据持久化**: 彻底解决了 Blob URL 失效问题，所有资产自动同步至本地存储，支持 ZIP 批量导出。
-*   **模型库与请求模板**: 模型能力统一管理，支持请求模板预览/覆盖，便于供应商模型对接。
-*   **模型库说明书**: 统一配置与测试说明见 [**模型库说明**](./model-template-readme.md)。
----
-
-
-## 📖 简介 (Introduction)
-
-
-**VodStudio** 是一个运行在浏览器中的可视化 AI 工作流工具。它采用“节点编辑”的交互方式（类似 ComfyUI），将当前最强大的 AI 模型能力聚合在一个无限缩放的画布上。
-
-它的核心理念是 **"轻量化"** 与 **"多模态协同"**。整个应用被打包在一个独立的 HTML 文件中，利用浏览器原生的能力和 CDN 资源，实现了复杂的 AI 交互逻辑。
-
-<img width="1920" height="960" alt="2e8568e463c6473d89bc5be6ea5e57e8" src="https://github.com/user-attachments/assets/2020616f-204b-4aa7-854d-10e970cf5519" />
-
-<br>
-<br>
-
-## ✨ 核心功能 (Key Features)
-
-### ♾️ 无限画布与节点系统
-* **拖拽式连线**：直观地将输入（图片/视频）流转到处理节点。
-* **无限缩放**：支持超大画布，利用鼠标滚轮自由缩放和平移。
-* **多选与批量操作**：支持框选节点，批量移动或删除。
-* **实时预览**：每个节点都具备独立的状态显示、进度条和结果预览。
-
-
-## 🚀 如何运行 (How to Run)
-
-<br>
-
-本项目保持了标志性的 **Single-file（单文件）** 架构，无需安装 Node.js 或 Python 环境。
-
-<br>
-
-1.  从 Release 获取最新 HTML 文件（仓库根目录不再放置构成物）。
-2.  **双击**直接使用 Chrome / Edge 浏览器打开。
-3.  点击右上角 **API 设置** 配置您的模型 Key 即可开始创作。
-
-<br>
-
-## 🚀 快速开始 (Quick Start)
-
-<br>
-
-### 方式 1：直接运行
-1.  从 Release 获取最新 HTML 文件（仓库根目录不再放置构成物）。
-2.  双击使用 Chrome, Edge 或 Safari 浏览器打开。
-3.  点击右上角 **API 设置**，配置你的模型 Key 即可开始使用。
-
-<br>
-
-### 方式 2：本地开发
-如果你想修改代码：
-1.  该项目是一个单文件 React 应用，源码直接嵌入在 HTML 的 `<script type="text/babel">` 标签中。
-2.  你可以直接使用 VS Code 编辑该 HTML 文件。
-3.  依赖库（React, Tailwind, Lucide, Babel）均通过 CDN 加载，无需 `npm install`。
-
-<br>
-
-
-## 🧭 画布简要使用说明
-
-1. 点击画布空白处双击或右键，添加节点（如：图片输入、AI 绘图、预览、保存到本地）。
-2. 从上游节点右侧连接点拖线到下游节点左侧输入点，建立数据流。
-3. 在生成节点填提示词并点击执行，结果会进入历史区并可回填到预览/分镜。
-4. 画布交互：滚轮缩放、按住空白拖动画布、拖动节点可调整布局，框选可批量移动。
-5. 预览交互：单击选图，双击打开大图灯箱，左右切换同组，上下切换分镜/历史组（支持时）。
-
-<br>
-
-
-## ⚙️ 技术架构 (Technical Details)
-
-<br>
-
-使用了现代前端技术在无构建工具（No-Build）环境下的极限能力：
-
-* **Runtime**: 浏览器原生 ES Modules + Babel Standalone 实时编译 JSX。
-* **UI Framework**: React 18 (UMD)。
-* **Styling**: Tailwind CSS (Script Tag 注入)。
-* **State Management**: React Hooks ( `useMemo` , `useCallback` , `useRef` ) 实现高性能画布渲染。
-* **Storage**: `localStorage` 实现数据持久化（API Key、历史记录、画布状态）。
-* **Network**: 原生 `fetch` API 处理 Server-Sent Events (SSE) 和长轮询。
-
-<br>
-
-## 🚀 VoDStudio更新日志
-
-### 0. 增加了VOD支持和本地Go版本代理
-
-Golang代理主要解决VOD服务安全问题，DeepSeek 能直连，是因为它的服务端允许浏览器跨域。VOD 不能直连，是因为它是腾讯云服务端 API，不给浏览器开放 CORS，而且还涉及 AK/SK 安全。所以 VOD 正确架构应是：
-
-、、、
-前端 index.html
-  → 本地/远程代理服务
-  → 腾讯云 VOD API
-、、、
-
-
-
-### 1. 本地缓存服务器 (Local Cache Server)
-**功能描述**：
-支持连接本地服务器以接管资源管理，大幅提升加载速度并节省带宽。
-* **连接配置**：默认支持连接 `http://127.0.0.1:9527`，提供可视化连接状态面板。
-* **智能缓存**：
-    * 自动缓存角色库图片及历史记录中的媒体文件。
-    * 内置去重机制，智能检测已存在文件，避免重复下载。
-* **加载加速**：资源加载时优先调用本地缓存 URL，实现秒级预览。
-
-<br>
-
-### 2. 保存到本地节点 (Local Save Node)
-**功能描述**：
-新增 `local-save` 节点，打通工作流与本地文件系统的存储通道。
-* **自动保存**：开启后自动将上游图片/视频存入本地，支持批量处理与自动去重。
-* **格式转换**：自动将 PNG 转换为高质量 JPG 格式，优化存储空间。
-* **自定义配置**：支持设置保存子文件夹路径，实时反馈服务器连接状态。
-* **操作模式**：支持全自动流式保存与手动触发保存。
-
-<br>
-
-### 3. 小说输入与 AI 分析
-**功能描述**：
-引入小说创作辅助工具链，实现从文本到视觉要素的自动提取。
-* **小说输入节点 (`novel-input`)**：
-    * 支持最大 **10,000字** 文本输入，配备实时字数统计。
-    * 一键生成分析下游节点。
-* **提取角色和场景节点 (`extract-characters-scenes`)**：
-    * **角色提取**：自动解析姓名、身份、外貌描述、年龄、性别等元数据。
-    * **场景提取**：智能识别场景名称与环境描述。
-    * **可视化**：分类展示提取结果，支持多模型选择与实时进度显示。
-
-<br>
-
-### 4. 工作流管理升级
-**功能描述**：
-增强了工作流的便携性与复用性。
-* **局部导出**：支持仅保存当前选中的节点和连接为工作流文件（V2.6 版本）。
-* **流式处理**：采用 Blob 转 Base64 及流式写入技术，轻松处理大型工作流导出。
-* **智能导入**：
-    * 支持 JSON 格式导入并追加到当前画布。
-    * 导入时智能匹配本地库文件，优先复用本地资源而非 Base64 数据。
-
-<br>
-
-### 5. 性能模式系统 (Performance Mode)
-**功能描述**：
-针对历史记录列表引入分级性能策略，解决长列表卡顿问题。
-* **三种模式**：
-    * **极速模式**：生成 80px 缩略图 (JPEG 质量 0.3)，极致流畅。
-    * **普通模式**：生成 150px 缩略图 (JPEG 质量 0.6)，平衡清晰度与性能。
-    * **关闭**：显示原图。
-* **批量处理**：支持 Midjourney 多图缩略图生成，采用分批处理（每次 5 个）避免阻塞主线程。
-
-<br>
-
-### 6. 渲染引擎深度调优
-**功能描述**：
-从底层 CSS 到交互逻辑的全方位优化。
-* **交互节流**：
-    * 画布拖动采用微型节流 (~10ms) 与 `requestAnimationFrame`。
-    * 优化多节点拖动的批量更新机制，减少重绘次数。
-* **GPU 加速与降级**：
-    * 节点容器启用 `transform: translateZ(0)` 硬件加速。
-    * 高性能模式下自动禁用阴影、模糊与过渡动画。
-    * 交互过程中动态降级渲染质量，视口外媒体自动卸载。
-* **文本与线条**：优化全局字体抗锯齿渲染及连接线几何精度。
-
-<br>
-
-### 7. 缓存机制增强
-* **计算结果缓存**：优化连接输入（图片/视频）的计算缓存，减少重复运算。
-* **缩略图 Map**：构建内存级 Map 索引缓存缩略图 URL，防止重复生成。
-* **加载优先级策略**：
-    1. 本地缓存文件 (Local Cache)
-    2. 性能模式缩略图 (Thumbnail)
-    3. 原始网络 URL (Original)
-
-<br>
-
-## CloudBase 部署信息
-
-> 当前部署形态：**前端静态托管 + 容器型云托管 (CloudRun) Go 代理**。Go 代理来自本地 `proxy-server.go`，编译为 Docker 镜像部署到 CloudRun，前端直接通过 CloudRun 路径访问代理服务，无需本地启动任何服务。
-
-### 当前部署快照
-
-- 环境 ID：`test234-d0g5z9qyae01763f6`（地域：`ap-shanghai`）
-- **后端代理**：CloudRun **容器型**服务 `vodstudio-proxy`（CPU 0.5 / Mem 1G / MinNum 1）
-  - 路径访问（前端默认值）：`https://test234-d0g5z9qyae01763f6.service.tcloudbase.com/vodstudio-proxy/`
-  - 子域访问（备用）：`https://vodstudio-proxy-257975-7-1305660054.sh.run.tcloudbase.com`
-  - 技术栈：Go 1.21（零外部依赖，纯标准库 HTTP 代理）
-  - 源码：`cloudrun/vodstudio-proxy/main.go`（基于 `proxy-server.go` 适配 CloudRun）
-  - 路由：`/ping`、`/config`、`/proxy?url=`、`/cos-put?url=`、`/save-cache`、`/file/<rel>`、`/list-files`
-- **前端**：CloudBase **静态网站托管**
-  - 访问入口：`https://test234-d0g5z9qyae01763f6-1305660054.tcloudbaseapp.com/?v=20260609`
-  - 部署方式：`vite build` 产出单文件 `dist/index.html`（~1.4 MB / gzip ~400 KB）
-
-### 架构流程
-
-```
-浏览器 → tcloudbaseapp.com (静态托管)
-         ↓ proxy 请求
-       service.tcloudbase.com/vodstudio-proxy (CloudRun Go 代理)
-         ↓ CORS 转发
-       VOD API / TokenHub / COS 等上游服务
+```text
+React/Vite (:5173)
+        │ /api + 本地代理接口
+        ▼
+Go/Gin (:8080)
+  ├─ SQLite: backend/data/studio.db
+  ├─ 加密密钥: backend/data/secret.key
+  ├─ 本地缓存: backend/data/cache/
+  ├─ VOD TC3 代签
+  └─ 前端静态文件嵌入
 ```
 
-### 再次发布命令
+详细说明见 `docs/ARCHITECTURE.md`。
+
+## 本地开发
+
+环境要求：Node.js 18+、Go 1.23+。
 
 ```bash
-# 1. 部署 / 更新 CloudRun Go 代理
-#    源码位置：cloudrun/vodstudio-proxy/
-#    （main.go + go.mod + Dockerfile，多阶段构建，最终镜像约 15MB）
-#    在 IDE 中通过 CloudBase integration 的 manageCloudRun deploy 完成
+npm install
+npm run dev
+```
 
-# 2. 构建前端
+`npm run dev` 会同时启动：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8080`
+
+应用为本地单用户模式，无需登录。API 凭证在页面右上角“API 设置”中配置。
+
+## 构建
+
+```bash
 npm run build
-
-# 3. 上传 dist 到静态托管
-#    通过 IDE CloudBase integration → uploadFiles，或：
-#    tcb hosting deploy dist/ -e test234-d0g5z9qyae01763f6 --yes
 ```
 
-### 本地开发
+该命令会构建 `dist/index.html`，并自动同步到 `backend/frontend/dist/index.html` 供 Go `embed` 使用。
+
+构建本地可执行文件：
 
 ```bash
-# 本地代理直接用 Go（推荐）
-go run proxy-server.go
-# 监听 http://127.0.0.1:9527，前端自动识别本地环境使用此地址
-
-# 或使用 Node.js 代理（不推荐，会全局代理影响上网）
-# node proxy-server.mjs
+cd backend
+go build -o vodstudio ./cmd/server
+./vodstudio -config config.yaml
 ```
 
-### 代理地址优先级
+## 数据与安全
 
-1. provider 设置里的 **代理地址（proxyUrl）** —— 仅对该模型接口生效
-2. 全局**本地服务地址（localServerUrl）**
-3. 默认值：浏览器域名命中 `tcloudbaseapp.com` / `txcloud.vip` 时使用 CloudRun，其余情况使用 `http://127.0.0.1:9527`
+- API Secret 使用 AES-256-GCM 加密后写入 SQLite。
+- AES 密钥首次启动时自动生成到 `backend/data/secret.key`。
+- `backend/data/` 已被 Git 忽略，不应提交数据库、密钥或缓存文件。
+- 通用代理拒绝访问环回、私网和未指定地址，降低 SSRF 风险。
+- 删除项目会同步硬删除画布快照和生成历史。
+
+## 目录说明
+
+```text
+src/                     当前前端源码
+backend/                 当前 Go 后端与 SQLite 数据目录
+backend/frontend/dist/   Go 内嵌的前端构建产物
+docs/                    当前架构说明
+bak/                     历史参考、旧实现和研究材料，不参与构建运行
+```
+
+## 历史归档
+
+`bak/` 中包括旧参考页面、training docs、历史架构图、独立 9527 代理、SaaS 登录/配额代码和已被场景化能力替代的模板库。归档内容仅供追溯，不应被当前源码引用。

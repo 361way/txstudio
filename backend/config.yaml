@@ -1,27 +1,12 @@
 server:
-  port: 10000
+  port: 8080
   mode: debug
 
 database:
-  host: 127.0.0.1
-  port: 3306
-  user: vodstudio
-  password: changeme
-  dbname: vodstudio
-  charset: utf8mb4
-
-jwt:
-  secret: REDACTED_JWT_SECRET
-  access_ttl: 15m
-  refresh_ttl: 168h
+  path: ./data/studio.db
 
 crypto:
-  aes_key: REDACTED_AES_KEY
+  key_file: ./data/secret.key
 
-cos:
-  secret_id: "REDACTED_TENCENT_SECRET_ID"
-  secret_key: "REDACTED_TENCENT_SECRET_KEY"
-  region: ap-shanghai
-  bucket: testvod-1305660054
-  cos_prefix: assets
-  presign_ttl: 10m
+cache:
+  path: ./data/cache

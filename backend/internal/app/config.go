@@ -1,20 +1,22 @@
 package app
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
-	"time"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
 
-// Config 后端全量配置
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
+	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
-	JWT     JWTConfig     `yaml:"jwt"`
-	Crypto  CryptoConfig  `yaml:"crypto"`
-	COS     COSConfig     `yaml:"cos"`
+	Crypto   CryptoConfig   `yaml:"crypto"`
+	Cache    CacheConfig    `yaml:"cache"`
+	Agent    AgentConfig    `yaml:"agent"`
 }
 
 type ServerConfig struct {
@@ -23,39 +25,23 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	DBName   string `yaml:"dbname"`
-	Charset  string `yaml:"charset"`
-}
-
-func (d DatabaseConfig) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
-		d.User, d.Password, d.Host, d.Port, d.DBName, d.Charset)
-}
-
-type JWTConfig struct {
-	Secret     string        `yaml:"secret"`
-	AccessTTL  time.Duration `yaml:"access_ttl"`
-	RefreshTTL time.Duration `yaml:"refresh_ttl"`
+	Path string `yaml:"path"`
 }
 
 type CryptoConfig struct {
-	AESKey string `yaml:"aes_key"` // 32 字节 hex
+	KeyFile string `yaml:"key_file"`
+	AESKey  string `yaml:"-"`
 }
 
-type COSConfig struct {
-	SecretID    string        `yaml:"secret_id"`
-	SecretKey   string        `yaml:"secret_key"`
-	Region      string        `yaml:"region"`
-	Bucket      string        `yaml:"bucket"`
-	COSPrefix   string        `yaml:"cos_prefix"`
-	PresignTTL  time.Duration `yaml:"presign_ttl"`
+type CacheConfig struct {
+	Path string `yaml:"path"`
 }
 
-// LoadConfig 从指定路径加载 YAML 配置，环境变量可覆盖敏感字段
+type AgentConfig struct {
+	BaseURL string `yaml:"base_url"`
+	APIKey  string `yaml:"-"`
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -66,47 +52,68 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	// 环境变量覆盖（部署时便于注入密钥，符合安全规则 secrets-env-only）
-	if v := os.Getenv("VODSTUDIO_DB_PASSWORD"); v != "" {
-		cfg.Database.Password = v
+	if value := os.Getenv("VODSTUDIO_DB_PATH"); value != "" {
+		cfg.Database.Path = value
 	}
-	if v := os.Getenv("VODSTUDIO_JWT_SECRET"); v != "" {
-		cfg.JWT.Secret = v
+	if value := os.Getenv("VODSTUDIO_AES_KEY"); value != "" {
+		cfg.Crypto.AESKey = value
 	}
-	if v := os.Getenv("VODSTUDIO_AES_KEY"); v != "" {
-		cfg.Crypto.AESKey = v
+	if value := os.Getenv("VODSTUDIO_CACHE_DIR"); value != "" {
+		cfg.Cache.Path = value
 	}
-	if v := os.Getenv("VODSTUDIO_COS_SECRET_ID"); v != "" {
-		cfg.COS.SecretID = v
+	if value := os.Getenv("VODSTUDIO_AGENT_BASE_URL"); value != "" {
+		cfg.Agent.BaseURL = value
 	}
-	if v := os.Getenv("VODSTUDIO_COS_SECRET_KEY"); v != "" {
-		cfg.COS.SecretKey = v
+	cfg.Agent.APIKey = os.Getenv("VODSTUDIO_AGENT_API_KEY")
+	if cfg.Agent.BaseURL == "" {
+		cfg.Agent.BaseURL = "https://tokenhub.tencentmaas.com"
 	}
 
-	// 校验必填项
-	if cfg.JWT.Secret == "" {
-		return nil, fmt.Errorf("jwt.secret 不能为空")
+	if cfg.Database.Path == "" {
+		cfg.Database.Path = "./data/vodstudio.db"
 	}
-	if cfg.Crypto.AESKey == "" || len(cfg.Crypto.AESKey) != 64 {
-		return nil, fmt.Errorf("crypto.aes_key 必须为 64 字符的 hex 字符串 (32字节)")
+	if cfg.Crypto.KeyFile == "" {
+		cfg.Crypto.KeyFile = filepath.Join(filepath.Dir(cfg.Database.Path), "secret.key")
 	}
-	if cfg.Database.Host == "" {
-		cfg.Database.Host = "127.0.0.1"
+	if cfg.Cache.Path == "" {
+		cfg.Cache.Path = filepath.Join(filepath.Dir(cfg.Database.Path), "cache")
 	}
-	if cfg.Database.Port == 0 {
-		cfg.Database.Port = 3306
+	if cfg.Crypto.AESKey == "" {
+		cfg.Crypto.AESKey, err = loadOrCreateLocalKey(cfg.Crypto.KeyFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	decodedKey, decodeErr := hex.DecodeString(cfg.Crypto.AESKey)
+	if decodeErr != nil || len(decodedKey) != 32 {
+		return nil, fmt.Errorf("VODSTUDIO_AES_KEY 必须是 64 字符的 hex 字符串")
 	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
-	if cfg.JWT.AccessTTL == 0 {
-		cfg.JWT.AccessTTL = 15 * time.Minute
-	}
-	if cfg.JWT.RefreshTTL == 0 {
-		cfg.JWT.RefreshTTL = 168 * time.Hour
-	}
-	if cfg.COS.PresignTTL == 0 {
-		cfg.COS.PresignTTL = 10 * time.Minute
+	if cfg.Server.Mode == "" {
+		cfg.Server.Mode = "debug"
 	}
 	return &cfg, nil
+}
+
+func loadOrCreateLocalKey(path string) (string, error) {
+	if data, err := os.ReadFile(path); err == nil {
+		return strings.TrimSpace(string(data)), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("读取本地加密密钥失败: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", fmt.Errorf("创建密钥目录失败: %w", err)
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("生成本地加密密钥失败: %w", err)
+	}
+	hexKey := hex.EncodeToString(key)
+	if err := os.WriteFile(path, []byte(hexKey), 0o600); err != nil {
+		return "", fmt.Errorf("保存本地加密密钥失败: %w", err)
+	}
+	return hexKey, nil
 }

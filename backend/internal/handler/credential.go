@@ -3,9 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vodstudio/backend/internal/middleware"
 	"github.com/vodstudio/backend/internal/model"
 	"github.com/vodstudio/backend/internal/service"
 	"gorm.io/gorm"
@@ -22,26 +22,38 @@ type saveCredentialReq struct {
 	Data     map[string]interface{} `json:"data" binding:"required"`     // 明文凭证 JSON
 }
 
-// List 当前租户的凭证列表（不返回明文）
+// List 全局凭证列表（不返回明文）
 func (h *CredentialHandler) List(c *gin.Context) {
-	tenantID := middleware.GetCurrentTenantID(c)
 	var creds []model.Credential
-	h.DB.Where("tenant_id = ?", tenantID).Find(&creds)
+	h.DB.Order("provider ASC").Find(&creds)
 
-	type credView struct {
-		ID        uint   `json:"id"`
-		Provider  string `json:"provider"`
-		HasData   bool   `json:"has_data"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
-	}
-	var views []credView
-	for _, cr := range creds {
-		views = append(views, credView{
-			ID: cr.ID, Provider: cr.Provider, HasData: cr.EncryptedData != "",
-			CreatedAt: cr.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: cr.UpdatedAt.Format("2006-01-02 15:04:05"),
-		})
+	views := make([]gin.H, 0, len(creds))
+	for _, credential := range creds {
+		view := gin.H{
+			"id":         credential.ID,
+			"provider":   credential.Provider,
+			"has_data":   credential.EncryptedData != "",
+			"created_at": credential.CreatedAt,
+			"updated_at": credential.UpdatedAt,
+		}
+		// 只公开运行时所需的非敏感字段，Secret 永不返回浏览器。
+		if plaintext, err := h.Crypto.Decrypt(credential.EncryptedData); err == nil {
+			var data map[string]interface{}
+			if json.Unmarshal(plaintext, &data) == nil {
+				publicConfig := gin.H{}
+				switch credential.Provider {
+				case "tokenhub":
+					publicConfig["base_url"] = data["base_url"]
+				case "tencent-cloud":
+					publicConfig["sub_app_id"] = data["sub_app_id"]
+					publicConfig["region"] = data["region"]
+					publicConfig["mps_bucket"] = data["mps_bucket"]
+					publicConfig["mps_region"] = data["mps_region"]
+				}
+				view["config"] = publicConfig
+			}
+		}
+		views = append(views, view)
 	}
 	OK(c, views)
 }
@@ -53,15 +65,30 @@ func (h *CredentialHandler) Save(c *gin.Context) {
 		BadRequest(c, "请求参数无效: "+err.Error())
 		return
 	}
-	if req.Provider != "vod" && req.Provider != "tokenhub" {
-		BadRequest(c, "provider 只支持 vod 或 tokenhub")
+	if req.Provider != "tencent-cloud" && req.Provider != "tokenhub" {
+		BadRequest(c, "provider 只支持 tencent-cloud 或 tokenhub")
 		return
 	}
 
-	tenantID := middleware.GetCurrentTenantID(c)
-
-	// 序列化明文 → 加密
-	plaintext, err := json.Marshal(req.Data)
+	// upsert：允许只更新 Bucket/Region 等非敏感配置，未提交的 Secret 保持不变。
+	var existing model.Credential
+	result := h.DB.Where("provider = ?", req.Provider).First(&existing)
+	merged := map[string]interface{}{}
+	if result.Error == nil {
+		if plaintext, err := h.Crypto.Decrypt(existing.EncryptedData); err == nil {
+			_ = json.Unmarshal(plaintext, &merged)
+		}
+	} else if result.Error != gorm.ErrRecordNotFound {
+		InternalError(c, "读取凭证失败")
+		return
+	}
+	for key, value := range req.Data {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		merged[key] = value
+	}
+	plaintext, err := json.Marshal(merged)
 	if err != nil {
 		InternalError(c, "凭证序列化失败")
 		return
@@ -71,22 +98,15 @@ func (h *CredentialHandler) Save(c *gin.Context) {
 		InternalError(c, "凭证加密失败")
 		return
 	}
-
-	// upsert：同租户同 provider 只保留一条
-	var existing model.Credential
-	result := h.DB.Where("tenant_id = ? AND provider = ?", tenantID, req.Provider).First(&existing)
 	if result.Error == gorm.ErrRecordNotFound {
-		cred := model.Credential{
-			TenantID:      tenantID,
-			Provider:      req.Provider,
-			EncryptedData: encrypted,
-		}
-		if err := h.DB.Create(&cred).Error; err != nil {
+		credential := model.Credential{Provider: req.Provider, EncryptedData: encrypted}
+		if err := h.DB.Create(&credential).Error; err != nil {
 			InternalError(c, "保存凭证失败")
 			return
 		}
-	} else if result.Error == nil {
-		h.DB.Model(&existing).Update("encrypted_data", encrypted)
+	} else if err := h.DB.Model(&existing).Update("encrypted_data", encrypted).Error; err != nil {
+		InternalError(c, "更新凭证失败")
+		return
 	}
 
 	OK(c, gin.H{"provider": req.Provider, "saved": true})
@@ -95,9 +115,8 @@ func (h *CredentialHandler) Save(c *gin.Context) {
 // Delete 删除凭证
 func (h *CredentialHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
-	result := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).Delete(&model.Credential{})
+	result := h.DB.Delete(&model.Credential{}, id)
 	if result.RowsAffected == 0 {
 		NotFound(c, "凭证不存在")
 		return
@@ -105,10 +124,10 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 	OK(c, gin.H{"deleted": true})
 }
 
-// DecryptForInternal 内部方法：解密指定租户的凭证（供代理 handler 使用）
-func (h *CredentialHandler) DecryptForInternal(tenantID uint, provider string) (map[string]interface{}, error) {
+// DecryptForInternal 内部方法：解密指定 provider 的全局凭证。
+func (h *CredentialHandler) DecryptForInternal(provider string) (map[string]interface{}, error) {
 	var cred model.Credential
-	if err := h.DB.Where("tenant_id = ? AND provider = ?", tenantID, provider).First(&cred).Error; err != nil {
+	if err := h.DB.Where("provider = ?", provider).First(&cred).Error; err != nil {
 		return nil, err
 	}
 	plaintext, err := h.Crypto.Decrypt(cred.EncryptedData)

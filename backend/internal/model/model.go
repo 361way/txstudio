@@ -6,198 +6,51 @@ import (
 	"gorm.io/gorm"
 )
 
-// Base 所有模型的公共字段（软删除由 gorm.DeletedAt 处理）
 type Base struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// Tenant 租户/组织
-type Tenant struct {
-	Base
-	Name   string `gorm:"size:128;not null" json:"name"`
-	Slug   string `gorm:"size:64;uniqueIndex;not null" json:"slug"`
-	Status string `gorm:"size:32;default:active" json:"status"` // active | suspended
-}
-
-// User 用户
-type User struct {
-	Base
-	TenantID      uint   `gorm:"index;not null" json:"tenant_id"`
-	Email         string `gorm:"size:255;uniqueIndex;not null" json:"email"`
-	PasswordHash  string `gorm:"size:255;not null" json:"-"`
-	DisplayName   string `gorm:"size:128" json:"display_name"`
-	Role          string `gorm:"size:32;default:owner" json:"role"` // owner | admin | member | viewer
-	Status        string `gorm:"size:32;default:active" json:"status"`
-	IsSuperAdmin  bool   `gorm:"default:false;index" json:"is_super_admin"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
-}
-
-// Plan 套餐定义
-type Plan struct {
-	Base
-	Code       string `gorm:"size:64;uniqueIndex;not null" json:"code"` // free | pro | enterprise
-	Name       string `gorm:"size:128;not null" json:"name"`
-	Quotas     string `gorm:"type:json" json:"quotas"`                  // JSON: {daily_video_gen, daily_image_gen, storage_mb, max_projects}
-	PriceCents int    `json:"price_cents"`
-	Period     string `gorm:"size:16;default:monthly" json:"period"`    // monthly | yearly
-	Status     string `gorm:"size:32;default:active" json:"status"`
-}
-
-// Subscription 订阅（租户 1:1）
-type Subscription struct {
-	Base
-	TenantID    uint   `gorm:"uniqueIndex;not null" json:"tenant_id"`
-	PlanID      uint   `gorm:"not null" json:"plan_id"`
-	Status      string `gorm:"size:32;default:active" json:"status"` // active | expired | cancelled
-	PeriodStart time.Time `json:"period_start"`
-	PeriodEnd   time.Time `json:"period_end"`
-}
-
-// UsageRecord 用量记录（按租户+日期+类型聚合）
-type UsageRecord struct {
-	Base
-	TenantID uint   `gorm:"index:idx_tenant_date,unique;not null" json:"tenant_id"`
-	UserID   uint   `gorm:"index" json:"user_id"`
-	Type     string `gorm:"size:64;index:idx_tenant_date,unique;not null" json:"type"` // video_gen | image_gen | storage | proxy
-	Count    int    `gorm:"default:0" json:"count"`
-	Date     string `gorm:"size:10;index:idx_tenant_date,unique;not null" json:"date"` // YYYY-MM-DD
-}
-
-// Project 项目/画布
+// Project 是一个本地创作项目。
 type Project struct {
 	Base
-	TenantID uint   `gorm:"index;not null" json:"tenant_id"`
-	OwnerID  uint   `gorm:"not null" json:"owner_id"`
 	Name     string `gorm:"size:255;not null" json:"name"`
 	CoverURL string `gorm:"size:1024" json:"cover_url"`
-	Status   string `gorm:"size:32;default:active" json:"status"` // active | archived
+	Status   string `gorm:"size:32;default:active" json:"status"`
 }
 
-// ProjectSnapshot 画布快照（版本化保存）
+// ProjectSnapshot 保存可恢复的完整画布过程状态。
 type ProjectSnapshot struct {
 	Base
-	ProjectID uint   `gorm:"index;not null" json:"project_id"`
-	Version   int    `gorm:"not null" json:"version"`
-	Data      string `gorm:"type:longtext" json:"data"` // JSON: {nodes, connections, ...}
+	ProjectID uint   `gorm:"uniqueIndex;not null" json:"project_id"`
+	Data      string `gorm:"type:text;not null" json:"data"`
 }
 
-// ProjectHistory 生成历史记录
+// ProjectHistory 保存图片、视频等生成结果。
 type ProjectHistory struct {
 	Base
-	ProjectID uint   `gorm:"index;not null" json:"project_id"`
-	Type      string `gorm:"size:32;not null" json:"type"` // image | video
-	URL       string `gorm:"size:1024" json:"url"`
+	ProjectID uint   `gorm:"index:idx_project_client,unique;not null" json:"project_id"`
+	ClientID  string `gorm:"size:191;index:idx_project_client,unique;not null" json:"client_id"`
+	Type      string `gorm:"size:32;not null" json:"type"`
+	URL       string `gorm:"size:2048" json:"url"`
 	Prompt    string `gorm:"type:text" json:"prompt"`
 	ModelName string `gorm:"size:128" json:"model_name"`
-	Meta      string `gorm:"type:json" json:"meta"` // 额外元数据
+	Meta      string `gorm:"type:text" json:"meta"`
 }
 
-// Asset 资产元数据
-type Asset struct {
-	Base
-	TenantID  uint   `gorm:"index;not null" json:"tenant_id"`
-	ProjectID uint   `gorm:"index" json:"project_id"`
-	COSKey    string `gorm:"size:1024;not null" json:"cos_key"` // tenant/{tenantId}/...
-	Mime      string `gorm:"size:128" json:"mime"`
-	Size      int64  `json:"size"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-}
-
-// Credential 加密凭证（VOD / TokenHub 的 AK/SK）
+// Credential 保存全局 API 凭证的 AES-GCM 密文。
 type Credential struct {
 	Base
-	TenantID      uint   `gorm:"index;not null" json:"tenant_id"`
-	Provider      string `gorm:"size:64;not null" json:"provider"` // vod | tokenhub
-	EncryptedData string `gorm:"type:text;not null" json:"-"`      // AES-GCM 加密的 JSON
-	// 明文结构（仅传输用，不入库）:
-	// vod:      {secret_id, secret_key, sub_app_id, region}
-	// tokenhub: {api_key, base_url}
+	Provider      string `gorm:"size:64;uniqueIndex;not null" json:"provider"`
+	EncryptedData string `gorm:"type:text;not null" json:"-"`
 }
 
-// UserQuotaOverride 用户级配额覆盖（管理员为单个用户设定）
-// 优先级：UserQuotaOverride.Quotas > Plan.Quotas（租户套餐）
-type UserQuotaOverride struct {
-	Base
-	UserID uint   `gorm:"uniqueIndex;not null" json:"user_id"`
-	Quotas string `gorm:"type:json" json:"quotas"` // 与 Plan.Quotas 同结构
-}
-
-// UserUsageRecord 用户级用量记录（按用户+类型+日期聚合）
-// 替代租户级 UsageRecord，配额检查基于此表
-type UserUsageRecord struct {
-	Base
-	UserID uint   `gorm:"index:idx_user_date,unique;not null" json:"user_id"`
-	Type   string `gorm:"size:64;index:idx_user_date,unique;not null" json:"type"` // image_gen | video_gen | proxy
-	Count  int    `gorm:"default:0" json:"count"`
-	Date   string `gorm:"size:10;index:idx_user_date,unique;not null" json:"date"` // YYYY-MM-DD
-}
-
-// Template 场景模板（电商/游戏/影视等参考生图模板）
-// TenantID 为 nil 表示全局模板（管理员创建，所有用户可见）
-type Template struct {
-	Base
-	TenantID      *uint  `gorm:"index" json:"tenant_id,omitempty"`
-	Name          string `gorm:"size:128;not null" json:"name"`
-	Category      string `gorm:"size:64;index" json:"category"` // 电商 | 游戏 | 影视 | 动漫 | ...
-	Type          string `gorm:"size:16;not null" json:"type"`  // image | video
-	Prompt        string `gorm:"type:text" json:"prompt"`
-	ModelName     string `gorm:"size:128" json:"model_name"`
-	ModelVersion  string `gorm:"size:64" json:"model_version"`
-	Ratio         string `gorm:"size:32" json:"ratio"`
-	RefImageCount int    `gorm:"default:0" json:"ref_image_count"`
-	Description   string `gorm:"type:text" json:"description"`
-	Status        string `gorm:"size:32;default:active" json:"status"` // active | archived
-}
-
-// AutoMigrateAll 自动迁移所有表
 func AutoMigrateAll(db *gorm.DB) error {
 	return db.AutoMigrate(
-		&Tenant{},
-		&User{},
-		&Plan{},
-		&Subscription{},
-		&UsageRecord{},
 		&Project{},
 		&ProjectSnapshot{},
 		&ProjectHistory{},
-		&Asset{},
 		&Credential{},
-		&UserQuotaOverride{},
-		&UserUsageRecord{},
-		&Template{},
 	)
-}
-
-// SeedPlans 写入默认套餐（幂等）
-func SeedPlans(db *gorm.DB) error {
-	plans := []Plan{
-		{
-			Code: "free", Name: "免费版",
-			Quotas:     `{"daily_video_gen":5,"daily_image_gen":20,"storage_mb":512,"max_projects":3}`,
-			PriceCents: 0, Period: "monthly", Status: "active",
-		},
-		{
-			Code: "pro", Name: "专业版",
-			Quotas:     `{"daily_video_gen":50,"daily_image_gen":200,"storage_mb":5120,"max_projects":20}`,
-			PriceCents: 9900, Period: "monthly", Status: "active",
-		},
-		{
-			Code: "enterprise", Name: "企业版",
-			Quotas:     `{"daily_video_gen":1000,"daily_image_gen":5000,"storage_mb":51200,"max_projects":999}`,
-			PriceCents: 99900, Period: "monthly", Status: "active",
-		},
-	}
-	for _, p := range plans {
-		var existing Plan
-		if err := db.Where("code = ?", p.Code).First(&existing).Error; err == gorm.ErrRecordNotFound {
-			if err := db.Create(&p).Error; err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

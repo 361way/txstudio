@@ -2,9 +2,9 @@ package handler
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vodstudio/backend/internal/middleware"
 	"github.com/vodstudio/backend/internal/model"
 	"gorm.io/gorm"
 )
@@ -19,9 +19,9 @@ type createProjectReq struct {
 }
 
 type updateProjectReq struct {
-	Name      *string `json:"name"`
-	CoverURL  *string `json:"cover_url"`
-	Status    *string `json:"status"`
+	Name     *string `json:"name"`
+	CoverURL *string `json:"cover_url"`
+	Status   *string `json:"status"`
 }
 
 type saveCanvasReq struct {
@@ -29,6 +29,7 @@ type saveCanvasReq struct {
 }
 
 type createHistoryReq struct {
+	ClientID  string `json:"client_id"`
 	Type      string `json:"type" binding:"required"`
 	URL       string `json:"url"`
 	Prompt    string `json:"prompt"`
@@ -36,11 +37,18 @@ type createHistoryReq struct {
 	Meta      string `json:"meta"`
 }
 
+type replaceHistoryReq struct {
+	Items []createHistoryReq `json:"items"`
+}
+
+type deleteHistoryReq struct {
+	ClientIDs []string `json:"client_ids" binding:"required"`
+}
+
 // List 项目列表（按当前租户）
 func (h *ProjectHandler) List(c *gin.Context) {
-	tenantID := middleware.GetCurrentTenantID(c)
 	var projects []model.Project
-	h.DB.Where("tenant_id = ?", tenantID).Order("updated_at DESC").Find(&projects)
+	h.DB.Order("updated_at DESC").Find(&projects)
 	OK(c, projects)
 }
 
@@ -51,32 +59,8 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		BadRequest(c, "项目名称必填")
 		return
 	}
-	tenantID := middleware.GetCurrentTenantID(c)
-	userID := middleware.GetCurrentUserID(c)
 
-	// 检查项目数量配额
-	var count int64
-	h.DB.Model(&model.Project{}).Where("tenant_id = ? AND status = ?", tenantID, "active").Count(&count)
-	var sub model.Subscription
-	h.DB.Where("tenant_id = ? AND status = ?", tenantID, "active").First(&sub)
-	var plan model.Plan
-	h.DB.First(&plan, sub.PlanID)
-
-	// 简单配额检查（max_projects）
-	if plan.Quotas != "" {
-		// 用 reuse 的解析
-	}
-	if count >= 999 {
-		BadRequest(c, "项目数量已达上限")
-		return
-	}
-
-	project := model.Project{
-		TenantID: tenantID,
-		OwnerID:  userID,
-		Name:     req.Name,
-		Status:   "active",
-	}
+	project := model.Project{Name: req.Name, Status: "active"}
 	if err := h.DB.Create(&project).Error; err != nil {
 		InternalError(c, "创建项目失败")
 		return
@@ -87,10 +71,9 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 // Get 项目详情
 func (h *ProjectHandler) Get(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
@@ -100,7 +83,6 @@ func (h *ProjectHandler) Get(c *gin.Context) {
 // Update 更新项目
 func (h *ProjectHandler) Update(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	var req updateProjectReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -109,7 +91,7 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	}
 
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
@@ -130,14 +112,29 @@ func (h *ProjectHandler) Update(c *gin.Context) {
 	OK(c, project)
 }
 
-// Delete 删除项目（软删除）
+// Delete 硬删除项目及其画布、历史和资产元数据
 func (h *ProjectHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
-	result := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).Delete(&model.Project{})
-	if result.RowsAffected == 0 {
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		var project model.Project
+		if err := tx.First(&project, id).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&model.ProjectSnapshot{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&model.ProjectHistory{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&project).Error
+	})
+	if err == gorm.ErrRecordNotFound {
 		NotFound(c, "项目不存在")
+		return
+	}
+	if err != nil {
+		InternalError(c, "删除项目失败")
 		return
 	}
 	OK(c, gin.H{"deleted": true})
@@ -146,7 +143,6 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 // SaveCanvas 保存画布状态（创建新快照）
 func (h *ProjectHandler) SaveCanvas(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	var req saveCanvasReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -156,59 +152,60 @@ func (h *ProjectHandler) SaveCanvas(c *gin.Context) {
 
 	// 校验项目归属
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
 
-	// 查当前最大版本号
-	var maxVersion int
-	h.DB.Model(&model.ProjectSnapshot{}).Where("project_id = ?", id).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion)
-
-	snapshot := model.ProjectSnapshot{
-		ProjectID: uint(id),
-		Version:   maxVersion + 1,
-		Data:      req.Data,
-	}
-	if err := h.DB.Create(&snapshot).Error; err != nil {
+	// 每个项目只维护一份当前过程快照。
+	var snapshot model.ProjectSnapshot
+	result := h.DB.Where("project_id = ?", id).First(&snapshot)
+	if result.Error == gorm.ErrRecordNotFound {
+		snapshot = model.ProjectSnapshot{ProjectID: uint(id), Data: req.Data}
+		if err := h.DB.Create(&snapshot).Error; err != nil {
+			InternalError(c, "保存画布失败")
+			return
+		}
+	} else if result.Error != nil {
+		InternalError(c, "读取画布快照失败")
+		return
+	} else if err := h.DB.Model(&snapshot).Updates(map[string]any{
+		"data": req.Data,
+	}).Error; err != nil {
 		InternalError(c, "保存画布失败")
 		return
 	}
 
-	// 更新项目更新时间
-	h.DB.Model(&project).Update("updated_at", project.UpdatedAt)
-
-	OK(c, gin.H{"version": snapshot.Version})
+	h.DB.Model(&project).Update("updated_at", time.Now())
+	OK(c, snapshot)
 }
 
 // GetCanvas 读取最新画布状态
 func (h *ProjectHandler) GetCanvas(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	// 校验归属
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
 
 	var snapshot model.ProjectSnapshot
-	if err := h.DB.Where("project_id = ?", id).Order("version DESC").First(&snapshot).Error; err != nil {
-		OK(c, gin.H{"data": nil, "version": 0})
+	if err := h.DB.Where("project_id = ?", id).First(&snapshot).Error; err != nil {
+		OK(c, gin.H{"data": nil})
 		return
 	}
-	OK(c, gin.H{"data": snapshot.Data, "version": snapshot.Version})
+	OK(c, gin.H{"data": snapshot.Data})
 }
 
 // ListHistory 历史记录列表
 func (h *ProjectHandler) ListHistory(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	// 校验归属
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
@@ -221,7 +218,6 @@ func (h *ProjectHandler) ListHistory(c *gin.Context) {
 // CreateHistory 新增历史记录
 func (h *ProjectHandler) CreateHistory(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	tenantID := middleware.GetCurrentTenantID(c)
 
 	var req createHistoryReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -230,13 +226,14 @@ func (h *ProjectHandler) CreateHistory(c *gin.Context) {
 	}
 
 	var project model.Project
-	if err := h.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&project).Error; err != nil {
+	if err := h.DB.First(&project, id).Error; err != nil {
 		NotFound(c, "项目不存在")
 		return
 	}
 
 	history := model.ProjectHistory{
 		ProjectID: uint(id),
+		ClientID:  req.ClientID,
 		Type:      req.Type,
 		URL:       req.URL,
 		Prompt:    req.Prompt,
@@ -248,4 +245,73 @@ func (h *ProjectHandler) CreateHistory(c *gin.Context) {
 		return
 	}
 	Created(c, history)
+}
+
+// ReplaceHistory 使用当前画布历史快照替换项目历史，供前端防抖持久化。
+func (h *ProjectHandler) ReplaceHistory(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	var req replaceHistoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "历史记录格式无效")
+		return
+	}
+
+	var project model.Project
+	if err := h.DB.First(&project, id).Error; err != nil {
+		NotFound(c, "项目不存在")
+		return
+	}
+
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", id).Delete(&model.ProjectHistory{}).Error; err != nil {
+			return err
+		}
+		for _, item := range req.Items {
+			history := model.ProjectHistory{
+				ProjectID: uint(id),
+				ClientID:  item.ClientID,
+				Type:      item.Type,
+				URL:       item.URL,
+				Prompt:    item.Prompt,
+				ModelName: item.ModelName,
+				Meta:      item.Meta,
+			}
+			if err := tx.Create(&history).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&project).Update("updated_at", time.Now()).Error
+	})
+	if err != nil {
+		InternalError(c, "保存历史记录失败")
+		return
+	}
+	OK(c, gin.H{"saved": len(req.Items)})
+}
+
+// DeleteHistory 根据前端稳定 ID 硬删除项目历史，页面删除后数据库立即同步。
+func (h *ProjectHandler) DeleteHistory(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	var req deleteHistoryReq
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.ClientIDs) == 0 {
+		BadRequest(c, "请选择要删除的历史记录")
+		return
+	}
+
+	var project model.Project
+	if err := h.DB.First(&project, id).Error; err != nil {
+		NotFound(c, "项目不存在")
+		return
+	}
+
+	result := h.DB.Where("project_id = ? AND client_id IN ?", id, req.ClientIDs).
+		Delete(&model.ProjectHistory{})
+	if result.Error != nil {
+		InternalError(c, "删除历史记录失败")
+		return
+	}
+	h.DB.Model(&project).Update("updated_at", time.Now())
+	OK(c, gin.H{"deleted": result.RowsAffected})
 }

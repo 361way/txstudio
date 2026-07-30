@@ -6,6 +6,9 @@ export default {
     ],
     theme: {
         extend: {
+            fontFamily: {
+                script: ['"Dancing Script"', 'cursive'],
+            },
             colors: {
                 // 品牌主色：靛蓝 → 紫罗兰渐变体系
                 brand: {

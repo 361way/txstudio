@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -10,11 +11,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vodstudio/backend/internal/model"
+	"github.com/vodstudio/backend/internal/service"
+	"gorm.io/gorm"
 )
 
 // ProxyHandler 通用 CORS 代理（复用现有 proxy-server.go 逻辑，加 SSRF 防护）
 type ProxyHandler struct {
 	client *http.Client
+	db     *gorm.DB
+	crypto *service.CryptoService
 }
 
 var hopByHop = map[string]struct{}{
@@ -23,8 +29,12 @@ var hopByHop = map[string]struct{}{
 	"transfer-encoding": {}, "upgrade": {}, "host": {},
 }
 
-func NewProxyHandler() *ProxyHandler {
-	return &ProxyHandler{client: &http.Client{Timeout: 120 * time.Second}}
+func NewProxyHandler(db *gorm.DB, crypto *service.CryptoService) *ProxyHandler {
+	return &ProxyHandler{
+		client: &http.Client{Timeout: 120 * time.Second},
+		db:     db,
+		crypto: crypto,
+	}
 }
 
 type proxyReq struct {
@@ -34,24 +44,46 @@ type proxyReq struct {
 	Body    string            `json:"body"`
 }
 
-// Proxy 通用 CORS 代理
+// QueryProxy 处理 query 参数形式的代理请求，供画布与媒体工具共用。
+func (h *ProxyHandler) QueryProxy(c *gin.Context) {
+	target := strings.TrimSpace(c.Query("url"))
+	parsed, err := validateProxyTarget(target)
+	if err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	outReq, err := http.NewRequest(c.Request.Method, parsed.String(), c.Request.Body)
+	if err != nil {
+		BadRequest(c, "创建上游请求失败")
+		return
+	}
+	for key, values := range c.Request.Header {
+		if _, skip := hopByHop[strings.ToLower(key)]; skip {
+			continue
+		}
+		for _, value := range values {
+			outReq.Header.Add(key, value)
+		}
+	}
+	outReq.Host = parsed.Host
+	if err := h.injectStoredCredential(outReq); err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+	h.forward(c, outReq)
+}
+
+// Proxy 通用 JSON 代理
 func (h *ProxyHandler) Proxy(c *gin.Context) {
 	var req proxyReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		BadRequest(c, "url 必填")
 		return
 	}
-	parsed, err := url.Parse(req.URL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		BadRequest(c, "无效的目标 URL")
-		return
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		BadRequest(c, "仅支持 http/https")
-		return
-	}
-	if isInternalHost(parsed.Hostname()) {
-		BadRequest(c, "目标地址不允许为内网地址")
+	parsed, err := validateProxyTarget(req.URL)
+	if err != nil {
+		BadRequest(c, err.Error())
 		return
 	}
 
@@ -74,23 +106,12 @@ func (h *ProxyHandler) Proxy(c *gin.Context) {
 		}
 	}
 	outReq.Host = parsed.Host
-
-	resp, err := h.client.Do(outReq)
-	if err != nil {
-		InternalError(c, "上游请求失败: "+err.Error())
+	if err := h.injectStoredCredential(outReq); err != nil {
+		InternalError(c, err.Error())
 		return
 	}
-	defer resp.Body.Close()
 
-	for key, values := range resp.Header {
-		if _, skip := hopByHop[strings.ToLower(key)]; skip {
-			continue
-		}
-		for _, v := range values {
-			c.Header(key, v)
-		}
-	}
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), readAllOrNull(resp.Body))
+	h.forward(c, outReq)
 }
 
 // COSPut COS PUT 上传代理
@@ -142,6 +163,65 @@ func (h *ProxyHandler) COSPut(c *gin.Context) {
 		}
 		for _, v := range values {
 			c.Header(key, v)
+		}
+	}
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), readAllOrNull(resp.Body))
+}
+
+func (h *ProxyHandler) injectStoredCredential(req *http.Request) error {
+	if req.Header.Get("Authorization") != "Bearer __server__" {
+		return nil
+	}
+	var credential model.Credential
+	if err := h.db.Where("provider = ?", "tokenhub").First(&credential).Error; err != nil {
+		return fmt.Errorf("未配置 TokenHub API Key，请在右上角 API 设置中配置")
+	}
+	plaintext, err := h.crypto.Decrypt(credential.EncryptedData)
+	if err != nil {
+		return fmt.Errorf("解密 TokenHub API Key 失败")
+	}
+	var data map[string]interface{}
+	if err := json.Unmarshal(plaintext, &data); err != nil {
+		return fmt.Errorf("TokenHub 凭证格式无效")
+	}
+	apiKey, _ := data["api_key"].(string)
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("TokenHub API Key 为空")
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	return nil
+}
+
+func validateProxyTarget(target string) (*url.URL, error) {
+	if target == "" {
+		return nil, fmt.Errorf("缺少目标 URL")
+	}
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("无效的目标 URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("仅支持 http/https")
+	}
+	if isInternalHost(parsed.Hostname()) {
+		return nil, fmt.Errorf("目标地址不允许为内网地址")
+	}
+	return parsed, nil
+}
+
+func (h *ProxyHandler) forward(c *gin.Context, req *http.Request) {
+	resp, err := h.client.Do(req)
+	if err != nil {
+		InternalError(c, "上游请求失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	for key, values := range resp.Header {
+		if _, skip := hopByHop[strings.ToLower(key)]; skip {
+			continue
+		}
+		for _, value := range values {
+			c.Header(key, value)
 		}
 	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), readAllOrNull(resp.Body))

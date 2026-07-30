@@ -1,11 +1,10 @@
 /**
  * 项目列表页
- * 登录后展示，支持创建/打开/删除项目。打开项目进入画布编辑器。
+ * 本地 SQLite 项目列表，支持创建/打开/删除项目。
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, FolderOpen, LogOut, Layout, Sparkles, AlertCircle, Loader2, RotateCw, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, FolderOpen, Layout, Sparkles, AlertCircle, Loader2, RotateCw, ArrowLeft } from 'lucide-react';
 import { listProjects, createProject, deleteProject } from '../api/project';
-import { logout } from '../api/auth';
 import i18n from '../i18n';
 
 const t = (s) => i18n.t ? i18n.t(s) : s;
@@ -18,7 +17,7 @@ const formatDate = (iso) => {
     } catch { return iso; }
 };
 
-export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBack, embedded = false }) {
+export default function ProjectList({ onOpenProject, onBack, embedded = false }) {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -33,12 +32,11 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
             const data = await listProjects();
             setProjects(Array.isArray(data) ? data : []);
         } catch (err) {
-            if (err?.needLogin) { onForcedLogout?.(); return; }
             setError(err.message || '加载项目列表失败');
         } finally {
             setLoading(false);
         }
-    }, [onForcedLogout]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -53,7 +51,6 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
             setProjects((prev) => [p, ...prev]);
             setNewName('');
         } catch (err) {
-            if (err?.needLogin) { onForcedLogout?.(); return; }
             setError(err.message || '创建项目失败');
         } finally {
             setCreating(false);
@@ -68,16 +65,10 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
             await deleteProject(id);
             setProjects((prev) => prev.filter((p) => p.id !== id));
         } catch (err) {
-            if (err?.needLogin) { onForcedLogout?.(); return; }
             setError(err.message || '删除项目失败');
         } finally {
             setDeletingId(null);
         }
-    };
-
-    const handleLogout = () => {
-        logout();
-        onForcedLogout?.();
     };
 
     return (
@@ -96,14 +87,11 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
                                 <Layout className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-bold tracking-tight text-white">{t('画布项目')}</h1>
-                                <p className="text-sm text-zinc-500">{t('选择一个项目开始创作')}</p>
+                                <h1 className="text-2xl font-bold tracking-tight text-[#1f2329]">{t('画布项目')}</h1>
+                                <p className="text-sm text-gray-400">{t('选择一个项目开始创作')}</p>
                             </div>
                         </div>
-                        <button onClick={handleLogout} className="btn-ghost px-4 py-2 text-sm">
-                            <LogOut className="w-4 h-4" />
-                            {t('退出登录')}
-                        </button>
+
                     </div>
                 )}
 
@@ -118,7 +106,7 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
                 </form>
 
                 {error && (
-                    <div className="mb-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-red-800/60 bg-red-950/40 text-red-300 text-sm">
+                    <div className="mb-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm">
                         <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</span>
                         <button onClick={load} className="btn-ghost px-3 py-1.5 text-xs">
                             <RotateCw className="w-3.5 h-3.5" />{t('重试')}
@@ -127,31 +115,31 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
                 )}
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
+                    <div className="flex flex-col items-center justify-center py-24 text-gray-400">
                         <Loader2 className="w-6 h-6 animate-spin mb-3" />
                         <span className="text-sm">{t('加载中...')}</span>
                     </div>
                 ) : projects.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 text-center">
-                        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-800/60 border border-white/8 mb-4">
-                            <Sparkles className="w-6 h-6 text-zinc-500" />
+                        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#f0f0f2] border border-[#ececef] mb-4">
+                            <Sparkles className="w-6 h-6 text-gray-400" />
                         </div>
-                        <p className="text-lg font-medium text-zinc-300 mb-1">{t('还没有项目')}</p>
-                        <p className="text-sm text-zinc-500">{t('在上方输入名称创建你的第一个项目')}</p>
+                        <p className="text-lg font-medium text-gray-600 mb-1">{t('还没有项目')}</p>
+                        <p className="text-sm text-gray-400">{t('在上方输入名称创建你的第一个项目')}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {projects.map((p, i) => (
                             <div key={p.id} style={{ animationDelay: `${i * 40}ms` }}
-                                className="group glass-card rounded-2xl p-5 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:border-white/15 animate-fade-in">
+                                className="group glass-card rounded-2xl p-5 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:border-[#d4d4d8] animate-fade-in">
                                 <div className="flex-1 cursor-pointer" onClick={() => onOpenProject(p)}>
                                     <div className="flex items-start gap-3 mb-3">
-                                        <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/80 border border-white/8 shrink-0 group-hover:bg-brand-600/20 group-hover:border-brand-500/40 transition">
-                                            <FolderOpen className="w-4 h-4 text-zinc-400 group-hover:text-brand-300 transition" />
+                                        <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[#f0f0f2] border border-[#ececef] shrink-0 group-hover:bg-brand-50 group-hover:border-brand-200 transition">
+                                            <FolderOpen className="w-4 h-4 text-gray-500 group-hover:text-brand-600 transition" />
                                         </div>
                                         <div className="min-w-0">
-                                            <div className="font-semibold text-base text-white truncate">{p.name || t('未命名项目')}</div>
-                                            <div className="text-xs text-zinc-500 mt-0.5">{t('更新于')} {formatDate(p.updated_at)}</div>
+                                            <div className="font-semibold text-base text-[#1f2329] truncate">{p.name || t('未命名项目')}</div>
+                                            <div className="text-xs text-gray-400 mt-0.5">{t('更新于')} {formatDate(p.updated_at)}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -160,7 +148,7 @@ export default function ProjectList({ onOpenProject, onForcedLogout, theme, onBa
                                         {t('打开')}
                                     </button>
                                     <button onClick={() => handleDelete(p.id)} disabled={deletingId === p.id}
-                                        className="btn-ghost px-3 py-2 text-sm hover:!text-red-300 hover:!border-red-800/60">
+                                        className="btn-ghost px-3 py-2 text-sm hover:!text-red-600 hover:!border-red-200">
                                         {deletingId === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                     </button>
                                 </div>

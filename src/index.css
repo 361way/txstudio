@@ -331,3 +331,95 @@
 .markdown-body code {
     font-size: 0.875em;
 }
+
+/* ============================================================
+   浅色主题作用域（.theme-light）
+   统一工作台（flowith 纯白风格）内联的工具区使用此作用域，
+   集中把深色语义类覆盖为浅色，避免逐个改写工具 JSX 的容器样式。
+   注意：画布编辑器（CanvasApp）不在该作用域内，保持深色沉浸式。
+   ============================================================ */
+.theme-light {
+    color: #1f2329;
+}
+.theme-light .app-surface {
+    background-color: #fff;
+    background-image: none;
+}
+/* 玻璃卡片 → 纯白卡片 */
+.theme-light .glass-card {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid #ececef;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.05);
+}
+/* 输入控件 */
+.theme-light .field {
+    background: #fff;
+    border: 1px solid #ececef;
+    color: #1f2329;
+}
+.theme-light .field::placeholder { color: #9ca3af; }
+.theme-light .field:hover { border-color: #d4d4d8; }
+.theme-light .field:focus {
+    border-color: #4a90d9;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.15);
+}
+.theme-light select.field {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%239ca3af' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 16px;
+    padding-right: 2.25rem;
+}
+/* 次级 / 幽灵按钮 */
+.theme-light .btn-ghost {
+    background: #fff;
+    border: 1px solid #ececef;
+    color: #3f3f46;
+}
+.theme-light .btn-ghost:hover {
+    background: #f4f4f5;
+    border-color: #d4d4d8;
+    color: #1f2329;
+}
+/* segmented 控件 */
+.theme-light .segmented {
+    background: #f4f4f5;
+    border: 1px solid #ececef;
+}
+.theme-light .segmented > button { color: #6b7280; }
+.theme-light .segmented > button:hover { color: #1f2329; }
+/* 浅色页面中活动态采用高对比深紫，确保文字与图标清晰可读。 */
+.theme-light .segmented > button[data-active="true"] {
+    background: linear-gradient(135deg, #5b3cc4, #7545d9);
+    color: #fff;
+    text-shadow: 0 1px 1px rgba(32, 15, 76, 0.35);
+    box-shadow: 0 5px 12px -7px rgba(91, 60, 196, 0.75);
+}
+.theme-light .segmented > button[data-active="true"] svg {
+    color: currentColor;
+    stroke-width: 2.35;
+}
+/* 上传区 */
+.theme-light .dropzone {
+    border-color: #d4d4d8;
+    color: #9ca3af;
+}
+.theme-light .dropzone:hover {
+    border-color: #4a90d9;
+    color: #4a90d9;
+    background: rgba(74, 144, 217, 0.05);
+}
+/* 浅色作用域下的滚动条 */
+.theme-light ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.22);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}

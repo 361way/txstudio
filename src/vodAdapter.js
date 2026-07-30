@@ -32,7 +32,7 @@ export const VOD_DEFAULT_VIDEO_MODEL_VERSION = '3.0';
 // ModelName / ModelVersion 支持矩阵（来自官方文档 2026-05）
 export const VOD_IMAGE_MODEL_MATRIX = {
     OG: ['image2_low', 'image2_medium', 'image2_high'],
-    GG: ['2.5', '3.0', '3.1'],
+    GEM: ['2.5', '3.0', '3.1', '3.1-lite'],
     SI: ['4.0', '4.5', '5.0-lite'],
     Qwen: ['0925'],
     Hunyuan: ['3.0'],
@@ -209,7 +209,7 @@ export async function signVodRequest({ secretId, secretKey, action, version, reg
  * @param {string} targetUrl
  * @param {Object} opts
  * @param {boolean} opts.useProxy
- * @param {string}  opts.localServerUrl   如 'http://127.0.0.1:9527'
+ * @param {string}  opts.localServerUrl   如 'http://127.0.0.1:8080'
  */
 function wrapProxy(targetUrl, { useProxy, localServerUrl }) {
     if (!useProxy) return targetUrl;
@@ -366,38 +366,24 @@ async function putObjectToCos({ tempCred, bucket, region, key, blob }, ctx = {})
 
     // URL 里的 key 需要按路径片段 encode（保留 /）
     const encodedKey = uriPathname.split('/').map((seg) => seg ? encodeURIComponent(seg) : '').join('/');
-    let resp;
-    
     const url = `https://${host}${encodedKey}`;
 
-    // 通过 fetch 上传（本地代理或直接）
-    const finalUrl = wrapProxy(url, ctx);
+    // 统一走同源后端专用 COS 代理，避免浏览器向 COS 直传时被 CORS 预检拦截。
+    // 后端仅允许腾讯云 COS HTTPS 域名，避免开放任意目标代理。
+    let resp;
     try {
-        resp = await fetch(finalUrl, {
+        resp = await fetch(`/api/cos-put?url=${encodeURIComponent(url)}`, {
             method: 'PUT',
             headers: {
                 Authorization: authorization,
                 'x-cos-security-token': tempCred.Token
-                // 注意：不设 Host / Content-Length，浏览器会自动处理；代理会转发目标 Host
             },
             body: blob
         });
     } catch (err) {
-        if (!ctx.useProxy && ctx.localServerUrl) {
-            const proxyUrl = wrapProxy(url, { ...ctx, useProxy: true });
-            resp = await fetch(proxyUrl, {
-                method: 'PUT',
-                headers: {
-                    Authorization: authorization,
-                    'x-cos-security-token': tempCred.Token
-                },
-                body: blob
-            });
-        } else {
-            throw new Error(`[VOD Upload/COS PUT] 网络请求失败，可能是浏览器 CORS 限制。请确认 CORS 转发服务可用: ${err?.message || err}`);
-        }
+        throw new Error(`[VOD Upload/COS PUT] 无法连接上传服务: ${err?.message || err}`);
     }
-    
+
     if (!resp.ok) {
         const text = await resp.text().catch(() => '');
         throw new Error(`[VOD Upload/COS PUT] HTTP ${resp.status}: ${text.slice(0, 300)}`);
@@ -629,8 +615,8 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
  * @param {'image'|'video'} params.type
  * @param {string}   params.prompt
  * @param {string}   params.negativePrompt
- * @param {string}   params.modelName      如 'GG'
- * @param {string}   params.modelVersion   如 '3.1'
+ * @param {string}   params.modelName      如 'GEM'
+ * @param {string}   params.modelVersion   如 '3.1-lite'
  * @param {Array<Blob|string>} params.sourceImages  参考图（画布上游）
  * @param {Array<Object|null>} params.sourceFileInfos  每个上传文件对应的 FileInfos 附加字段；null 表示不放入 FileInfos
  * @param {number}   params.lastFrameSourceIndex  sourceImages 中作为 LastFrameFileId 的索引

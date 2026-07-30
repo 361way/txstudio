@@ -1,34 +1,21 @@
-# VodStudio SaaS 后端配置
-# 复制为 config.yaml 并填入真实值
-
+# VodStudio 本地单用户配置
 server:
   port: 8080
-  mode: debug          # debug | release
+  mode: debug
 
 database:
-  host: 127.0.0.1
-  port: 3306
-  user: vodstudio
-  password: changeme
-  dbname: vodstudio
-  charset: utf8mb4
+  # 项目、画布过程和生成历史
+  path: ./data/studio.db
 
-jwt:
-  secret: change-this-to-a-random-64-char-string
-  access_ttl: 15m      # access token 有效期
-  refresh_ttl: 168h    # refresh token 有效期 (7天)
-
-# AES-256-GCM 加密凭证用，32 字节 hex（64 个字符）
 crypto:
-  aes_key: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  # 首次启动自动生成；也可通过 VODSTUDIO_AES_KEY 注入
+  key_file: ./data/secret.key
 
-# 腾讯云 COS（资产存储）
-cos:
-  secret_id: ""
-  secret_key: ""
-  region: ap-guangzhou
-  bucket: vodstudio-1250000000
-  # 资产按 tenant 前缀隔离：{bucket}/{cos_prefix}/{tenantId}/...
-  cos_prefix: assets
-  # 临时上传 URL 有效期
-  presign_ttl: 10m
+cache:
+  # 生成结果的可选本地缓存；可用 VODSTUDIO_CACHE_DIR 覆盖
+  path: ./data/cache
+
+agent:
+  # 智能 Agent 文本模型的 OpenAI 兼容网关；可用 VODSTUDIO_AGENT_BASE_URL 覆盖
+  # 密钥仅通过 VODSTUDIO_AGENT_API_KEY 环境变量注入，不写入配置文件
+  base_url: https://tokenhub.tencentmaas.com

@@ -29,6 +29,12 @@ localStorage*.json
 .idea/
 .codebuddy/
 
+# Local SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
+backend/data/
+
 # Logs
 *.log
 npm-debug.log*
