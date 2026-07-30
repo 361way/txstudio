@@ -36,8 +36,8 @@ export async function bootstrapRuntimeCredentials() {
         };
     }
 
-    localStorage.setItem('vodstudio_providers', JSON.stringify(providers));
-    localStorage.setItem('vodstudio_global_key', tokenhub ? '__server__' : '');
-    window.dispatchEvent(new CustomEvent('vodstudio:api-settings-updated'));
+    localStorage.setItem('txstudio_providers', JSON.stringify(providers));
+    localStorage.setItem('txstudio_global_key', tokenhub ? '__server__' : '');
+    window.dispatchEvent(new CustomEvent('txstudio:api-settings-updated'));
     return providers;
 }

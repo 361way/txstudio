@@ -1,7 +1,7 @@
 import { runVodAigcPipeline } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
 
-const MODELS_KEY = 'vodstudio_api_configs';
+const MODELS_KEY = 'txstudio_api_configs';
 
 const PIPELINE_CONTEXT = {
     credentials: {},
@@ -21,7 +21,12 @@ const readJSON = (key, fallback) => {
 export function getAgentTextModels() {
     const configured = readJSON(MODELS_KEY, []);
     const models = Array.isArray(configured)
-        ? configured.filter((item) => ['Chat', 'ChatImage'].includes(item?.type) && item?.id)
+        ? configured
+            .filter((item) => ['Chat', 'ChatImage'].includes(item?.type) && item?.id)
+            .filter((item) => !['midjourney', 'grok'].includes(String(item?.provider || '').trim()))
+            .map((item) => item.id === 'hy3-preview'
+                ? { ...item, id: 'hy3', modelName: 'hy3', displayName: 'hy3' }
+                : item)
         : [];
     return models.length
         ? models.map((item) => ({
@@ -30,13 +35,13 @@ export function getAgentTextModels() {
             modelName: item.modelName || item.id,
             provider: item.provider || 'openai',
         }))
-        : [{ id: 'hy3-preview', name: 'hy3-preview', modelName: 'hy3-preview', provider: 'openai' }];
+        : [{ id: 'hy3', name: 'hy3', modelName: 'hy3', provider: 'openai' }];
 }
 
 function resolveTextModelName(modelId) {
     const models = readJSON(MODELS_KEY, []);
     const config = Array.isArray(models) ? models.find((item) => item?.id === modelId) : null;
-    return config?.modelName || config?.id || modelId || 'hy3-preview';
+    return config?.modelName || config?.id || modelId || 'hy3';
 }
 
 function extractTextResponse(payload) {

@@ -1,4 +1,4 @@
-module github.com/vodstudio/backend
+module cnb.cool/txcloud/txstudio/backend
 
 go 1.21
 

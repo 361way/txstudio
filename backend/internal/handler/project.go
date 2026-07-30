@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
+	"cnb.cool/txcloud/txstudio/backend/internal/model"
 	"github.com/gin-gonic/gin"
-	"github.com/vodstudio/backend/internal/model"
 	"gorm.io/gorm"
 )
 

@@ -50,7 +50,7 @@ export default function ImageTool({ onBack, template, embedded = false }) {
     const [storageMode, setStorageMode] = useState(() => {
         if (template?.storage_mode === 'Permanent') return 'Permanent';
         try {
-            return localStorage.getItem('vodstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
+            return localStorage.getItem('txstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
         } catch {
             return 'Temporary';
         }

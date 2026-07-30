@@ -3,7 +3,7 @@ server:
   mode: debug
 
 database:
-  path: ./data/studio.db
+  path: ./data/txstudio.db
 
 crypto:
   key_file: ./data/secret.key

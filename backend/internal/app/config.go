@@ -52,25 +52,25 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	if value := os.Getenv("VODSTUDIO_DB_PATH"); value != "" {
+	if value := os.Getenv("TXSTUDIO_DB_PATH"); value != "" {
 		cfg.Database.Path = value
 	}
-	if value := os.Getenv("VODSTUDIO_AES_KEY"); value != "" {
+	if value := os.Getenv("TXSTUDIO_AES_KEY"); value != "" {
 		cfg.Crypto.AESKey = value
 	}
-	if value := os.Getenv("VODSTUDIO_CACHE_DIR"); value != "" {
+	if value := os.Getenv("TXSTUDIO_CACHE_DIR"); value != "" {
 		cfg.Cache.Path = value
 	}
-	if value := os.Getenv("VODSTUDIO_AGENT_BASE_URL"); value != "" {
+	if value := os.Getenv("TXSTUDIO_AGENT_BASE_URL"); value != "" {
 		cfg.Agent.BaseURL = value
 	}
-	cfg.Agent.APIKey = os.Getenv("VODSTUDIO_AGENT_API_KEY")
+	cfg.Agent.APIKey = os.Getenv("TXSTUDIO_AGENT_API_KEY")
 	if cfg.Agent.BaseURL == "" {
 		cfg.Agent.BaseURL = "https://tokenhub.tencentmaas.com"
 	}
 
 	if cfg.Database.Path == "" {
-		cfg.Database.Path = "./data/vodstudio.db"
+		cfg.Database.Path = "./data/txstudio.db"
 	}
 	if cfg.Crypto.KeyFile == "" {
 		cfg.Crypto.KeyFile = filepath.Join(filepath.Dir(cfg.Database.Path), "secret.key")
@@ -86,7 +86,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	decodedKey, decodeErr := hex.DecodeString(cfg.Crypto.AESKey)
 	if decodeErr != nil || len(decodedKey) != 32 {
-		return nil, fmt.Errorf("VODSTUDIO_AES_KEY 必须是 64 字符的 hex 字符串")
+		return nil, fmt.Errorf("TXSTUDIO_AES_KEY 必须是 64 字符的 hex 字符串")
 	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080

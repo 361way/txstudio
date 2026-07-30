@@ -1,5 +1,5 @@
 // ============================================================================
-// 腾讯云 VOD AIGC 适配器 (VodStudio Studio)
+// 腾讯云 VOD AIGC 适配器 (TxStudio Studio)
 // ----------------------------------------------------------------------------
 // 对接接口：
 //   - ApplyUpload           (VOD)      申请上传凭证
@@ -403,7 +403,7 @@ export async function uploadImageToVod(imageInput, ctx) {
     // 1) ApplyUpload
     const applyResp = await callVodApi('ApplyUpload', {
         MediaType: ext,
-        MediaName: `vodstudio-${Date.now()}`,
+        MediaName: `txstudio-${Date.now()}`,
         SubAppId: credentials.subAppId
     }, ctx);
 
@@ -1049,7 +1049,7 @@ export async function runVodComposePipeline(plan, ctx) {
         Tracks: tracks,
         Output: {
             Container: (plan.output && plan.output.container) || 'mp4',
-            FileName: (plan.output && plan.output.fileName) || `vodstudio-compose-${Date.now()}`
+            FileName: (plan.output && plan.output.fileName) || `txstudio-compose-${Date.now()}`
         }
     };
     if (canvasWidth > 0 && canvas.height > 0) {

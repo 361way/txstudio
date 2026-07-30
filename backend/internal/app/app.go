@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
+	"cnb.cool/txcloud/txstudio/backend/frontend"
+	"cnb.cool/txcloud/txstudio/backend/internal/handler"
+	"cnb.cool/txcloud/txstudio/backend/internal/model"
+	"cnb.cool/txcloud/txstudio/backend/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/vodstudio/backend/frontend"
-	"github.com/vodstudio/backend/internal/handler"
-	"github.com/vodstudio/backend/internal/model"
-	"github.com/vodstudio/backend/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -46,7 +46,7 @@ func NewApp(cfg *Config) (*App, error) {
 
 func (a *App) Run() error {
 	addr := fmt.Sprintf("127.0.0.1:%d", a.Config.Server.Port)
-	log.Printf("[server] VodStudio 本地服务启动: http://%s", addr)
+	log.Printf("[server] TxStudio 本地服务启动: http://%s", addr)
 	return a.Router.Run(addr)
 }
 

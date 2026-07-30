@@ -63,7 +63,7 @@ func isPublicHTTPS(raw string) bool {
 
 func (h *AgentChatHandler) Chat(c *gin.Context) {
 	if h.apiKey == "" {
-		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本模型未配置，请设置 VODSTUDIO_AGENT_API_KEY")
+		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本模型未配置，请设置 TXSTUDIO_AGENT_API_KEY")
 		return
 	}
 	target := h.baseURL + "/v1/chat/completions"

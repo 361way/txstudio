@@ -89,8 +89,28 @@ import { saveCanvas, getCanvas, createProject, listHistory, replaceHistory, dele
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
+const TXSTUDIO_STORAGE_PREFIX = 'txstudio';
+const LEGACY_STORAGE_PREFIX = ['vod', 'studio'].join('');
+const LEGACY_CACHE_DIR = `.${LEGACY_STORAGE_PREFIX}_cache`;
 
-// VodStudio: 存储 key 统一使用 `vodstudio_` 前缀，不再做 vodstudio_/studio_ 兼容迁移。
+// 将旧品牌命名空间中的浏览器数据复制到新命名空间，避免重命名导致用户配置和画布状态丢失。
+const migrateBrowserStorageNamespace = (storage) => {
+    try {
+        const legacyPrefix = `${LEGACY_STORAGE_PREFIX}_`;
+        const currentPrefix = `${TXSTUDIO_STORAGE_PREFIX}_`;
+        const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter(Boolean);
+        keys.forEach((key) => {
+            if (!key.startsWith(legacyPrefix)) return;
+            const nextKey = `${currentPrefix}${key.slice(legacyPrefix.length)}`;
+            if (storage.getItem(nextKey) === null) storage.setItem(nextKey, storage.getItem(key));
+        });
+    } catch (error) {
+        console.warn('[TxStudio] 浏览器存储迁移失败:', error);
+    }
+};
+
+migrateBrowserStorageNamespace(window.localStorage);
+migrateBrowserStorageNamespace(window.sessionStorage);
 
 // --- MaskVisualFeedback 组件：蒙版视觉反馈层 ---
 const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
@@ -156,7 +176,7 @@ const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
 // --- V3.5.16: LocalImageManager - IndexedDB-based image storage ---
 // Replaces localStorage Base64 storage with IndexedDB for better performance and larger capacity
 const LocalImageManager = (() => {
-    const DB_NAME = 'vodstudio_images_db';
+    const DB_NAME = 'txstudio_images_db';
     const DB_VERSION = 1;
     const STORE_NAME = 'images';
     let dbInstance = null;
@@ -962,7 +982,7 @@ const HistoryItem = memo(({
             selectedIndex
         };
         e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('application/x-vodstudio-history', JSON.stringify(payload));
+        e.dataTransfer.setData('application/x-txstudio-history', JSON.stringify(payload));
         e.dataTransfer.setData('text/uri-list', dragUrl);
         e.dataTransfer.setData('text/plain', dragUrl);
     };
@@ -1823,7 +1843,7 @@ const VIDEO_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 const TOKENHUB_BASE_URL = 'https://tokenhub.tencentmaas.com';
 const LOCAL_PROXY_DEFAULT_URL = 'http://127.0.0.1:8080';
 const DEFAULT_BASE_URL = TOKENHUB_BASE_URL;
-const DEFAULT_TOKENHUB_MODEL_ID = 'hy3-preview';
+const DEFAULT_TOKENHUB_MODEL_ID = 'hy3';
 const TOKENHUB_PROVIDER_KEY = 'openai';
 const TENCENT_VOD_BASE_URL = `https://${VOD_API_HOST}`;
 
@@ -1834,9 +1854,6 @@ const DEFAULT_PROVIDERS = {
     'openai': { key: '', url: DEFAULT_BASE_URL, apiType: 'openai', useProxy: false, forceAsync: false },
     'google': { key: '', url: DEFAULT_BASE_URL, apiType: 'openai', useProxy: false, forceAsync: false },
     'deepseek': { key: '', url: DEFAULT_BASE_URL, apiType: 'openai', useProxy: false, forceAsync: false },
-    'midjourney': { key: '', url: 'https://api.midjourney.com', apiType: 'openai', useProxy: false, forceAsync: false },
-
-    'grok': { key: '', url: 'https://ai.t8star.cn', apiType: 'openai', useProxy: false, forceAsync: false },
     // 腾讯云 VOD AIGC（key 格式：SecretId|SecretKey|SubAppId|Region；Base URL 为官方域名，请求经 CORS 转发通道发送）
     'tencent-vod': { key: '', url: TENCENT_VOD_BASE_URL, apiType: 'tencent-vod', useProxy: true, forceAsync: true },
 };
@@ -2013,10 +2030,7 @@ const DEFAULT_API_CONFIGS = [
     { id: DEFAULT_TOKENHUB_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai' },
 
     // Image Models
-    { id: 'MJ V6', provider: 'midjourney', type: 'Image' },
     { id: 'gpt-4o-image', provider: 'openai', type: 'Image' },
-    // Video Models
-    { id: 'grok-video-3', provider: 'grok', type: 'Video', durations: ['8s', '5s'] },
 
     // 腾讯云 VOD AIGC（通过 adapter 驱动，ModelName/ModelVersion 通过节点自定义参数选择）
     { id: VOD_IMAGE_MODEL_ID, provider: TENCENT_VOD_PROVIDER_KEY, type: 'Image', customParams: buildVodCustomParams('image') },
@@ -2026,7 +2040,7 @@ const DEFAULT_API_CONFIGS = [
 const RATIOS = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
 const GROK_VIDEO_RATIOS = ['3:2', '2:3', '1:1'];
 const VIDEO_RES_OPTIONS = ['1080P', '720P'];
-const PROMPT_LIBRARY_KEY = 'vodstudio_prompt_library';
+const PROMPT_LIBRARY_KEY = 'txstudio_prompt_library';
 const GRID_PROMPT_TEXT = `基于我上传的这张参考图，生成一张九宫格（3x3 grid）布局的分镜脚本。请严格保持角色与参考图一致（Keep character strictly consistent），但在9个格子中展示该角色不同的动作、表情和拍摄角度（如正面、侧面、背面、特写等）。要求风格高度统一，形成一张完整的角色动态表（Character Sheet）。`;
 const UPSCALE_PROMPT_TEXT = `请对参考图片进行无损高清放大（Upscale）。请严格保持原图的构图、色彩、光影和所有细节元素不变，不要进行任何创造性的重绘或添加新内容。仅专注于提升分辨率、锐化边缘（Sharpening）和去除噪点（Denoising），实现像素级的高清修复。Best quality, 8k, masterpiece, highres, ultra detailed, sharp focus, image restoration, upscale, faithful to original.`;
 const STORYBOARD_PROMPT_TEXT = `you are a veteran Hollywood storyboard artist with years of experience. You have the ability to accurately analyze character features and scene characteristics based on images. Provide me with the most suitable camera angles and storyboards. Strictly base this on the uploaded character and scene images, while maintaining a consistent visual style.
@@ -2117,9 +2131,13 @@ const DELETED_MODEL_IDS = [
     'doubao-seedream',
     'hailuo-02',
     'kling-v1-6',
-    'wan-2.5'
+    'wan-2.5',
+    'MJ V6',
+    'grok-video-3',
+    'gpt-4o-image',
+    'hy3-preview'
 ];
-const REMOVED_PROVIDER_KEYS = ['yunwu', 'jimeng'];
+const REMOVED_PROVIDER_KEYS = ['yunwu', 'jimeng', 'midjourney', 'grok'];
 const isRemovedProviderKey = (providerKey) => REMOVED_PROVIDER_KEYS.includes(String(providerKey || '').trim());
 const SETTINGS_PROVIDER_KEYS = [TOKENHUB_PROVIDER_KEY, TENCENT_VOD_PROVIDER_KEY];
 const isSettingsProviderVisible = (providerKey) => SETTINGS_PROVIDER_KEYS.includes(String(providerKey || '').trim());
@@ -2257,7 +2275,7 @@ const materializeStoryboardOutputFromSnapshot = (snapshot, currentShot) => {
 };
 const isStoryboardDebugEnabled = () => {
     try {
-        return localStorage.getItem('vodstudio_debug_storyboard') === '1';
+        return localStorage.getItem('txstudio_debug_storyboard') === '1';
     } catch (e) {
         return false;
     }
@@ -2379,7 +2397,7 @@ const IMAGE_BATCH_MODE_STANDARD_BATCH = 'standard_batch';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_AUTO = 'auto';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_FORCE = 'force_native';
 const IMAGE_NATIVE_MULTI_IMAGE_MODE_DISABLE = 'disable_native';
-const NATIVE_MULTI_IMAGE_CAPABILITY_STORAGE_KEY = 'vodstudio_native_multi_image_capabilities';
+const NATIVE_MULTI_IMAGE_CAPABILITY_STORAGE_KEY = 'txstudio_native_multi_image_capabilities';
 const NODE_IO_ENVELOPE_VERSION = '1.0';
 const TRANSPORT_HTTP_JSON = 'http-json';
 const TRANSPORT_HTTP_SSE = 'http-sse';
@@ -2650,8 +2668,8 @@ const isChatPanelSelectableModel = (model) => {
 const MAX_CUSTOM_PARAMS = 30;
 const DEFAULT_IMAGE_DISPATCH_INTERVAL_SECONDS = 2;
 const INTERNAL_CUSTOM_PARAM_NAMES = new Set([
-    'vodstudio_image_concurrency',
-    'vodstudio_concurrency',
+    'txstudio_image_concurrency',
+    'txstudio_concurrency',
     'image_concurrency'
 ]);
 const DEFAULT_STORYBOARD_SCRIPT_PROMPT_IMAGE = `你是分镜生图导演。请将用户脚本拆成“图片分镜卡片”，数量要细、密、完整，明显多于视频卡片。
@@ -2712,7 +2730,7 @@ const DEFAULT_STORYBOARD_TABLE_SUMMARY_PROMPT_VIDEO = `你是影视分镜视频�
 3) 每条提示词要适合 5s 或 10s 视频模型一次生成，按“1-5秒/6-10秒……”描述人物在什么场景下做什么动作、说什么话、什么表情和镜头如何运动；
 4) 不要拆成图片分镜，不要输出生图提示词；
 5) 仅输出 JSON 数组，格式：[{"scene_index":1,"video_prompt":"1-5秒，...","duration":"5s"},{"scene_index":2,"video_prompt":"6-10秒，...","duration":"5s"}]`;
-// VodStudio 两阶段分镜：同一条镜头同时产出「静态图片提示词」与「动态视频提示词」，
+// TxStudio 两阶段分镜：同一条镜头同时产出「静态图片提示词」与「动态视频提示词」，
 // 供「① 生成分镜图片」与「② 生成视频片段」两个子功能分别使用。
 const DEFAULT_STORYBOARD_SCRIPT_PROMPT_DUAL = `你是分镜导演。请将用户脚本拆成一组镜头卡片，每个卡片同时给出「静态图片提示词」和「动态视频提示词」。
 要求：
@@ -4370,11 +4388,11 @@ const getModelParams = (modelId, ratio, resolution) => {
     return { sizeStr: str, w, h };
 };
 
-const AUTOSAVE_LOCAL_KEY = 'vodstudio_autosave';
-const AUTOSAVE_META_KEY = 'vodstudio_autosave_meta';
-const AUTOSAVE_IDB_NAME = 'vodstudio_autosave_db';
+const AUTOSAVE_LOCAL_KEY = 'txstudio_autosave';
+const AUTOSAVE_META_KEY = 'txstudio_autosave_meta';
+const AUTOSAVE_IDB_NAME = 'txstudio_autosave_db';
 const AUTOSAVE_IDB_STORE = 'autosave';
-const ASSET_BUNDLE_META_KEY = 'vodstudio_asset_bundle_meta';
+const ASSET_BUNDLE_META_KEY = 'txstudio_asset_bundle_meta';
 
 let assetBundleMetaCache = null;
 const readAssetBundleMeta = () => {
@@ -5163,7 +5181,7 @@ const Lightbox = ({ item, onClose, onNavigate, onShotNavigate, onHistoryNavigate
     );
 };
 
-function VodStudioApp({
+function TxStudioApp({
     currentProject,
     onExitToProjects,
     embedded = false,
@@ -5178,7 +5196,7 @@ function VodStudioApp({
         // 嵌入工作台固定使用浅色主题，避免内部主题污染全局外壳。
         if (embedded) return 'light';
         try {
-            return localStorage.getItem('vodstudio_theme') || 'dark';
+            return localStorage.getItem('txstudio_theme') || 'dark';
         } catch (e) {
             return 'dark';
         }
@@ -5238,7 +5256,7 @@ function VodStudioApp({
     useEffect(() => {
         if (embedded) return;
         try {
-            localStorage.setItem('vodstudio_theme', theme);
+            localStorage.setItem('txstudio_theme', theme);
         } catch (e) { }
         const root = document.documentElement;
         root.classList.remove('theme-dark', 'theme-light', 'theme-solarized');
@@ -5355,7 +5373,7 @@ function VodStudioApp({
                 return parsed.nodes || [];
             }
             // Compatible with legacy storage
-            const legacy = localStorage.getItem('vodstudio_nodes');
+            const legacy = localStorage.getItem('txstudio_nodes');
             return legacy ? JSON.parse(legacy) : [];
         } catch (e) { return []; }
     });
@@ -5371,7 +5389,7 @@ function VodStudioApp({
                 return parsed.connections || [];
             }
             // Compatible with legacy storage
-            const legacy = localStorage.getItem('vodstudio_connections');
+            const legacy = localStorage.getItem('txstudio_connections');
             return legacy ? JSON.parse(legacy) : [];
         } catch (e) { return []; }
     });
@@ -5439,7 +5457,7 @@ function VodStudioApp({
 
     // === V3.4.7: Undo/Redo 功能 (可配置步数) ===
     const [maxUndoSteps, setMaxUndoSteps] = useState(() => {
-        const saved = localStorage.getItem('vodstudio_max_undo_steps');
+        const saved = localStorage.getItem('txstudio_max_undo_steps');
         return saved ? Math.min(30, Math.max(1, parseInt(saved) || 5)) : 5;
     });
     const [undoStack, setUndoStack] = useState([]); // { nodes, connections }[]
@@ -5458,23 +5476,23 @@ function VodStudioApp({
     const shotBatchMapRef = useRef(new Map()); // key: nodeId:shotId -> { batchId, batchOrder, taskIndex }
     const [batchQueueMode, setBatchQueueMode] = useState(() => {
         try {
-            return localStorage.getItem('vodstudio_batch_queue_mode') || 'parallel';
+            return localStorage.getItem('txstudio_batch_queue_mode') || 'parallel';
         } catch (e) {
             return 'parallel';
         }
     });
     const [batchTick, setBatchTick] = useState(0); // Used to trigger next batch after cooldown
-    const [batchConcurrency, setBatchConcurrency] = useState(() => parseInt(localStorage.getItem('vodstudio_batch_concurrency') || '1')); // Default 1
+    const [batchConcurrency, setBatchConcurrency] = useState(() => parseInt(localStorage.getItem('txstudio_batch_concurrency') || '1')); // Default 1
     const pendingStartsRef = useRef(new Set()); // Track items that are starting but not yet 'generating' in nodes
     const batchStateRef = useRef('idle'); // 'idle' | 'running' | 'cooling'
 
     // Save batch concurrency to localStorage
     useEffect(() => {
-        localStorage.setItem('vodstudio_batch_concurrency', batchConcurrency);
+        localStorage.setItem('txstudio_batch_concurrency', batchConcurrency);
     }, [batchConcurrency]);
 
     useEffect(() => {
-        localStorage.setItem('vodstudio_batch_queue_mode', batchQueueMode);
+        localStorage.setItem('txstudio_batch_queue_mode', batchQueueMode);
     }, [batchQueueMode]);
 
     // 保存当前状态到撤销栈
@@ -5840,7 +5858,7 @@ function VodStudioApp({
     };
 
     const [modelLibrary, setModelLibrary] = useState(() => {
-        const saved = localStorage.getItem('vodstudio_model_library');
+        const saved = localStorage.getItem('txstudio_model_library');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
@@ -5859,7 +5877,7 @@ function VodStudioApp({
 });
     const collapsedLibraryStateLoadedRef = useRef(false);
     const [collapsedLibraryModels, setCollapsedLibraryModels] = useState(() => {
-        const saved = localStorage.getItem('vodstudio_model_library_collapsed');
+        const saved = localStorage.getItem('txstudio_model_library_collapsed');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
@@ -5875,7 +5893,7 @@ function VodStudioApp({
     });
     useEffect(() => {
         try {
-            localStorage.setItem('vodstudio_model_library', JSON.stringify(modelLibrary));
+            localStorage.setItem('txstudio_model_library', JSON.stringify(modelLibrary));
         } catch (e) {
             console.error('保存 modelLibrary 配置失败:', e);
         }
@@ -5901,7 +5919,7 @@ function VodStudioApp({
     useEffect(() => {
         try {
             const payload = Array.from(collapsedLibraryModels);
-            localStorage.setItem('vodstudio_model_library_collapsed', JSON.stringify(payload));
+            localStorage.setItem('txstudio_model_library_collapsed', JSON.stringify(payload));
         } catch (e) {
             console.error('保存模型库折叠状态失败:', e);
         }
@@ -5964,7 +5982,7 @@ function VodStudioApp({
     }, [getNativeMultiImageCapabilityKey]);
 
     const [apiConfigs, setApiConfigs] = useState(() => {
-        const saved = localStorage.getItem('vodstudio_api_configs');
+        const saved = localStorage.getItem('txstudio_api_configs');
 
         // V3.6.0: 如果有存量数据，直接使用（不再合并默认模型）
         if (saved) {
@@ -6047,7 +6065,7 @@ function VodStudioApp({
     // V3.4.18: 使用 _deleted 标记追踪删除的Provider
     const [providers, setProviders] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_providers');
+            const saved = localStorage.getItem('txstudio_providers');
             if (saved) {
                 const parsed = JSON.parse(saved);
                 // 直接使用用户保存的数据，不再自动补充默认Provider
@@ -6071,7 +6089,7 @@ function VodStudioApp({
     // V3.3: 持久化 providers
     useEffect(() => {
         try {
-            localStorage.setItem('vodstudio_providers', JSON.stringify(providers));
+            localStorage.setItem('txstudio_providers', JSON.stringify(providers));
         } catch (e) {
             console.error('保存 providers 配置失败:', e);
         }
@@ -6080,17 +6098,17 @@ function VodStudioApp({
     useEffect(() => {
         const refreshGlobalSettings = () => {
             try {
-                const storedProviders = JSON.parse(localStorage.getItem('vodstudio_providers') || '{}');
+                const storedProviders = JSON.parse(localStorage.getItem('txstudio_providers') || '{}');
                 setProviders(Object.fromEntries(Object.entries(storedProviders).map(([key, config]) => [key, normalizeProviderConfig(key, config)])));
-                const storedModels = JSON.parse(localStorage.getItem('vodstudio_api_configs') || '[]');
+                const storedModels = JSON.parse(localStorage.getItem('txstudio_api_configs') || '[]');
                 if (Array.isArray(storedModels) && storedModels.length) setApiConfigs(storedModels);
-                setGlobalApiKey(localStorage.getItem('vodstudio_global_key') || '');
+                setGlobalApiKey(localStorage.getItem('txstudio_global_key') || '');
             } catch (error) {
                 console.error('刷新全局 API 设置失败:', error);
             }
         };
-        window.addEventListener('vodstudio:api-settings-updated', refreshGlobalSettings);
-        return () => window.removeEventListener('vodstudio:api-settings-updated', refreshGlobalSettings);
+        window.addEventListener('txstudio:api-settings-updated', refreshGlobalSettings);
+        return () => window.removeEventListener('txstudio:api-settings-updated', refreshGlobalSettings);
     }, []);
 
     useEffect(() => {
@@ -6174,12 +6192,12 @@ function VodStudioApp({
         };
     }, [apiConfigs, providers]);
 
-    const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('vodstudio_global_key') || '');
+    const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('txstudio_global_key') || '');
 
     // API 黑名单机制 (比照 Jimeng-api-tool 实现)
     const [apiBlacklist, setApiBlacklist] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_api_blacklist');
+            const saved = localStorage.getItem('txstudio_api_blacklist');
             if (!saved) return {};
             const parsed = JSON.parse(saved);
             const today = new Date().toDateString();
@@ -6194,7 +6212,7 @@ function VodStudioApp({
     // 持久化黑名单
     useEffect(() => {
         try {
-            localStorage.setItem('vodstudio_api_blacklist', JSON.stringify({
+            localStorage.setItem('txstudio_api_blacklist', JSON.stringify({
                 date: new Date().toDateString(),
                 blacklist: apiBlacklist
             }));
@@ -6230,7 +6248,7 @@ function VodStudioApp({
     // V3.7.23: API 临时暂停列表（用于登录失效等可恢复错误，TTL 60分钟）
     const [apiSuspendList, setApiSuspendList] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_api_suspend');
+            const saved = localStorage.getItem('txstudio_api_suspend');
             if (!saved) return {};
             const parsed = JSON.parse(saved);
             const now = Date.now();
@@ -6244,7 +6262,7 @@ function VodStudioApp({
     // 持久化暂停列表
     useEffect(() => {
         try {
-            localStorage.setItem('vodstudio_api_suspend', JSON.stringify(apiSuspendList));
+            localStorage.setItem('txstudio_api_suspend', JSON.stringify(apiSuspendList));
         } catch (e) { }
     }, [apiSuspendList]);
 
@@ -6287,12 +6305,12 @@ function VodStudioApp({
     const [projectName, setProjectName] = useState(() => {
         try {
             // 如果没有保存的节点，说明是新项目，强制显示"未命名项目"
-            const savedNodes = localStorage.getItem('vodstudio_nodes');
+            const savedNodes = localStorage.getItem('txstudio_nodes');
             if (!savedNodes || JSON.parse(savedNodes).length === 0) {
-                localStorage.removeItem('vodstudio_project_name');
+                localStorage.removeItem('txstudio_project_name');
                 return '未命名项目';
             }
-            const saved = localStorage.getItem('vodstudio_project_name');
+            const saved = localStorage.getItem('txstudio_project_name');
             return saved || '未命名项目';
         } catch (e) {
             return '未命名项目';
@@ -6315,13 +6333,13 @@ function VodStudioApp({
     // ultra: 极速 (缩略图质量 0.3)
     const [performanceMode, setPerformanceMode] = useState(() => {
         try {
-            const savedHistory = localStorage.getItem('vodstudio_history_performance_mode');
+            const savedHistory = localStorage.getItem('txstudio_history_performance_mode');
             if (savedHistory !== null) {
                 if (savedHistory === 'true') return 'normal';
                 if (savedHistory === 'false') return 'off';
                 return savedHistory || 'off';
             }
-            return localStorage.getItem('vodstudio_performance_mode') || 'off';
+            return localStorage.getItem('txstudio_performance_mode') || 'off';
         } catch (e) {
             return 'off';
         }
@@ -6329,14 +6347,14 @@ function VodStudioApp({
     // 全局性能模式（与历史面板独立）
     const [globalPerformanceMode, setGlobalPerformanceMode] = useState(() => {
         try {
-            return localStorage.getItem('vodstudio_global_performance_mode') || 'off';
+            return localStorage.getItem('txstudio_global_performance_mode') || 'off';
         } catch (e) {
             return 'off';
         }
     });
     const [aigcStorageMode, setAigcStorageMode] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_aigc_storage_mode');
+            const saved = localStorage.getItem('txstudio_aigc_storage_mode');
             return saved === 'Permanent' ? 'Permanent' : 'Temporary';
         } catch (e) {
             return 'Temporary';
@@ -6345,7 +6363,7 @@ function VodStudioApp({
 
     // 本地代理、缓存和 API 统一由 8080 Go 后端提供；自动迁移旧 9527 配置。
     const [localServerUrl, setLocalServerUrl] = useState(() => {
-        const saved = localStorage.getItem('vodstudio_local_server_url') || '';
+        const saved = localStorage.getItem('txstudio_local_server_url') || '';
         return !saved || saved.includes(':9527') ? LOCAL_PROXY_DEFAULT_URL : saved;
     });
 
@@ -6353,9 +6371,9 @@ function VodStudioApp({
     const [localCacheServerConnected, setLocalCacheServerConnected] = useState(false);
     const [localCacheEnabled, setLocalCacheEnabled] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_local_cache_enabled');
+            const saved = localStorage.getItem('txstudio_local_cache_enabled');
             if (saved !== null) return saved === 'true';
-            const legacy = localStorage.getItem('vodstudio_show_local_cache_banner');
+            const legacy = localStorage.getItem('txstudio_show_local_cache_banner');
             return legacy === null ? true : legacy === 'true';
         } catch (e) {
             return true;
@@ -6363,14 +6381,14 @@ function VodStudioApp({
     });
     const [cacheRedownloadOnEnable, setCacheRedownloadOnEnable] = useState(() => {
         try {
-            return localStorage.getItem('vodstudio_cache_redownload_on_enable') === 'true';
+            return localStorage.getItem('txstudio_cache_redownload_on_enable') === 'true';
         } catch (e) {
             return false;
         }
     });
     const [saveHistoryAssets, setSaveHistoryAssets] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_save_history_assets');
+            const saved = localStorage.getItem('txstudio_save_history_assets');
             if (saved === null) return true;
             return saved === 'true';
         } catch (e) {
@@ -6386,7 +6404,7 @@ function VodStudioApp({
     };
     const [historySaveLimit, setHistorySaveLimit] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_history_limit');
+            const saved = localStorage.getItem('txstudio_history_limit');
             if (saved === null) return 80;
             return normalizeHistorySaveLimit(saved);
         } catch (e) {
@@ -6560,8 +6578,8 @@ function VodStudioApp({
         if (!base || !expectedId) return '';
         if (!localCacheIndexReadyRef.current) return '';
         const segments = [
-            preferHistoryPath ? 'history' : '.vodstudio_cache/history',
-            preferHistoryPath ? '.vodstudio_cache/history' : 'history'
+            preferHistoryPath ? 'history' : '.txstudio_cache/history',
+            preferHistoryPath ? '.txstudio_cache/history' : 'history'
         ];
         const candidates = [];
         segments.forEach((seg) => {
@@ -6607,15 +6625,15 @@ function VodStudioApp({
 
     // 持久化性能模式和本地服务器设置
     useEffect(() => {
-        localStorage.setItem('vodstudio_performance_mode', performanceMode);
-        localStorage.setItem('vodstudio_history_performance_mode', performanceMode);
+        localStorage.setItem('txstudio_performance_mode', performanceMode);
+        localStorage.setItem('txstudio_history_performance_mode', performanceMode);
     }, [performanceMode]);
     useEffect(() => {
-        localStorage.setItem('vodstudio_save_history_assets', String(saveHistoryAssets));
+        localStorage.setItem('txstudio_save_history_assets', String(saveHistoryAssets));
     }, [saveHistoryAssets]);
     useEffect(() => {
         try {
-            localStorage.setItem('vodstudio_history_limit', String(historySaveLimit));
+            localStorage.setItem('txstudio_history_limit', String(historySaveLimit));
         } catch (e) { }
     }, [historySaveLimit]);
 
@@ -6663,20 +6681,20 @@ function VodStudioApp({
     }, []);
 
     useEffect(() => {
-        localStorage.setItem('vodstudio_global_performance_mode', globalPerformanceMode);
+        localStorage.setItem('txstudio_global_performance_mode', globalPerformanceMode);
     }, [globalPerformanceMode]);
     useEffect(() => {
-        localStorage.setItem('vodstudio_aigc_storage_mode', aigcStorageMode);
+        localStorage.setItem('txstudio_aigc_storage_mode', aigcStorageMode);
     }, [aigcStorageMode]);
 
     useEffect(() => {
-        localStorage.setItem('vodstudio_local_server_url', localServerUrl);
+        localStorage.setItem('txstudio_local_server_url', localServerUrl);
     }, [localServerUrl]);
     useEffect(() => {
-        try { localStorage.setItem('vodstudio_local_cache_enabled', String(localCacheEnabled)); } catch (e) { }
+        try { localStorage.setItem('txstudio_local_cache_enabled', String(localCacheEnabled)); } catch (e) { }
     }, [localCacheEnabled]);
     useEffect(() => {
-        try { localStorage.setItem('vodstudio_cache_redownload_on_enable', String(cacheRedownloadOnEnable)); } catch (e) { }
+        try { localStorage.setItem('txstudio_cache_redownload_on_enable', String(cacheRedownloadOnEnable)); } catch (e) { }
     }, [cacheRedownloadOnEnable]);
     useEffect(() => {
         if (!localCacheActive) {
@@ -6826,7 +6844,7 @@ function VodStudioApp({
     // V3.4.12: 自动保存配置
     const [autoSaveConfig, setAutoSaveConfig] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_auto_save_config');
+            const saved = localStorage.getItem('txstudio_auto_save_config');
             return saved ? JSON.parse(saved) : { enabled: false, interval: 5, folderPath: '' };
         } catch (e) {
             return { enabled: false, interval: 5, folderPath: '' };
@@ -6838,7 +6856,7 @@ function VodStudioApp({
 
     const [chatSessions, setChatSessions] = useState(() => {
         try {
-            const saved = localStorage.getItem('vodstudio_chat_sessions');
+            const saved = localStorage.getItem('txstudio_chat_sessions');
             return saved ? JSON.parse(saved) : [{ id: 'default', title: t('新对话'), messages: [] }];
         } catch (e) {
             return [{ id: 'default', title: t('新对话'), messages: [] }];
@@ -6850,7 +6868,7 @@ function VodStudioApp({
     const [chatWidth, setChatWidth] = useState(400);
     const [chatFiles, setChatFiles] = useState([]);
     const [chatModel, setChatModel] = useState(() => {
-        try { return localStorage.getItem('vodstudio_chat_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
+        try { return localStorage.getItem('txstudio_chat_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
     });
     const [chatModelDropdownOpen, setChatModelDropdownOpen] = useState(false);
     const [chatHoveredProvider, setChatHoveredProvider] = useState(null);
@@ -6859,7 +6877,7 @@ function VodStudioApp({
 
     // V3.7.24: 保存聊天模型选择到 localStorage
     useEffect(() => {
-        try { localStorage.setItem('vodstudio_chat_model', chatModel); } catch { }
+        try { localStorage.setItem('txstudio_chat_model', chatModel); } catch { }
     }, [chatModel]);
 
     const [lightboxItem, setLightboxItem] = useState(null);
@@ -7023,7 +7041,7 @@ function VodStudioApp({
     const [settingsOpen, setSettingsOpen] = useState(false);
     useEffect(() => {
         if (!settingsOpen) return;
-        window.dispatchEvent(new CustomEvent('vodstudio:open-api-settings'));
+        window.dispatchEvent(new CustomEvent('txstudio:open-api-settings'));
         setSettingsOpen(false);
     }, [settingsOpen]);
     const [settingsTab, setSettingsTab] = useState('providers');
@@ -7094,7 +7112,7 @@ function VodStudioApp({
     const [characterLibrary, setCharacterLibrary] = useState(() => {
         if (currentProjectId) return [];
         try {
-            const saved = localStorage.getItem('vodstudio_characters');
+            const saved = localStorage.getItem('txstudio_characters');
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
             console.error('加载角色库失败:', e);
@@ -7130,28 +7148,28 @@ function VodStudioApp({
     const [nodeTimers, setNodeTimers] = useState({});
     // V3.4.8: 记住上次使用的模型
     const [lastUsedImageModel, setLastUsedImageModel] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_image_model') || 'nano-banana'; } catch { return 'nano-banana'; }
+        try { return localStorage.getItem('txstudio_last_image_model') || 'nano-banana'; } catch { return 'nano-banana'; }
     });
     const [lastUsedVideoModel, setLastUsedVideoModel] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_video_model') || 'sora-2'; } catch { return 'sora-2'; }
+        try { return localStorage.getItem('txstudio_last_video_model') || 'sora-2'; } catch { return 'sora-2'; }
     });
     const [lastUsedRatio, setLastUsedRatio] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_ratio') || '16:9'; } catch { return '16:9'; }
+        try { return localStorage.getItem('txstudio_last_ratio') || '16:9'; } catch { return '16:9'; }
     });
     const [lastUsedImageResolution, setLastUsedImageResolution] = useState(() => {
-        try { return normalizeImageResolution(localStorage.getItem('vodstudio_last_image_res') || '2K'); } catch { return '2K'; }
+        try { return normalizeImageResolution(localStorage.getItem('txstudio_last_image_res') || '2K'); } catch { return '2K'; }
     });
     const [lastUsedVideoResolution, setLastUsedVideoResolution] = useState(() => {
-        try { return normalizeVideoResolution(localStorage.getItem('vodstudio_last_video_res') || '720P'); } catch { return '720P'; }
+        try { return normalizeVideoResolution(localStorage.getItem('txstudio_last_video_res') || '720P'); } catch { return '720P'; }
     });
     const [lastUsedSegmentDuration, setLastUsedSegmentDuration] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_segment_duration') || '3'; } catch { return '3'; }
+        try { return localStorage.getItem('txstudio_last_segment_duration') || '3'; } catch { return '3'; }
     });
     const [lastUsedAnalyzeModel, setLastUsedAnalyzeModel] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_analyze_model') || 'gemini-3-pro'; } catch { return 'gemini-3-pro'; }
+        try { return localStorage.getItem('txstudio_last_analyze_model') || 'gemini-3-pro'; } catch { return 'gemini-3-pro'; }
     });
     const [lastUsedExtractModel, setLastUsedExtractModel] = useState(() => {
-        try { return localStorage.getItem('vodstudio_last_extract_model') || ''; } catch { return ''; }
+        try { return localStorage.getItem('txstudio_last_extract_model') || ''; } catch { return ''; }
     });
 
     // V2.6.1 Feature: 本地缓存服务器连接检查
@@ -7613,8 +7631,8 @@ function VodStudioApp({
         const looksLikeLocalRuntimeUrl = next.includes('127.0.0.1')
             || next.includes('localhost')
             || next.includes('/proxy?url=')
-            || next.includes('/file/.vodstudio_cache/')
-            || next.includes('.vodstudio_cache\\');
+            || next.includes('/file/.txstudio_cache/')
+            || next.includes('.txstudio_cache\\');
         if (!looksLikeLocalRuntimeUrl) {
             sourceReferenceResolveCacheRef.current.set(value, next);
             return next;
@@ -7670,8 +7688,10 @@ function VodStudioApp({
             const maybeLocalRuntime = value.includes('127.0.0.1')
                 || value.includes('localhost')
                 || value.includes('/proxy?url=')
-                || value.includes('/file/.vodstudio_cache/')
-                || value.includes('.vodstudio_cache\\');
+                || value.includes('/file/.txstudio_cache/')
+                || value.includes('.txstudio_cache\\')
+                || value.includes(`/file/${LEGACY_CACHE_DIR}/`)
+                || value.includes(`${LEGACY_CACHE_DIR}\\`);
             if (!maybeLocalRuntime) return value;
             return resolveSourceReferenceUrl(value);
         }
@@ -8798,7 +8818,7 @@ function VodStudioApp({
             };
             try {
                 const preferHistoryPath = !!(localServerConfig.imageSavePath || localServerConfig.videoSavePath);
-                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.vodstudio_cache/history/';
+                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.txstudio_cache/history/';
                 const localBase = (localServerUrl || '').trim().replace(/\/+$/, '');
                 if (!localCacheIndexReadyRef.current) {
                     await refreshLocalCacheFileIndex({ silent: true });
@@ -9017,8 +9037,8 @@ function VodStudioApp({
             try {
                 const localBase = (localServerUrl || '').trim().replace(/\/+$/, '');
                 const savePathRaw = localServerConfig.videoSavePath || localServerConfig.savePath || '';
-                const preferHistoryPath = !!(savePathRaw && !String(savePathRaw).includes('.vodstudio_cache'));
-                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.vodstudio_cache/history/';
+                const preferHistoryPath = !!(savePathRaw && !String(savePathRaw).includes('.txstudio_cache'));
+                const expectedSegment = preferHistoryPath ? '/file/history/' : '/file/.txstudio_cache/history/';
                 if (!localCacheIndexReadyRef.current) {
                     await refreshLocalCacheFileIndex({ silent: true });
                 }
@@ -9116,7 +9136,7 @@ function VodStudioApp({
 
     useEffect(() => {
         // 保存配置到 localStorage（不再过滤任何模型）
-        localStorage.setItem('vodstudio_api_configs', JSON.stringify(apiConfigs));
+        localStorage.setItem('txstudio_api_configs', JSON.stringify(apiConfigs));
     }, [apiConfigs]);
 
     // --- MOVED HELPERS to fix ReferenceError ---
@@ -9187,7 +9207,7 @@ function VodStudioApp({
     // 保存角色库到 localStorage（使用防抖优化）
     const debouncedSaveCharacters = useMemo(() => debounce((charactersToSave) => {
         try {
-            localStorage.setItem('vodstudio_characters', JSON.stringify(charactersToSave));
+            localStorage.setItem('txstudio_characters', JSON.stringify(charactersToSave));
         } catch (e) {
             console.error('保存角色库失败:', e);
         }
@@ -9544,7 +9564,7 @@ function VodStudioApp({
     const persistHistorySnapshot = () => true;
 
     const debouncedSaveGlobalKey = useMemo(() => debounce((key) => {
-        localStorage.setItem('vodstudio_global_key', key);
+        localStorage.setItem('txstudio_global_key', key);
     }, 1000), []);
 
     useEffect(() => { debouncedSaveGlobalKey(globalApiKey); }, [globalApiKey, debouncedSaveGlobalKey]);
@@ -9609,7 +9629,7 @@ function VodStudioApp({
     }, [currentProjectId, history]);
 
     const debouncedSaveChatSessions = useMemo(() => debounce((sessions) => {
-        try { localStorage.setItem('vodstudio_chat_sessions', JSON.stringify(sessions)); } catch (e) { }
+        try { localStorage.setItem('txstudio_chat_sessions', JSON.stringify(sessions)); } catch (e) { }
     }, 1000), []);
     useEffect(() => {
         if (!currentProjectId) debouncedSaveChatSessions(chatSessions);
@@ -10232,7 +10252,7 @@ function VodStudioApp({
     }, [chatModel, chatPanelModelOptions, resolveModelKey]);
 
     const getFirstEnabledModelKey = useCallback((mode = 'image') => {
-        const storageKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
+        const storageKey = mode === 'image' ? 'txstudio_last_image_model' : 'txstudio_last_video_model';
         const preferredFromState = mode === 'image' ? lastUsedImageModel : lastUsedVideoModel;
         let preferredStored = '';
         try {
@@ -10751,8 +10771,8 @@ function VodStudioApp({
                 const baseLabel = [resolvedProjectTitle, item.prompt].filter(Boolean).join('-')
                     || getFilenameFromUrl(url)
                     || item.name
-                    || 'vodstudio';
-                let baseName = sanitizeCacheId(baseLabel) || 'vodstudio';
+                    || 'txstudio';
+                let baseName = sanitizeCacheId(baseLabel) || 'txstudio';
                 baseName = baseName.slice(0, 80);
                 const nextIndex = (nameCounters.get(baseName) || 0) + 1;
                 nameCounters.set(baseName, nextIndex);
@@ -12089,7 +12109,7 @@ function VodStudioApp({
             sourceNodeId = historyItem?.sourceNodeId;
         }
         if (!sourceNodeId) {
-            console.warn('[VodStudio] updatePreviewFromTask: 未找到 sourceNodeId for taskId:', taskId);
+            console.warn('[TxStudio] updatePreviewFromTask: 未找到 sourceNodeId for taskId:', taskId);
             return;
         }
 
@@ -14264,7 +14284,7 @@ function VodStudioApp({
     };
 
     const getHistoryDragPayload = (e) => {
-        const rawPayload = e.dataTransfer.getData('application/x-vodstudio-history');
+        const rawPayload = e.dataTransfer.getData('application/x-txstudio-history');
         if (!rawPayload) return null;
         try {
             return JSON.parse(rawPayload);
@@ -14281,7 +14301,7 @@ function VodStudioApp({
         const rawName = payload.id || payload.modelName || 'model';
         const safeName = String(rawName).replace(/[^\w.-]+/g, '_');
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const fileName = `vodstudio-model-${safeName}.json`;
+        const fileName = `txstudio-model-${safeName}.json`;
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
@@ -14294,7 +14314,7 @@ function VodStudioApp({
         if (!normalized) return;
         const safeName = String(normalized.id || 'model').replace(/[^\w.-]+/g, '_');
         const blob = new Blob([JSON.stringify(normalized, null, 2)], { type: 'application/json' });
-        const fileName = `vodstudio-model-library-${safeName}.json`;
+        const fileName = `txstudio-model-library-${safeName}.json`;
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
@@ -15062,7 +15082,7 @@ function VodStudioApp({
                 if (status === 'SUCCESS' || status === 'succeeded' || status === 'FINISHED' || status === 'completed') {
                     const videoUrl = data?.data?.output || data?.output || data?.data?.video_url || data?.video_url || data?.data?.data?.output;
                     if (!videoUrl) {
-                        console.warn('[VodStudio] Veo: 任务成功但未找到视频URL', data);
+                        console.warn('[TxStudio] Veo: 任务成功但未找到视频URL', data);
                         setHistory((prev) => prev.map((hItem) => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg: '未找到视频URL' } : hItem));
                         return;
                     }
@@ -15092,9 +15112,9 @@ function VodStudioApp({
                                         const actualRatio = actualW / actualH;
                                         const expectedRatio = 16 / 9;
                                         if (Math.abs(actualRatio - expectedRatio) > 0.1) {
-                                            console.warn(`[VodStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 16:9 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
-                                            console.warn(`[VodStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 16:9`);
-                                            console.warn(`[VodStudio] Veo: 强制使用请求的 16:9 比例，调整尺寸为: ${w}x${Math.round(w / (16 / 9))}`);
+                                            console.warn(`[TxStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 16:9 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
+                                            console.warn(`[TxStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 16:9`);
+                                            console.warn(`[TxStudio] Veo: 强制使用请求的 16:9 比例，调整尺寸为: ${w}x${Math.round(w / (16 / 9))}`);
                                             // 如果后端返回了错误的比例，强制使用请求的比例
                                             finalW = w;
                                             finalH = Math.round(w / (16 / 9));
@@ -15106,9 +15126,9 @@ function VodStudioApp({
                                         const actualRatio = actualW / actualH;
                                         const expectedRatio = 9 / 16;
                                         if (Math.abs(actualRatio - expectedRatio) > 0.1) {
-                                            console.warn(`[VodStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 9:16 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
-                                            console.warn(`[VodStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 9:16`);
-                                            console.warn(`[VodStudio] Veo: 强制使用请求的 9:16 比例，调整尺寸为: ${Math.round(h * (9 / 16))}x${h}`);
+                                            console.warn(`[TxStudio] Veo: 视频实际比例 ${actualRatio.toFixed(2)} 不匹配请求的 9:16 (${expectedRatio.toFixed(2)})，后端返回了错误的比例！`);
+                                            console.warn(`[TxStudio] Veo: 实际尺寸: ${actualW}x${actualH}, 请求比例: 9:16`);
+                                            console.warn(`[TxStudio] Veo: 强制使用请求的 9:16 比例，调整尺寸为: ${Math.round(h * (9 / 16))}x${h}`);
                                             // 如果后端返回了错误的比例，强制使用请求的比例
                                             finalW = Math.round(h * (9 / 16));
                                             finalH = h;
@@ -15151,7 +15171,7 @@ function VodStudioApp({
                                     }
                                 }
                             } catch (e) {
-                                console.warn('[VodStudio] Veo: 无法获取视频实际尺寸，使用请求尺寸', e);
+                                console.warn('[TxStudio] Veo: 无法获取视频实际尺寸，使用请求尺寸', e);
                                 // 如果无法获取实际尺寸，使用请求的尺寸并根据 aspect_ratio 调整
                                 let fallbackW = w, fallbackH = h;
                                 if (originalRatio === '16:9') {
@@ -15213,7 +15233,7 @@ function VodStudioApp({
                             errorMsg = failReason || errorMsg;
                         }
                     }
-                    console.error('[VodStudio] Veo: 任务失败', { status, failReason, errorMsg });
+                    console.error('[TxStudio] Veo: 任务失败', { status, failReason, errorMsg });
                     setHistory((prev) => prev.map((hItem) => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg } : hItem));
 
                     // V3.7.33: Save duration even on failure for storyboard
@@ -15323,7 +15343,7 @@ function VodStudioApp({
                 try {
                     data = JSON.parse(text);
                 } catch (err) {
-                    console.error('[VodStudio] Sora/Grok Poll JSON 解析失败:', err, text);
+                    console.error('[TxStudio] Sora/Grok Poll JSON 解析失败:', err, text);
                     setTimeout(() => pollSoraJob(jobId, taskId, baseUrl, apiKey, w, h, modelId, attempt + 1), delayMs);
                     return;
                 }
@@ -15362,7 +15382,7 @@ function VodStudioApp({
                                     updatePreviewFromTask(taskId, videoUrl, 'video', updatedItem.sourceNodeId);
                                 }, 0);
                             } else {
-                                console.warn('[VodStudio] Sora: 未找到 sourceNodeId', { taskId, updatedItem });
+                                console.warn('[TxStudio] Sora: 未找到 sourceNodeId', { taskId, updatedItem });
                             }
                         }
                         return updated;
@@ -15394,7 +15414,7 @@ function VodStudioApp({
                 setTimeout(() => pollSoraJob(jobId, taskId, baseUrl, apiKey, w, h, modelId, attempt + 1), delayMs);
             })
             .catch(err => {
-                console.error('[VodStudio] Sora/Grok Poll 请求失败:', err);
+                console.error('[TxStudio] Sora/Grok Poll 请求失败:', err);
                 // 如果是网络错误，继续重试；如果是其他错误，标记为失败
                 if (attempt < maxAttempts - 5) {
                     // 前75次尝试继续重试
@@ -16871,7 +16891,7 @@ function VodStudioApp({
                                         updatePreviewFromTask(taskId, imageUrl, 'image', sourceNodeIdForPreview);
                                     }, 0);
                                 } else {
-                                    console.warn('[VodStudio] Midjourney: 未找到 sourceNodeId，无法更新预览窗口', { taskId, hItem });
+                                    console.warn('[TxStudio] Midjourney: 未找到 sourceNodeId，无法更新预览窗口', { taskId, hItem });
                                 }
 
                                 // 延迟切割，确保UI先更新显示原图，避免白屏
@@ -16969,7 +16989,7 @@ function VodStudioApp({
                                     updatePreviewFromTask(taskId, imageUrl, 'image', hItem.sourceNodeId);
                                 }
                             } else {
-                                console.warn('[VodStudio] 图片生成: 未找到 sourceNodeId', { taskId, hItem });
+                                console.warn('[TxStudio] 图片生成: 未找到 sourceNodeId', { taskId, hItem });
                             }
 
                             // 计算并保存用时
@@ -16996,7 +17016,7 @@ function VodStudioApp({
                 setTimeout(() => pollMidjourneyJob(jobId, taskId, baseUrl, apiKey, mjMode, w, h, attempt + 1), delayMs);
             })
             .catch((err) => {
-                console.error(`[VodStudio] Midjourney Poll Fetch Error for task ${taskId}:`, err);
+                console.error(`[TxStudio] Midjourney Poll Fetch Error for task ${taskId}:`, err);
                 setHistory((prev) => prev.map((hItem) =>
                     hItem.id === taskId
                         ? { ...hItem, status: 'failed', errorMsg: `轮询请求失败: ${err.message}` }
@@ -20048,7 +20068,7 @@ function VodStudioApp({
                                     updatePreviewFromTask(taskId, immediateUrl, 'video', updatedItem.sourceNodeId);
                                 }, 0);
                             } else {
-                                console.warn('[VodStudio] 视频立即返回: 未找到 sourceNodeId', { taskId, updatedItem });
+                                console.warn('[TxStudio] 视频立即返回: 未找到 sourceNodeId', { taskId, updatedItem });
                             }
                         }
                         return updated;
@@ -20568,7 +20588,7 @@ function VodStudioApp({
         setBatchGroups([]);
         if (!options.keepAssetBundle) resetAssetBundleState();
         if (!options.keepAutoSave) await clearAutoSaveStorage();
-        try { localStorage.removeItem('vodstudio_project_name'); } catch (e) { }
+        try { localStorage.removeItem('txstudio_project_name'); } catch (e) { }
     }, [resetAssetBundleState, clearAutoSaveStorage]);
 
     // 功能5：保存项目到JSON文件（流式写入，支持超大文件）
@@ -20646,7 +20666,7 @@ function VodStudioApp({
                     const bundleName = `${projectName || '未命名项目'}_${timestamp}.zip`;
                     const handle = await window.showSaveFilePicker({
                         suggestedName: bundleName,
-                        types: [{ description: 'VodStudio Bundle', accept: { 'application/zip': ['.zip'] } }],
+                        types: [{ description: 'TxStudio Bundle', accept: { 'application/zip': ['.zip'] } }],
                     });
                     const projectData = {
                         version: '2.5.7',
@@ -24046,7 +24066,7 @@ function VodStudioApp({
             initialModel,
             getStoryboardDefaultModelKey('video'),
             (() => {
-                try { return localStorage.getItem('vodstudio_last_video_model') || ''; } catch { return ''; }
+                try { return localStorage.getItem('txstudio_last_video_model') || ''; } catch { return ''; }
             })(),
             getFirstEnabledModelKey('video'),
             apiConfigs.find(c => c.type === 'Video' && c.id === 'sora-2')?.id || '',
@@ -24192,7 +24212,7 @@ function VodStudioApp({
         }
 
         // 2. 获取选中的图片模型
-        const selectedModel = resolveModelKey(shot.model || localStorage.getItem('vodstudio_last_image_model') || (apiConfigs.find(c => isImageModelType(c.type))?.id || ''));
+        const selectedModel = resolveModelKey(shot.model || localStorage.getItem('txstudio_last_image_model') || (apiConfigs.find(c => isImageModelType(c.type))?.id || ''));
         const modelConfig = getApiConfigByKey(selectedModel);
 
         if (!modelConfig || !isImageModelType(modelConfig.type)) {
@@ -24502,7 +24522,7 @@ function VodStudioApp({
             updateNodeSettings(nodeId, { model: modelId });
         }
         setLastUsedExtractModel(modelId);
-        try { localStorage.setItem('vodstudio_last_extract_model', modelId); } catch { }
+        try { localStorage.setItem('txstudio_last_extract_model', modelId); } catch { }
 
         // 3. 更新状态
         updateNodeSettings(nodeId, { isAnalyzing: true, progress: 5, errorMsg: null, analysisResults: null });
@@ -27233,7 +27253,7 @@ ${inputText.substring(0, 15000)} ... (截断)
             setDownloadProgress(prev => ({ ...prev, current: totalSteps }));
             const now = new Date();
             const timestamp = `${now.getFullYear().toString().slice(2)}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
-            saveAs(content, `vodstudio-assets-${timestamp}.zip`);
+            saveAs(content, `txstudio-assets-${timestamp}.zip`);
 
             // V3.5.12: Reset download progress
             setDownloadProgress({ active: false, current: totalSteps, total: totalSteps });
@@ -28042,7 +28062,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         const interactive = e.target.closest('input, textarea, select, button, a, [contenteditable="true"]');
                         if (!interactive) return;
                         touchNodeSelectionPriority(node.id);
-                        if (e.nativeEvent) e.nativeEvent.__vodstudioSelectionHandled = true;
+                        if (e.nativeEvent) e.nativeEvent.__txstudioSelectionHandled = true;
                         if (e.ctrlKey || e.metaKey) {
                             setSelectedNodeIds(prev => {
                                 const newSet = new Set(prev);
@@ -28069,7 +28089,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         }
                     }}
                     onMouseDown={(e) => {
-                        if (e.nativeEvent?.__vodstudioSelectionHandled) return;
+                        if (e.nativeEvent?.__txstudioSelectionHandled) return;
                         if (e.button === 0) {
                             touchNodeSelectionPriority(node.id);
                             e.stopPropagation();
@@ -28313,7 +28333,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                     const interactive = e.target.closest('input, textarea, select, button, a, [contenteditable="true"]');
                     if (!interactive) return;
                     touchNodeSelectionPriority(node.id);
-                    if (e.nativeEvent) e.nativeEvent.__vodstudioSelectionHandled = true;
+                    if (e.nativeEvent) e.nativeEvent.__txstudioSelectionHandled = true;
                     if (e.ctrlKey || e.metaKey) {
                         setSelectedNodeIds(prev => {
                             const newSet = new Set(prev);
@@ -28340,7 +28360,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                     }
                 }}
                 onMouseDown={(e) => {
-                    if (e.nativeEvent?.__vodstudioSelectionHandled) return;
+                    if (e.nativeEvent?.__txstudioSelectionHandled) return;
                     if (e.button === 0) {
                         touchNodeSelectionPriority(node.id);
                         e.stopPropagation();
@@ -28599,7 +28619,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         onClick={() => {
                                                                             updateNodeSettings(node.id, { model: modelKey });
                                                                             setLastUsedExtractModel(modelKey);
-                                                                            try { localStorage.setItem('vodstudio_last_extract_model', modelKey); } catch { }
+                                                                            try { localStorage.setItem('txstudio_last_extract_model', modelKey); } catch { }
                                                                             setActiveDropdown(null);
                                                                             setHoveredProvider(null);
                                                                         }}
@@ -28888,7 +28908,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { chatModel: modelKey });
                                                                                     setLastUsedExtractModel(modelKey);
-                                                                                    try { localStorage.setItem('vodstudio_last_extract_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('txstudio_last_extract_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -29129,7 +29149,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { model: modelKey });
                                                                                     setLastUsedVideoModel(modelKey);
-                                                                                    try { localStorage.setItem('vodstudio_last_video_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('txstudio_last_video_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -29203,7 +29223,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         updateNodeSettings(node.id, { resolution: nextValue });
                                                         if (nextValue !== 'Auto') {
                                                             setLastUsedVideoResolution(nextValue);
-                                                            try { localStorage.setItem('vodstudio_last_video_res', nextValue); } catch { }
+                                                            try { localStorage.setItem('txstudio_last_video_res', nextValue); } catch { }
                                                         }
                                                     }}
                                                     className={`w-full px-2 py-1 rounded text-xs border ${theme === 'dark'
@@ -29414,7 +29434,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 onClick={() => {
                                                                                     updateNodeSettings(node.id, { model: modelKey });
                                                                                     setLastUsedImageModel(modelKey);
-                                                                                    try { localStorage.setItem('vodstudio_last_image_model', modelKey); } catch { }
+                                                                                    try { localStorage.setItem('txstudio_last_image_model', modelKey); } catch { }
                                                                                     setActiveDropdown(null);
                                                                                     setHoveredProvider(null);
                                                                                 }}
@@ -30659,7 +30679,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     const val = parseInt(e.target.value) || 3;
                                                                     updateNodeSettings(node.id, { segmentDuration: val });
                                                                     setLastUsedSegmentDuration(val.toString());
-                                                                    try { localStorage.setItem('vodstudio_last_segment_duration', val.toString()); } catch { }
+                                                                    try { localStorage.setItem('txstudio_last_segment_duration', val.toString()); } catch { }
                                                                 }}
                                                                 className={`w-16 px-2 py-1 text-[11px] rounded border ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5] text-zinc-800' : 'bg-white border-zinc-300 text-zinc-800'}`}
                                                                 onMouseDown={(e) => e.stopPropagation()}
@@ -30721,7 +30741,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                             onClick={() => {
                                                                                                 updateNodeSettings(node.id, { model: modelKey });
                                                                                                 setLastUsedAnalyzeModel(modelKey);
-                                                                                                try { localStorage.setItem('vodstudio_last_analyze_model', modelKey); } catch { }
+                                                                                                try { localStorage.setItem('txstudio_last_analyze_model', modelKey); } catch { }
                                                                                                 setActiveDropdown(null);
                                                                                                 setHoveredProvider(null);
                                                                                             }}
@@ -31164,7 +31184,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                             }
 
                             // 2. 尝试从左侧历史记录拖入 (dataTransfer)
-                            const rawPayload = e.dataTransfer.getData('application/x-vodstudio-history');
+                            const rawPayload = e.dataTransfer.getData('application/x-txstudio-history');
                             if (rawPayload) {
                                 try {
                                     const payload = JSON.parse(rawPayload);
@@ -31333,7 +31353,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                 };
                             });
                             try {
-                                localStorage.setItem(storyboardMode === 'video' ? 'vodstudio_last_video_model' : 'vodstudio_last_image_model', modelKey);
+                                localStorage.setItem(storyboardMode === 'video' ? 'txstudio_last_video_model' : 'txstudio_last_image_model', modelKey);
                             } catch (error) { /* ignore storage errors */ }
                             if (storyboardMode === 'video') setLastUsedVideoModel(modelKey);
                             else setLastUsedImageModel(modelKey);
@@ -31655,7 +31675,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 ...currentShots[i],
                                                                 prompt: currentShots[i]?.prompt ?? '',
                                                                 description: currentShots[i]?.description ?? '',
-                                                                model: resolveModelKey(currentShots[i]?.model || localStorage.getItem('vodstudio_last_video_model') || ''),
+                                                                model: resolveModelKey(currentShots[i]?.model || localStorage.getItem('txstudio_last_video_model') || ''),
                                                                 image_url: keyframes[i]?.url ?? currentShots[i]?.image_url ?? '',
                                                                 image_filename: keyframes[i]?.filename || currentShots[i]?.image_filename || '',
                                                                 status: currentShots[i]?.status || 'draft'
@@ -33005,7 +33025,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         ? currentRatio
                                                                         : getPreferredModelRatio(modelKey, storyboardMode);
                                                                     try {
-                                                                        localStorage.setItem(storyboardMode === 'video' ? 'vodstudio_last_video_model' : 'vodstudio_last_image_model', modelKey);
+                                                                        localStorage.setItem(storyboardMode === 'video' ? 'txstudio_last_video_model' : 'txstudio_last_image_model', modelKey);
                                                                     } catch (error) { /* ignore storage errors */ }
                                                                     if (storyboardMode === 'video') setLastUsedVideoModel(modelKey);
                                                                     else setLastUsedImageModel(modelKey);
@@ -33442,7 +33462,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 <span className="truncate font-mono text-[10px]">
                                                                                     {(() => {
                                                                                         const mode = normalizeStoryboardMode(node.settings?.mode);
-                                                                                        const lastModelKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
+                                                                                        const lastModelKey = mode === 'image' ? 'txstudio_last_image_model' : 'txstudio_last_video_model';
                                                                                         // V3.7.29: 只显示 shot.model，不 fallback 到 localStorage（避免假联动）
                                                                                         return getApiConfigByKey(shot.model)?.id || shot.model || '选择模型';
                                                                                     })()}
@@ -33507,7 +33527,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                                     customParams: getDefaultCustomParamsForModel(modelKey, null, { preserveByName: false })
                                                                                                                 });
                                                                                                                 // V3.6.0.fuckedup: 根据模式保存最后使用的模型
-                                                                                                                const lastModelKey = mode === 'image' ? 'vodstudio_last_image_model' : 'vodstudio_last_video_model';
+                                                                                                                const lastModelKey = mode === 'image' ? 'txstudio_last_image_model' : 'txstudio_last_video_model';
                                                                                                                 localStorage.setItem(lastModelKey, modelKey);
                                                                                                                 // 同步到 state
                                                                                                                 if (mode === 'image') {
@@ -35607,10 +35627,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             // V3.4.8: 记住上次使用的模型
                                                                             if (node.type === 'gen-image') {
                                                                                 setLastUsedImageModel(modelKey);
-                                                                                try { localStorage.setItem('vodstudio_last_image_model', modelKey); } catch { }
+                                                                                try { localStorage.setItem('txstudio_last_image_model', modelKey); } catch { }
                                                                             } else if (node.type === 'gen-video') {
                                                                                 setLastUsedVideoModel(modelKey);
-                                                                                try { localStorage.setItem('vodstudio_last_video_model', modelKey); } catch { }
+                                                                                try { localStorage.setItem('txstudio_last_video_model', modelKey); } catch { }
                                                                             }
                                                                             setActiveDropdown(null);
                                                                             setHoveredProvider(null);
@@ -35724,7 +35744,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     onClick={() => {
                                                                         updateNodeSettings(node.id, { ratio: r });
                                                                         setLastUsedRatio(r);
-                                                                        try { localStorage.setItem('vodstudio_last_ratio', r); } catch { }
+                                                                        try { localStorage.setItem('txstudio_last_ratio', r); } catch { }
                                                                         setActiveDropdown(null);
                                                                     }}
                                                                     className={`w-full text-center py-1 text-[10px] rounded ${theme === 'dark'
@@ -35787,7 +35807,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             updateNodeSettings(node.id, { resolution: r });
                                                                             if (r !== 'Auto') {
                                                                                 setLastUsedVideoResolution(r);
-                                                                                try { localStorage.setItem('vodstudio_last_video_res', r); } catch { }
+                                                                                try { localStorage.setItem('txstudio_last_video_res', r); } catch { }
                                                                             }
                                                                             setActiveDropdown(null);
                                                                         }}
@@ -35872,7 +35892,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         onClick={() => {
                                                                             updateNodeSettings(node.id, { resolution: r });
                                                                             setLastUsedImageResolution(r);
-                                                                            try { localStorage.setItem('vodstudio_last_image_res', r); } catch { }
+                                                                            try { localStorage.setItem('txstudio_last_image_res', r); } catch { }
                                                                             setActiveDropdown(null);
                                                                         }}
                                                                         className={`w-full text-center py-1 text-[10px] rounded ${theme === 'dark'
@@ -36129,7 +36149,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                     ) : (
                         <div className="flex items-center gap-3">
                             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-indigo-600"><Layers size={16} className="text-white" /></div>
-                            <span className={`text-sm font-bold tracking-wide ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}>VodStudio</span>
+                            <span className={`text-sm font-bold tracking-wide ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}>TxStudio</span>
                             {isEditingProjectName ? (
                                 <input ref={projectNameInputRef} type="text" value={projectName} onChange={(e) => setProjectName(e.target.value)} onBlur={() => setIsEditingProjectName(false)} onKeyDown={(e) => { if (e.key === 'Enter') setIsEditingProjectName(false); }} className={`ml-2 rounded border px-2 py-0.5 text-xs outline-none ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-zinc-300 text-zinc-800'}`} style={{ minWidth: '100px', maxWidth: '200px' }} />
                             ) : (
@@ -37429,7 +37449,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 const updated = characterLibrary.filter(c => c.id !== character.id);
                                                                 setCharacterLibrary(updated);
                                                                 try {
-                                                                    localStorage.setItem('vodstudio_characters', JSON.stringify(updated));
+                                                                    localStorage.setItem('txstudio_characters', JSON.stringify(updated));
                                                                 } catch (err) {
                                                                     console.error('保存角色库失败:', err);
                                                                 }
@@ -39538,7 +39558,7 @@ ${inputText.substring(0, 15000)} ... (截断)
     );
 }
 
-export default VodStudioApp;
+export default TxStudioApp;
 
 
 

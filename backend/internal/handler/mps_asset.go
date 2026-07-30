@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"cnb.cool/txcloud/txstudio/backend/internal/model"
+	"cnb.cool/txcloud/txstudio/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tencentyun/cos-go-sdk-v5"
-	"github.com/vodstudio/backend/internal/model"
-	"github.com/vodstudio/backend/internal/service"
 	"gorm.io/gorm"
 )
 

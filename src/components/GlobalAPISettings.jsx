@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Eye, EyeOff, KeyRound, LibraryBig, Loader2, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { listCredentials, saveCredential } from '../api/credential';
 
-const PROVIDERS_KEY = 'vodstudio_providers';
-const API_CONFIGS_KEY = 'vodstudio_api_configs';
-const GLOBAL_KEY = 'vodstudio_global_key';
+const PROVIDERS_KEY = 'txstudio_providers';
+const API_CONFIGS_KEY = 'txstudio_api_configs';
+const GLOBAL_KEY = 'txstudio_global_key';
 const DEFAULT_TOKENHUB_URL = 'https://tokenhub.tencentmaas.com';
 const DEFAULT_VOD_URL = 'https://vod.tencentcloudapi.com';
+const REMOVED_MODEL_IDS = new Set(['hy3-preview', 'MJ V6', 'grok-video-3', 'gpt-4o-image']);
+const REMOVED_PROVIDER_KEYS = new Set(['midjourney', 'grok']);
 
 const readJSON = (key, fallback) => {
     try {
@@ -18,10 +20,22 @@ const readJSON = (key, fallback) => {
 };
 
 const defaultModels = () => [
-    { id: 'hy3-preview', modelName: 'hy3-preview', displayName: 'hy3-preview', provider: 'openai', type: 'Chat', apiType: 'openai', _uid: crypto.randomUUID?.() || `model-${Date.now()}-1` },
+    { id: 'hy3', modelName: 'hy3', displayName: 'hy3', provider: 'openai', type: 'Chat', apiType: 'openai', _uid: crypto.randomUUID?.() || `model-${Date.now()}-1` },
     { id: 'vod-aigc-image', modelName: 'vod-aigc-image', displayName: 'vod-aigc-image', provider: 'tencent-vod', type: 'Image', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-2` },
     { id: 'vod-aigc-video', modelName: 'vod-aigc-video', displayName: 'vod-aigc-video', provider: 'tencent-vod', type: 'Video', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-3` },
 ];
+
+const normalizePreset = (item) => {
+    if (!item || REMOVED_PROVIDER_KEYS.has(String(item.provider || '').trim())) return null;
+    const id = String(item.id || '').trim();
+    if (!id || REMOVED_MODEL_IDS.has(id)) return id === 'hy3-preview' ? { ...item, id: 'hy3', modelName: 'hy3', displayName: 'hy3' } : null;
+    return { ...item, id, modelName: id, displayName: id };
+};
+
+const getVisibleModels = (items) => {
+    const visible = (Array.isArray(items) ? items : []).map(normalizePreset).filter(Boolean);
+    return visible.length ? visible : defaultModels();
+};
 
 const parseVodKey = (value = '') => {
     const [secretId = '', secretKey = '', subAppId = '', region = 'ap-guangzhou'] = String(value).split('|');
@@ -53,7 +67,7 @@ export default function GlobalAPISettings({ open, onClose }) {
     });
     const [models, setModels] = useState(() => {
         const stored = readJSON(API_CONFIGS_KEY, null);
-        return Array.isArray(stored) && stored.length ? stored : defaultModels();
+        return getVisibleModels(stored);
     });
 
     useEffect(() => {
@@ -143,7 +157,7 @@ export default function GlobalAPISettings({ open, onClose }) {
             };
             localStorage.setItem(PROVIDERS_KEY, JSON.stringify(nextProviders));
             localStorage.setItem(GLOBAL_KEY, tokenhub.apiKey.trim() ? '__server__' : '');
-            window.dispatchEvent(new CustomEvent('vodstudio:api-settings-updated'));
+            window.dispatchEvent(new CustomEvent('txstudio:api-settings-updated'));
             setConfigured((prev) => ({
                 tokenhub: prev.tokenhub || Boolean(tokenhub.apiKey.trim()),
                 vod: prev.vod || Boolean(vod.secretId.trim() && vod.secretKey.trim()),
@@ -171,7 +185,7 @@ export default function GlobalAPISettings({ open, onClose }) {
             }));
         localStorage.setItem(API_CONFIGS_KEY, JSON.stringify(normalized));
         setModels(normalized);
-        window.dispatchEvent(new CustomEvent('vodstudio:api-settings-updated'));
+        window.dispatchEvent(new CustomEvent('txstudio:api-settings-updated'));
         setMessage('模型配置已保存');
     };
 

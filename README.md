@@ -1,6 +1,6 @@
-# VodStudio
+# TxStudio
 
-VodStudio 是一个本地单用户 AI 图片、视频与节点画布工作台。项目由 React/Vite 前端和单一 Go 后端组成；项目、画布过程、生成历史和加密 API 凭证统一保存在本地 SQLite。
+TxStudio 是一个本地单用户 AI 图片、视频与节点画布工作台。项目由 React/Vite 前端和单一 Go 后端组成；项目、画布过程、生成历史和加密 API 凭证统一保存在本地 SQLite。
 
 ## 当前能力
 
@@ -22,7 +22,7 @@ React/Vite (:5173)
         │ /api + 本地代理接口
         ▼
 Go/Gin (:8080)
-  ├─ SQLite: backend/data/studio.db
+  ├─ SQLite: backend/data/txstudio.db
   ├─ 加密密钥: backend/data/secret.key
   ├─ 本地缓存: backend/data/cache/
   ├─ VOD TC3 代签
@@ -59,8 +59,8 @@ npm run build
 
 ```bash
 cd backend
-go build -o vodstudio ./cmd/server
-./vodstudio -config config.yaml
+go build -o txstudio ./cmd/server
+./txstudio -config config.yaml
 ```
 
 ## 数据与安全

@@ -1,21 +1,21 @@
-# VodStudio 本地单用户配置
+# TxStudio 本地单用户配置
 server:
   port: 8080
   mode: debug
 
 database:
   # 项目、画布过程和生成历史
-  path: ./data/studio.db
+  path: ./data/txstudio.db
 
 crypto:
-  # 首次启动自动生成；也可通过 VODSTUDIO_AES_KEY 注入
+  # 首次启动自动生成；也可通过 TXSTUDIO_AES_KEY 注入
   key_file: ./data/secret.key
 
 cache:
-  # 生成结果的可选本地缓存；可用 VODSTUDIO_CACHE_DIR 覆盖
+  # 生成结果的可选本地缓存；可用 TXSTUDIO_CACHE_DIR 覆盖
   path: ./data/cache
 
 agent:
-  # 智能 Agent 文本模型的 OpenAI 兼容网关；可用 VODSTUDIO_AGENT_BASE_URL 覆盖
-  # 密钥仅通过 VODSTUDIO_AGENT_API_KEY 环境变量注入，不写入配置文件
+  # 智能 Agent 文本模型的 OpenAI 兼容网关；可用 TXSTUDIO_AGENT_BASE_URL 覆盖
+  # 密钥仅通过 TXSTUDIO_AGENT_API_KEY 环境变量注入，不写入配置文件
   base_url: https://tokenhub.tencentmaas.com

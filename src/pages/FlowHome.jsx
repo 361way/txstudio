@@ -332,7 +332,7 @@ export default function FlowHome() {
     const [homeEnhancePrompt, setHomeEnhancePrompt] = useState(true);
     const [homeStorageMode, setHomeStorageMode] = useState(() => {
         try {
-            return localStorage.getItem('vodstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
+            return localStorage.getItem('txstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
         } catch {
             return 'Temporary';
         }
@@ -394,8 +394,8 @@ export default function FlowHome() {
 
     useEffect(() => {
         const openGlobalSettings = () => setSettingsOpen(true);
-        window.addEventListener('vodstudio:open-api-settings', openGlobalSettings);
-        return () => window.removeEventListener('vodstudio:open-api-settings', openGlobalSettings);
+        window.addEventListener('txstudio:open-api-settings', openGlobalSettings);
+        return () => window.removeEventListener('txstudio:open-api-settings', openGlobalSettings);
     }, []);
 
     useEffect(() => {
@@ -562,7 +562,7 @@ export default function FlowHome() {
             return;
         }
         if (value) {
-            try { sessionStorage.setItem('vodstudio_prompt', value); } catch { /* 忽略 */ }
+            try { sessionStorage.setItem('txstudio_prompt', value); } catch { /* 忽略 */ }
         }
         if (!isHomeVideo) {
             setAppliedTemplate({

@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/vodstudio/backend/internal/app"
+	"cnb.cool/txcloud/txstudio/backend/internal/app"
 )
 
 func main() {
