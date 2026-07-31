@@ -88,6 +88,14 @@ func (h *CredentialHandler) Save(c *gin.Context) {
 		}
 		merged[key] = value
 	}
+	if req.Provider == "tencent-cloud" {
+		subAppID, err := parsePositiveUint64(merged["sub_app_id"])
+		if err != nil {
+			BadRequest(c, "SubAppId 必须是正整数")
+			return
+		}
+		merged["sub_app_id"] = subAppID
+	}
 	plaintext, err := json.Marshal(merged)
 	if err != nil {
 		InternalError(c, "凭证序列化失败")

@@ -82,6 +82,14 @@ const HOME_PIPELINE_CONTEXT = {
     useProxy: true,
     localServerUrl: import.meta.env.DEV ? 'http://127.0.0.1:8080' : window.location.origin,
 };
+const IMAGE_STAGE_LABELS = {
+    upload_start: '正在上传参考图',
+    upload_done: '参考图上传完成',
+    create_task: '正在创建图片任务',
+    task_created: '图片任务已创建',
+    polling: '正在生成图片',
+    task_finish: '图片生成完成',
+};
 const VIDEO_STAGE_LABELS = {
     upload_start: '正在上传参考图',
     upload_done: '参考图上传完成',
@@ -323,6 +331,9 @@ export default function FlowHome() {
     const [homeVideoDuration, setHomeVideoDuration] = useState('5s');
     const [homeVideoAudio, setHomeVideoAudio] = useState(true);
     const [homeVideoSubjectText, setHomeVideoSubjectText] = useState('');
+    const [homeImageLoading, setHomeImageLoading] = useState(false);
+    const [homeImageStage, setHomeImageStage] = useState('');
+    const [homeImageResults, setHomeImageResults] = useState([]);
     const [homeVideoLoading, setHomeVideoLoading] = useState(false);
     const [homeVideoStage, setHomeVideoStage] = useState('');
     const [homeVideoResults, setHomeVideoResults] = useState([]);
@@ -364,15 +375,17 @@ export default function FlowHome() {
     const homeVideoModelVersions = VOD_VIDEO_MODEL_MATRIX[videoModel] || [];
     const isHomeVideo = homeGenerationType === 'video';
     const isKlingExtendedVideo = videoModel === 'Kling' && ['3.0', '3.0-Omni'].includes(videoModelVersion);
-    const homeVideoReferenceFeature = videoModel === 'Kling' && videoModelVersion === '3.0'
-        ? 'firstLastFrame'
-        : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
-            ? 'multiReference'
-            : videoModel === 'Kling' && videoModelVersion === 'O1'
-                ? 'subjectReference'
-                : '';
-    const supportsHomeVideoSubjects = videoModel === 'Kling' && ['O1', '3.0-Omni'].includes(videoModelVersion);
-    const homeVideoSubjectInfos = parseHomeVideoSubjectInfos(homeVideoSubjectText);
+    const homeVideoReferenceFeature = !isHomeVideo
+        ? ''
+        : videoModel === 'Kling' && videoModelVersion === '3.0'
+            ? 'firstLastFrame'
+            : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
+                ? 'multiReference'
+                : videoModel === 'Kling' && videoModelVersion === 'O1'
+                    ? 'subjectReference'
+                    : '';
+    const supportsHomeVideoSubjects = isHomeVideo && videoModel === 'Kling' && ['O1', '3.0-Omni'].includes(videoModelVersion);
+    const homeVideoSubjectInfos = isHomeVideo ? parseHomeVideoSubjectInfos(homeVideoSubjectText) : [];
     const homeReferenceLimit = isHomeVideo
         ? (homeVideoReferenceFeature === 'firstLastFrame' ? 2 : VIDEO_REFERENCE_LIMIT)
         : homeModelCapability.maxReferences;
@@ -381,6 +394,9 @@ export default function FlowHome() {
     const homeVideoDurationOptions = isKlingExtendedVideo ? KLING_EXTENDED_DURATIONS : DEFAULT_VIDEO_DURATIONS;
     const activeHomeModel = isHomeVideo ? videoModel : imageModel;
     const activeHomeModelVersion = isHomeVideo ? videoModelVersion : imageModelVersion;
+    const homeGenerationLoading = isHomeVideo ? homeVideoLoading : homeImageLoading;
+    const homeAnyGenerationLoading = homeImageLoading || homeVideoLoading;
+    const homeGenerationStage = isHomeVideo ? homeVideoStage : homeImageStage;
     const visibleCapabilities = capabilityCategory === 'all'
         ? IMAGE_CAPABILITIES
         : IMAGE_CAPABILITIES.filter((item) => item.category === capabilityCategory);
@@ -473,6 +489,7 @@ export default function FlowHome() {
     };
 
     const switchHomeGenerationType = (type) => {
+        if (homeAnyGenerationLoading) return;
         setHomeGenerationType(type);
         setModelOpen(false);
         setHomeParameterOpen(null);
@@ -550,8 +567,9 @@ export default function FlowHome() {
         setHomeParameterError('');
     };
 
-    // 图片沿用创作页；视频在首页直接完成配置、提交与结果展示，不再跳转。
+    // 图片和视频均在首页完成参数校验、任务提交、进度反馈和结果展示。
     const handleSend = async () => {
+        if (homeAnyGenerationLoading) return;
         if (homeReferenceImages.length > homeReferenceLimit) {
             setHomeParameterError(`当前模型最多支持 ${homeReferenceLimit} 张参考图，请删除多余图片后再生成`);
             return;
@@ -565,20 +583,35 @@ export default function FlowHome() {
             try { sessionStorage.setItem('txstudio_prompt', value); } catch { /* 忽略 */ }
         }
         if (!isHomeVideo) {
-            setAppliedTemplate({
-                type: 'image',
-                model_name: imageModel,
-                model_version: imageModelVersion,
-                prompt: value,
-                source_prompt: value,
-                ratio: homeAspectRatio,
-                resolution: homeResolution,
-                enhance_prompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
-                storage_mode: homeStorageMode,
-                reference_images: homeReferenceImages,
-            });
-            setImageTemplateMode(false);
-            setActiveMode('image');
+            setHomeImageLoading(true);
+            setHomeParameterError('');
+            setHomeImageResults([]);
+            setHomeImageStage('正在创建图片任务');
+            try {
+                const { urls } = await runVodAigcPipeline({
+                    type: 'image',
+                    modelName: imageModel,
+                    modelVersion: imageModelVersion,
+                    prompt: value,
+                    enhancePrompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
+                    sourceImages: homeReferenceImages.map((item) => item.file),
+                    aspectRatio: homeAspectRatio || undefined,
+                    extraConfig: {
+                        ...(homeResolution ? { Resolution: homeResolution } : {}),
+                        StorageMode: homeStorageMode,
+                    },
+                }, {
+                    ...HOME_PIPELINE_CONTEXT,
+                    onStage: (stage) => setHomeImageStage(IMAGE_STAGE_LABELS[stage] || '正在生成图片'),
+                });
+                setHomeImageResults(urls);
+                setHomeImageStage('图片生成完成');
+            } catch (error) {
+                setHomeParameterError(`生成失败：${error?.message || '未知错误'}`);
+                setHomeImageStage('');
+            } finally {
+                setHomeImageLoading(false);
+            }
             return;
         }
 
@@ -832,14 +865,16 @@ export default function FlowHome() {
                                             <button
                                                 type="button"
                                                 onClick={() => switchHomeGenerationType('image')}
-                                                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${!isHomeVideo ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                                disabled={homeAnyGenerationLoading}
+                                                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition disabled:cursor-not-allowed ${!isHomeVideo ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                                             >
                                                 <ImageIcon size={14} />{t('生成图片')}
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => switchHomeGenerationType('video')}
-                                                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${isHomeVideo ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                                disabled={homeAnyGenerationLoading}
+                                                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition disabled:cursor-not-allowed ${isHomeVideo ? 'bg-white text-[#1f2329] shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                                             >
                                                 <Video size={14} />{t('生成视频')}
                                             </button>
@@ -1144,24 +1179,64 @@ export default function FlowHome() {
                                         <button
                                             type="button"
                                             onClick={handleSend}
-                                            disabled={homeVideoLoading}
+                                            disabled={homeGenerationLoading}
                                             className={`flex h-[36px] flex-shrink-0 items-center justify-center gap-1.5 bg-[#1f2329] text-white transition hover:bg-black focus:outline-none focus:ring-2 focus:ring-[#e7b238] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${isHomeVideo ? 'min-w-[96px] rounded-lg px-4 text-[12.5px] font-semibold' : 'w-[36px] rounded-full'}`}
                                             aria-label={t(isHomeVideo ? '生成视频' : '开始生成')}
                                         >
-                                            {homeVideoLoading ? <Loader2 size={16} className="animate-spin" /> : isHomeVideo ? <Play size={15} className="fill-current" /> : <ArrowUp size={17} />}
-                                            {isHomeVideo && <span>{t(homeVideoLoading ? '生成中' : '生成视频')}</span>}
+                                            {homeGenerationLoading ? <Loader2 size={16} className="animate-spin" /> : isHomeVideo ? <Play size={15} className="fill-current" /> : <ArrowUp size={17} />}
+                                            {isHomeVideo && <span>{t(homeGenerationLoading ? '生成中' : '生成视频')}</span>}
                                         </button>
                                     </div>
                                     {(homeParameterError || homeReferenceImages.length > homeReferenceLimit) && (
                                         <div className="mt-3 rounded-lg border border-[#f0d495] bg-[#fff9ea] px-3 py-2 text-[11px] leading-5 text-[#8b681b]">{homeParameterError || t(`当前参考图数量超过 ${activeHomeModel} ${activeHomeModelVersion} 的 ${homeReferenceLimit} 张限制`)}</div>
                                     )}
-                                    {isHomeVideo && homeVideoStage && !homeParameterError && (
-                                        <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#8b681b]">
-                                            {homeVideoLoading && <Loader2 size={13} className="animate-spin" />}
-                                            {t(homeVideoStage)}
+                                    {homeGenerationStage && !homeParameterError && (
+                                        <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#8b681b]" role="status" aria-live="polite">
+                                            {homeGenerationLoading && <Loader2 size={13} className="animate-spin" />}
+                                            {t(homeGenerationStage)}
                                         </div>
                                     )}
                                 </div>
+
+                                {/* 首页功能导航：生成结果出现时仍保持在结果之前 */}
+                                <div className="mt-[34px] flex flex-wrap items-center justify-center gap-2">
+                                    {MODES.filter(({ id }) => id !== 'scenario').map(({ id, label, icon: Icon }) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => id === 'video' ? switchHomeGenerationType('video') : goMode(id)}
+                                            className={`flex items-center gap-[7px] rounded-[10px] px-4 py-2 text-[13.5px] hover:bg-[#f4f4f5] ${id === 'video' && isHomeVideo ? 'bg-[#fff5d8] text-[#795913]' : 'text-gray-500'}`}
+                                        >
+                                            <Icon size={16} />
+                                            {t(id === 'image' ? '图片' : label)}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {!isHomeVideo && homeImageResults.length > 0 && (
+                                    <section className="mt-5 w-full max-w-[960px]" aria-label={t('图片生成结果')}>
+                                        <div className="mb-2.5 flex items-center justify-between px-1">
+                                            <div className="flex items-center gap-2 text-[12px] font-medium text-[#5f563f]">
+                                                <Sparkles size={14} className="text-[#c58b15]" />
+                                                {t('生成结果')}
+                                            </div>
+                                            <span className="text-[10.5px] text-gray-400">{t(`${imageModel} ${imageModelVersion} · ${homeAspectRatio}${homeResolution ? ` · ${homeResolution}` : ''}`)}</span>
+                                        </div>
+                                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                            {homeImageResults.map((url, index) => (
+                                                <article key={`${url}-${index}`} className="group overflow-hidden rounded-2xl border border-[#ece7da] bg-[#fbfaf7] p-2 shadow-[0_8px_24px_rgba(50,43,24,0.06)]">
+                                                    <a href={url} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-xl bg-[#f2f0ea]">
+                                                        <img src={url} alt={t(`生成图片 ${index + 1}`)} className="aspect-square w-full object-contain transition duration-300 group-hover:scale-[1.015]" />
+                                                        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-2 pt-8 text-[10px] text-white opacity-0 transition group-hover:opacity-100">{t('点击查看原图')}</span>
+                                                    </a>
+                                                    <div className="flex items-center justify-between px-2 pb-1 pt-2">
+                                                        <span className="text-[11.5px] text-gray-400">{t(`生成图片 ${index + 1}`)}</span>
+                                                        <a href={url} download target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#765611] hover:bg-[#fff1c9]"><Download size={13} />{t('下载')}</a>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
 
                                 {isHomeVideo && homeVideoResults.length > 0 && (
                                     <section className="mt-5 grid w-full max-w-[960px] gap-4 sm:grid-cols-2">
@@ -1176,20 +1251,6 @@ export default function FlowHome() {
                                         ))}
                                     </section>
                                 )}
-
-                                {/* 底部功能标签 */}
-                                <div className="mt-[34px] flex flex-wrap items-center justify-center gap-2">
-                                    {MODES.filter(({ id }) => id !== 'scenario').map(({ id, label, icon: Icon }) => (
-                                        <button
-                                            key={id}
-                                            onClick={() => id === 'video' ? switchHomeGenerationType('video') : goMode(id)}
-                                            className={`flex items-center gap-[7px] rounded-[10px] px-4 py-2 text-[13.5px] hover:bg-[#f4f4f5] ${id === 'video' && isHomeVideo ? 'bg-[#fff5d8] text-[#795913]' : 'text-gray-500'}`}
-                                        >
-                                            <Icon size={16} />
-                                            {t(id === 'image' ? '图片' : label)}
-                                        </button>
-                                    ))}
-                                </div>
 
                             </div>
                         </div>

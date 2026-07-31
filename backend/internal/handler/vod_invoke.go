@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,12 +102,12 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 		}
 	}
 	if h.InjectSubAppID {
-		subAppID := credentialData["sub_app_id"]
-		if subAppID == nil || strings.TrimSpace(toString(subAppID)) == "" || toString(subAppID) == "0" {
-			BadRequest(c, "腾讯云凭证缺少 SubAppId")
+		subAppID, parseErr := parsePositiveUint64(credentialData["sub_app_id"])
+		if parseErr != nil {
+			BadRequest(c, "腾讯云凭证中的 SubAppId 必须是正整数")
 			return
 		}
-		// 服务端值始终覆盖浏览器输入，避免调用其他子应用。
+		// 服务端值始终覆盖浏览器输入，并序列化为 JSON number，满足腾讯云 uint64 类型要求。
 		payload["SubAppId"] = subAppID
 	}
 
@@ -176,6 +178,48 @@ type publicError struct{ message string }
 
 func (e *publicError) Error() string { return e.message }
 
-func toString(value interface{}) string {
-	return strings.TrimSpace(fmt.Sprint(value))
+func parsePositiveUint64(value interface{}) (uint64, error) {
+	var parsed uint64
+	var err error
+
+	switch typed := value.(type) {
+	case uint64:
+		parsed = typed
+	case uint:
+		parsed = uint64(typed)
+	case uint32:
+		parsed = uint64(typed)
+	case int:
+		if typed > 0 {
+			parsed = uint64(typed)
+		}
+	case int64:
+		if typed > 0 {
+			parsed = uint64(typed)
+		}
+	case int32:
+		if typed > 0 {
+			parsed = uint64(typed)
+		}
+	case float64:
+		if typed > 0 && typed == math.Trunc(typed) {
+			parsed = uint64(typed)
+		}
+	case float32:
+		value64 := float64(typed)
+		if value64 > 0 && value64 == math.Trunc(value64) {
+			parsed = uint64(value64)
+		}
+	case json.Number:
+		parsed, err = strconv.ParseUint(string(typed), 10, 64)
+	case string:
+		parsed, err = strconv.ParseUint(strings.TrimSpace(typed), 10, 64)
+	default:
+		err = fmt.Errorf("unsupported SubAppId type %T", value)
+	}
+
+	if err != nil || parsed == 0 {
+		return 0, fmt.Errorf("SubAppId must be a positive uint64")
+	}
+	return parsed, nil
 }
