@@ -157,6 +157,7 @@ export async function runScriptAgentLoop({
     duration = '5s',
     audioGeneration = true,
     maxShots = 4,
+    historyParentJobId,
     onUpdate,
     shouldContinue,
     signal,
@@ -210,7 +211,7 @@ export async function runScriptAgentLoop({
                     aspectRatio: '3:4',
                     enhancePrompt: 'Enabled',
                     extraConfig: { Resolution: '1K', StorageMode: 'Temporary' },
-                }, PIPELINE_CONTEXT);
+                }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'character' } } });
                 character.imageUrl = result.urls[0] || '';
                 character.status = 'completed';
                 emit();
@@ -256,7 +257,7 @@ export async function runScriptAgentLoop({
                     aspectRatio,
                     enhancePrompt: 'Enabled',
                     extraConfig: { Resolution: '1K', StorageMode: 'Temporary' },
-                }, PIPELINE_CONTEXT);
+                }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'storyboard', shot_index: shot.index } } });
                 shot.imageUrl = result.urls[0] || '';
                 shot.status = 'storyboard_completed';
                 emit();
@@ -288,7 +289,7 @@ export async function runScriptAgentLoop({
                         AudioGeneration: audioGeneration ? 'Enabled' : 'Disabled',
                         StorageMode: 'Temporary',
                     },
-                }, PIPELINE_CONTEXT);
+                }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'video_clip', shot_index: shot.index } } });
                 shot.videoUrl = result.urls[0] || '';
                 shot.status = 'completed';
                 emit();

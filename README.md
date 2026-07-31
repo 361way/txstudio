@@ -11,6 +11,7 @@ TxStudio 是一个本地单用户 AI 图片、视频与节点画布工作台。�
 - 腾讯云 MPS AI 换装：模特图 + 服装图、WAND 1.0 模型、1K/2K/4K 输出
 - 腾讯云 MPS 图片水印智能擦除：COS 输入转存、文字水印编排 `ScheduleId=30000`
 - 腾讯云 MPS 老照片清晰修复：基于公开的超分辨率图像增强能力提升清晰度
+- 自定义图像模板：完整生成参数配置、SQLite 持久化、跨浏览器新增/编辑/复制/删除
 - 本地项目、完整画布过程和生成历史持久化
 - 全局 API 设置：TokenHub/OpenAI 兼容接口、腾讯云 VOD
 - 本地缓存与通用 HTTP 代理
@@ -18,15 +19,15 @@ TxStudio 是一个本地单用户 AI 图片、视频与节点画布工作台。�
 ## 技术结构
 
 ```text
-React/Vite (:5173)
+开发期 React/Vite (:5173)
         │ /api + 本地代理接口
         ▼
 Go/Gin (:8080)
-  ├─ SQLite: backend/data/txstudio.db
-  ├─ 加密密钥: backend/data/secret.key
-  ├─ 本地缓存: backend/data/cache/
+  ├─ 纯 Go SQLite: 用户数据目录/txstudio.db
+  ├─ 加密密钥: 用户数据目录/secret.key
+  ├─ 本地缓存: 用户数据目录/cache/
   ├─ VOD TC3 代签
-  └─ 前端静态文件嵌入
+  └─ 发布时完整前端内嵌到单个二进制
 ```
 
 详细说明见 `docs/ARCHITECTURE.md`。
@@ -47,27 +48,62 @@ npm run dev
 
 应用为本地单用户模式，无需登录。API 凭证在页面右上角“API 设置”中配置。
 
-## 构建
+## 单二进制发布
+
+构建当前操作系统和 CPU 架构的独立可执行文件：
 
 ```bash
-npm run build
+npm run build:binary
 ```
 
-该命令会构建 `dist/index.html`，并自动同步到 `backend/frontend/dist/index.html` 供 Go `embed` 使用。
+产物只有一个文件：
 
-构建本地可执行文件：
+```text
+release/txstudio       # macOS / Linux
+release/txstudio.exe   # Windows
+```
+
+发布后的二进制已内嵌完整前端，并使用纯 Go SQLite。目标机器运行时不需要安装 Node.js、Go、CGO、SQLite、YAML 配置或其他动态库：
 
 ```bash
-cd backend
-go build -o txstudio ./cmd/server
-./txstudio -config config.yaml
+./txstudio
 ```
+
+服务默认监听 `127.0.0.1:8080` 并自动打开浏览器。首次运行会在操作系统用户配置目录创建数据库、密钥、缓存和日志：
+
+- macOS：`~/Library/Application Support/TxStudio/`
+- Windows：`%AppData%\\TxStudio\\`
+- Linux：`$XDG_CONFIG_HOME/TxStudio/` 或 `~/.config/TxStudio/`
+
+运行参数均为可选：
+
+```bash
+./txstudio -data-dir ./txstudio-data -port 8080 -open=false
+./txstudio -config /path/to/config.yaml
+./txstudio -version
+```
+
+在空目录和空环境中验证发布文件：
+
+```bash
+npm run test:standalone
+```
+
+交叉编译时可设置标准 `GOOS`、`GOARCH`，例如：
+
+```bash
+GOOS=windows GOARCH=amd64 npm run build:binary
+```
+
+不同操作系统和 CPU 架构需要分别构建对应二进制；每个目标的发布内容仍只有一个可执行文件。
+
+`npm run build` 仅构建并同步内嵌前端，供开发调试使用。
 
 ## 数据与安全
 
 - API Secret 使用 AES-256-GCM 加密后写入 SQLite。
-- AES 密钥首次启动时自动生成到 `backend/data/secret.key`。
-- `backend/data/` 已被 Git 忽略，不应提交数据库、密钥或缓存文件。
+- AES 密钥首次启动时自动生成到用户数据目录的 `secret.key`。
+- 用户数据目录不属于发布文件，不应提交数据库、密钥、缓存或日志。
 - 通用代理拒绝访问环回、私网和未指定地址，降低 SSRF 风险。
 - 删除项目会同步硬删除画布快照和生成历史。
 

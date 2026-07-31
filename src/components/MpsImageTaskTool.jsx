@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { listCredentials } from '../api/credential';
 import { uploadMpsImage, uploadMpsImageFromURL } from '../api/mps';
+import { createGenerationTracker } from '../api/generationHistory';
 
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -99,23 +100,37 @@ export default function MpsImageTaskTool({ tool }) {
         if (!storage.bucket) { setError('请先在 API 设置中填写 MPS 输出 COS Bucket'); return; }
 
         setLoading(true);
+        const tracker = await createGenerationTracker({
+            source: 'mps_tool', type: 'mps', provider: 'tencent-mps', prompt: '',
+            modelName: tool.title, modelVersion: tool.id, storageMode: 'Permanent',
+            parameters: { bucket: storage.bucket, region: storage.region, input_mode: source.kind },
+            assets: [{ role: 'reference', ordinal: 0, media_type: 'image', mime_type: source.file?.type || '', file_size: source.file?.size || 0, metadata: { name: source.name || '', direct_url: source.kind === 'url' } }],
+        });
         try {
             setStage(source.kind === 'file' ? '正在上传图片到 COS…' : '正在安全转存 URL 图片到 COS…');
+            await tracker?.stage('upload_start', { progress: 8, message: '正在上传输入图片' });
             const input = source.kind === 'file'
                 ? await uploadMpsImage(source.file)
                 : await uploadMpsImageFromURL(source.url);
+            await tracker?.stage('upload_done', { progress: 25, message: '输入图片已保存到 COS' });
             setStage(tool.submittingText);
             const created = await tool.createTask({ input, outputBucket: storage.bucket, outputRegion: storage.region });
             setTaskId(created.taskId);
+            await tracker?.stage('task_created', { progress: 40, message: tool.submittingText, taskId: created.taskId });
             setStage(tool.processingText);
             const completed = await tool.pollTask(created.taskId, storage.region, {
-                onPoll: ({ attempt }) => setStage(`${tool.processingText} · 第 ${attempt} 次查询`),
+                onPoll: ({ attempt, status }) => {
+                    setStage(`${tool.processingText} · 第 ${attempt} 次查询`);
+                    tracker?.stage('polling', { progress: 60, status, message: tool.processingText });
+                },
             });
             setResults(completed.urls);
             setStage(tool.completedText);
+            await tracker?.complete({ urls: completed.urls, mediaType: 'image' });
         } catch (taskError) {
             setError(taskError?.message || `${tool.title}任务失败`);
             setStage('');
+            await tracker?.fail(taskError);
         } finally {
             setLoading(false);
         }

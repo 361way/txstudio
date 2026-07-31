@@ -139,6 +139,7 @@ export default function ImageTool({ onBack, template, embedded = false }) {
                 },
             }, {
                 ...PIPELINE_CONTEXT,
+                history: { source: 'image_tool', parameters: { capability_id: template?.capability_id || '' } },
                 onStage: (name) => setStage(STAGE_LABELS[name] || '处理中...'),
             });
             setResults(urls);

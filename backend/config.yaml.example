@@ -15,6 +15,12 @@ cache:
   # 生成结果的可选本地缓存；可用 TXSTUDIO_CACHE_DIR 覆盖
   path: ./data/cache
 
+logging:
+  # 仅记录脱敏技术日志；可用 TXSTUDIO_LOG_PATH 覆盖
+  path: ./data/logs/txstudio.log
+  max_size_mb: 20
+  max_backups: 10
+
 agent:
   # 智能 Agent 文本模型的 OpenAI 兼容网关；可用 TXSTUDIO_AGENT_BASE_URL 覆盖
   # 密钥仅通过 TXSTUDIO_AGENT_API_KEY 环境变量注入，不写入配置文件

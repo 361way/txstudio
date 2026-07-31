@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { listCredentials } from '../api/credential';
 import { createAiTryOnTask, pollAiTryOnTask } from '../api/mps';
+import { createGenerationTracker } from '../api/generationHistory';
 import { uploadImageToVod } from '../vodAdapter';
 
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -191,27 +192,41 @@ export default function AIOutfitTool() {
         if (!storage.bucket) { setError('请先在 API 设置中配置 MPS 输出 COS Bucket'); return; }
 
         setLoading(true);
+        const tracker = await createGenerationTracker({
+            source: 'mps_tool', type: 'mps', provider: 'tencent-mps', prompt,
+            modelName: model, modelVersion: 'AiTryOn', storageMode: 'Permanent',
+            parameters: { resolution, bucket: storage.bucket, region: storage.region, garment_count: garmentImages.length },
+            assets: [...modelImages, ...garmentImages].map((item, index) => ({ role: index === 0 ? 'person_reference' : 'garment_reference', ordinal: index, media_type: 'image', mime_type: item.file?.type || '', file_size: item.file?.size || 0, metadata: { name: item.name || '', direct_url: item.kind === 'url' } })),
+        });
         try {
+            await tracker?.stage('upload_start', { progress: 8, message: '正在上传模特图与服装图' });
             const modelImageUrl = await resolveUrl(modelImages[0], '模特图');
             const garmentImageUrls = [];
             for (let index = 0; index < garmentImages.length; index += 1) {
                 garmentImageUrls.push(await resolveUrl(garmentImages[index], `服装图 ${index + 1}`));
             }
+            await tracker?.stage('upload_done', { progress: 25, message: '模特图与服装图上传完成' });
             setStage('正在提交 AI 换装任务…');
             const created = await createAiTryOnTask({
                 modelImageUrl, garmentImageUrls, model, prompt, resolution,
                 outputBucket: storage.bucket, outputRegion: storage.region,
             });
             setTaskId(created.taskId);
+            await tracker?.stage('task_created', { progress: 40, message: 'AI 换装任务已创建', taskId: created.taskId });
             setStage('AI 正在试穿，请稍候…');
             const completed = await pollAiTryOnTask(created.taskId, storage.region, {
-                onPoll: ({ attempt }) => setStage(`AI 正在试穿 · 第 ${attempt} 次查询`),
+                onPoll: ({ attempt, status }) => {
+                    setStage(`AI 正在试穿 · 第 ${attempt} 次查询`);
+                    tracker?.stage('polling', { progress: 60, status, message: 'AI 正在试穿' });
+                },
             });
             setResults(completed.urls);
             setStage('换装完成');
+            await tracker?.complete({ urls: completed.urls, mediaType: 'image' });
         } catch (submitError) {
             setError(submitError?.message || 'AI 换装任务失败');
             setStage('');
+            await tracker?.fail(submitError);
         } finally {
             setLoading(false);
         }

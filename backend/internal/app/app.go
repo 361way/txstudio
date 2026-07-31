@@ -23,6 +23,9 @@ type App struct {
 }
 
 func NewApp(cfg *Config) (*App, error) {
+	if err := configureApplicationLog(cfg.Logging); err != nil {
+		return nil, err
+	}
 	db, err := NewDB(cfg.Database)
 	if err != nil {
 		return nil, err
@@ -36,7 +39,8 @@ func NewApp(cfg *Config) (*App, error) {
 	}
 
 	gin.SetMode(cfg.Server.Mode)
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery(), requestLogMiddleware())
 	app := &App{Config: cfg, DB: db, Crypto: cryptoSvc, Router: router}
 	if err := app.registerRoutes(); err != nil {
 		return nil, err
@@ -62,11 +66,13 @@ func (a *App) registerRoutes() error {
 	}))
 
 	projectHandler := &handler.ProjectHandler{DB: a.DB}
+	generationHandler := &handler.GenerationHandler{DB: a.DB}
+	imageTemplateHandler := &handler.ImageTemplateHandler{DB: a.DB}
 	credentialHandler := &handler.CredentialHandler{DB: a.DB, Crypto: a.Crypto}
 	proxyHandler := handler.NewProxyHandler(a.DB, a.Crypto)
 	vodHandler := handler.NewVODInvokeHandler(a.DB, a.Crypto)
 	mpsHandler := handler.NewMPSInvokeHandler(a.DB, a.Crypto)
-	agentChatHandler := handler.NewAgentChatHandler(a.Config.Agent.APIKey, a.Config.Agent.BaseURL)
+	agentChatHandler := handler.NewAgentChatHandler(a.DB, a.Crypto, a.Config.Agent.APIKey, a.Config.Agent.BaseURL)
 	mpsAssetHandler := &handler.MPSAssetHandler{DB: a.DB, Crypto: a.Crypto}
 	localHandler, err := handler.NewLocalServiceHandler(a.Config.Cache.Path)
 	if err != nil {
@@ -105,6 +111,23 @@ func (a *App) registerRoutes() error {
 			credentials.GET("", credentialHandler.List)
 			credentials.POST("", credentialHandler.Save)
 			credentials.DELETE("/:id", credentialHandler.Delete)
+		}
+
+		generationJobs := api.Group("/generation-jobs")
+		{
+			generationJobs.GET("", generationHandler.List)
+			generationJobs.POST("", generationHandler.Create)
+			generationJobs.GET("/:id", generationHandler.Get)
+			generationJobs.PUT("/:id", generationHandler.Update)
+			generationJobs.DELETE("/:id", generationHandler.Delete)
+		}
+
+		imageTemplates := api.Group("/image-templates")
+		{
+			imageTemplates.GET("", imageTemplateHandler.List)
+			imageTemplates.POST("", imageTemplateHandler.Create)
+			imageTemplates.PUT("/:id", imageTemplateHandler.Update)
+			imageTemplates.DELETE("/:id", imageTemplateHandler.Delete)
 		}
 
 		api.POST("/proxy", proxyHandler.Proxy)

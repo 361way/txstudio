@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "cd backend && go run ./cmd/server -config config.yaml",
+    "dev:backend": "cd backend && go run ./cmd/server -config config.yaml -open=false",
     "dev:frontend": "vite",
     "build:web": "vite build",
-    "build": "npm run build:web && cp dist/index.html backend/frontend/dist/index.html",
+    "build": "npm run build:web && node scripts/sync-frontend.mjs",
+    "build:binary": "node scripts/build-release.mjs",
+    "test:standalone": "node scripts/smoke-standalone.mjs",
     "preview": "vite preview",
     "test": "cd backend && go test ./..."
   },

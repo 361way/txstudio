@@ -135,6 +135,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 },
             }, {
                 ...PIPELINE_CONTEXT,
+                history: { source: 'video_tool', parameters: { reference_mode: mode } },
                 onStage: (name) => setStage(STAGE_LABELS[name] || '处理中...'),
             });
             setResults(urls);

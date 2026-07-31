@@ -10,30 +10,64 @@ import (
 	"strings"
 	"time"
 
+	"cnb.cool/txcloud/txstudio/backend/internal/model"
+	"cnb.cool/txcloud/txstudio/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const maxAgentChatBody = 2 << 20
 
 type AgentChatHandler struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	db              *gorm.DB
+	crypto          *service.CryptoService
+	fallbackAPIKey  string
+	fallbackBaseURL string
+	client          *http.Client
 }
 
-func NewAgentChatHandler(apiKey, baseURL string) *AgentChatHandler {
+func NewAgentChatHandler(db *gorm.DB, crypto *service.CryptoService, fallbackAPIKey, fallbackBaseURL string) *AgentChatHandler {
 	return &AgentChatHandler{
-		apiKey:  strings.TrimSpace(apiKey),
-		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		client:  &http.Client{Timeout: 90 * time.Second},
+		db:              db,
+		crypto:          crypto,
+		fallbackAPIKey:  strings.TrimSpace(fallbackAPIKey),
+		fallbackBaseURL: strings.TrimRight(strings.TrimSpace(fallbackBaseURL), "/"),
+		client:          &http.Client{Timeout: 90 * time.Second},
 	}
 }
 
+func (h *AgentChatHandler) loadCredential() (string, string) {
+	apiKey := h.fallbackAPIKey
+	baseURL := h.fallbackBaseURL
+	if h.db == nil || h.crypto == nil {
+		return apiKey, baseURL
+	}
+	var credential model.Credential
+	if err := h.db.Where("provider = ?", "tokenhub").First(&credential).Error; err != nil {
+		return apiKey, baseURL
+	}
+	plaintext, err := h.crypto.Decrypt(credential.EncryptedData)
+	if err != nil {
+		return apiKey, baseURL
+	}
+	var data map[string]any
+	if json.Unmarshal(plaintext, &data) != nil {
+		return apiKey, baseURL
+	}
+	if value := stringValue(data["api_key"]); value != "" {
+		apiKey = value
+	}
+	if value := strings.TrimRight(stringValue(data["base_url"]), "/"); value != "" {
+		baseURL = value
+	}
+	return apiKey, baseURL
+}
+
 type agentChatRequest struct {
-	Model          string                   `json:"model"`
-	Messages       []map[string]interface{} `json:"messages"`
-	ResponseFormat map[string]interface{}   `json:"response_format,omitempty"`
-	Temperature    float64                  `json:"temperature,omitempty"`
+	Model          string           `json:"model"`
+	Messages       []map[string]any `json:"messages"`
+	ResponseFormat map[string]any   `json:"response_format,omitempty"`
+	Temperature    float64          `json:"temperature,omitempty"`
 }
 
 func writeAgentChatError(c *gin.Context, status int, message string) {
@@ -62,11 +96,12 @@ func isPublicHTTPS(raw string) bool {
 }
 
 func (h *AgentChatHandler) Chat(c *gin.Context) {
-	if h.apiKey == "" {
-		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本模型未配置，请设置 TXSTUDIO_AGENT_API_KEY")
+	apiKey, baseURL := h.loadCredential()
+	if apiKey == "" {
+		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本模型未配置，请在右上角 API 设置中配置 TokenHub")
 		return
 	}
-	target := h.baseURL + "/v1/chat/completions"
+	target := baseURL + "/v1/chat/completions"
 	if !isPublicHTTPS(target) {
 		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本服务地址无效或不安全")
 		return
@@ -95,15 +130,19 @@ func (h *AgentChatHandler) Chat(c *gin.Context) {
 		return
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+h.apiKey)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	upstreamStartedAt := time.Now()
 	response, err := h.client.Do(request)
 	if err != nil {
+		logUpstreamTransportError(c, "tokenhub", "chat-completions", payload.Model, upstreamStartedAt, err)
 		writeAgentChatError(c, http.StatusBadGateway, "文本模型服务暂不可用")
 		return
 	}
 	defer response.Body.Close()
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxAgentChatBody))
+	logUpstreamResult(c, "tokenhub", "chat-completions", payload.Model, response.StatusCode, upstreamStartedAt, response.Header, responseBody)
 
 	c.Header("Content-Type", "application/json")
 	c.Status(response.StatusCode)
-	_, _ = io.CopyN(c.Writer, response.Body, maxAgentChatBody)
+	_, _ = c.Writer.Write(responseBody)
 }

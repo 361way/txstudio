@@ -150,12 +150,16 @@ func (h *ProxyHandler) COSPut(c *gin.Context) {
 	}
 	outReq.Host = parsed.Host
 
+	upstreamStartedAt := time.Now()
 	resp, err := h.client.Do(outReq)
 	if err != nil {
+		logUpstreamTransportError(c, "tencent-cloud", "cos", http.MethodPut, upstreamStartedAt, err)
 		InternalError(c, "COS 上传失败: "+err.Error())
 		return
 	}
 	defer resp.Body.Close()
+	responseBody := readAllOrNull(resp.Body)
+	logUpstreamResult(c, "tencent-cloud", "cos", http.MethodPut, resp.StatusCode, upstreamStartedAt, resp.Header, responseBody)
 
 	for key, values := range resp.Header {
 		if _, skip := hopByHop[strings.ToLower(key)]; skip {
@@ -165,7 +169,7 @@ func (h *ProxyHandler) COSPut(c *gin.Context) {
 			c.Header(key, v)
 		}
 	}
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), readAllOrNull(resp.Body))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), responseBody)
 }
 
 func (h *ProxyHandler) injectStoredCredential(req *http.Request) error {
@@ -210,12 +214,16 @@ func validateProxyTarget(target string) (*url.URL, error) {
 }
 
 func (h *ProxyHandler) forward(c *gin.Context, req *http.Request) {
+	upstreamStartedAt := time.Now()
 	resp, err := h.client.Do(req)
 	if err != nil {
+		logUpstreamTransportError(c, "external", req.URL.Hostname(), req.Method, upstreamStartedAt, err)
 		InternalError(c, "上游请求失败: "+err.Error())
 		return
 	}
 	defer resp.Body.Close()
+	responseBody := readAllOrNull(resp.Body)
+	logUpstreamResult(c, "external", req.URL.Hostname(), req.Method, resp.StatusCode, upstreamStartedAt, resp.Header, responseBody)
 	for key, values := range resp.Header {
 		if _, skip := hopByHop[strings.ToLower(key)]; skip {
 			continue
@@ -224,7 +232,7 @@ func (h *ProxyHandler) forward(c *gin.Context, req *http.Request) {
 			c.Header(key, value)
 		}
 	}
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), readAllOrNull(resp.Body))
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), responseBody)
 }
 
 // isInternalHost SSRF 防护：禁止内网地址

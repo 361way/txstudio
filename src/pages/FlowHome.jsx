@@ -15,7 +15,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    PanelLeft, LayoutGrid, ChevronDown, ListFilter,
+    PanelLeft, LayoutGrid, ChevronDown,
     Paperclip, Star, ArrowUp, ArrowLeft, Settings,
     Image as ImageIcon, Video, Layout, Sparkles, MousePointer2,
     History, Users, MessageSquare, Download, UploadCloud, Home, Search,
@@ -35,11 +35,13 @@ import {
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
 import i18n from '../i18n';
 import ImageTool from './ImageTool';
+import ImageTemplateHub from './ImageTemplateHub';
 import VideoTool from './VideoTool';
 import AIOutfitTool from './AIOutfitTool';
 import WatermarkEraseTool from './WatermarkEraseTool';
 import OldPhotoRestoreTool from './OldPhotoRestoreTool';
 import AgentStudio from './AgentStudio';
+import GenerationHistory from './GenerationHistory';
 import ProjectList from './ProjectList';
 import CanvasApp from '../App.jsx';
 import {
@@ -228,7 +230,7 @@ function ScenarioCapabilityHub({ activeCategory, onCategoryChange, capabilities,
     );
 }
 
-function ImageTemplateHub({ activeCategory, query, styles, onCategoryChange, onQueryChange, onApply }) {
+function LegacyImageTemplateHub({ activeCategory, query, styles, onCategoryChange, onQueryChange, onApply }) {
     return (
         <div className="mx-auto w-full max-w-[1240px] px-6 py-10 lg:px-10">
             <section aria-labelledby="image-template-title">
@@ -469,14 +471,14 @@ export default function FlowHome() {
     const openImageTemplate = (style) => {
         setAppliedTemplate({
             type: 'image',
-            model_name: imageModel,
-            model_version: imageModelVersion,
+            model_name: style.is_custom ? style.model_name : imageModel,
+            model_version: style.is_custom ? style.model_version : imageModelVersion,
             prompt: style.prompt,
             source_prompt: '',
-            ratio: homeAspectRatio,
-            resolution: homeResolution,
-            enhance_prompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
-            storage_mode: homeStorageMode,
+            ratio: style.is_custom ? style.ratio : homeAspectRatio,
+            resolution: style.is_custom ? style.resolution : homeResolution,
+            enhance_prompt: style.is_custom ? style.enhance_prompt : (homeEnhancePrompt ? 'Enabled' : 'Disabled'),
+            storage_mode: style.is_custom ? style.storage_mode : homeStorageMode,
             inspiration: style,
         });
         setImageTemplateMode(false);
@@ -602,6 +604,7 @@ export default function FlowHome() {
                     },
                 }, {
                     ...HOME_PIPELINE_CONTEXT,
+                    history: { source: 'home', parameters: { entry: 'home_image' } },
                     onStage: (stage) => setHomeImageStage(IMAGE_STAGE_LABELS[stage] || '正在生成图片'),
                 });
                 setHomeImageResults(urls);
@@ -649,6 +652,7 @@ export default function FlowHome() {
                 },
             }, {
                 ...HOME_PIPELINE_CONTEXT,
+                history: { source: 'home', parameters: { entry: 'home_video', audio_generation: homeVideoAudio } },
                 onStage: (stage) => setHomeVideoStage(VIDEO_STAGE_LABELS[stage] || '正在生成视频'),
             });
             setHomeVideoResults(urls);
@@ -706,7 +710,9 @@ export default function FlowHome() {
         ? 'AI 换装'
         : activeMode === 'watermark-erase'
             ? '智能擦除'
-            : (MODES.find((m) => m.id === activeMode) || {}).label || '';
+            : activeMode === 'history'
+                ? '生成历史'
+                : (MODES.find((m) => m.id === activeMode) || {}).label || '';
     const canvasToolItems = [
         { id: 'autoArrange', label: '自动整理', icon: Layout },
         { id: 'select', label: '选择与移动', icon: MousePointer2 },
@@ -800,29 +806,12 @@ export default function FlowHome() {
                             </button>
                         </div>
 
-                        {/* 历史记录 */}
-                        <div className="mt-3.5 flex items-center justify-between px-[9px] py-1.5 text-[12.5px] text-gray-400">
-                            <span className="flex items-center gap-1.5">{t('历史记录')} <ChevronDown size={11} /></span>
-                            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#f4f4f5]">
-                                <ListFilter size={14} />
-                            </button>
-                        </div>
-
-                        <div className="mt-0.5 flex flex-1 flex-col gap-1 overflow-y-auto no-scrollbar">
-                            {HISTORY.length === 0 ? (
-                                <div className="px-[9px] py-2 text-[12px] text-gray-300">{t('暂无历史记录')}</div>
-                            ) : HISTORY.map((h) => (
-                                <button key={h.id} className="flex gap-[9px] rounded-lg px-2 py-[7px] text-left hover:bg-[#f4f4f5]">
-                                    <div className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center overflow-hidden whitespace-pre rounded-md bg-[#f0f0f2] text-center text-[8px] leading-tight text-gray-400">
-                                        {h.thumb}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <div className="max-w-[150px] truncate text-[13px] text-[#1f2329]">{h.title}</div>
-                                        <div className="mt-0.5 text-[11px] text-gray-400">{h.time}</div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
+                        {/* 统一生成历史 */}
+                        <button type="button" onClick={() => goMode('history')} className="mt-3.5 flex w-full items-center justify-between rounded-lg px-[9px] py-2 text-[12.5px] text-gray-400 hover:bg-[#f4f4f5] hover:text-[#1f2329]">
+                            <span className="flex items-center gap-1.5"><History size={14} />{t('查看全部生成历史')}</span>
+                            <ChevronDown size={11} className="-rotate-90" />
+                        </button>
+                        <div className="flex-1" />
 
                         <div className="mt-2 border-t border-[#ececef] px-[9px] pt-3 text-[11px] text-gray-300">
                             {t('本地单用户模式')}
@@ -1287,13 +1276,12 @@ export default function FlowHome() {
                                 {activeMode === 'agent' && (
                                     <AgentStudio />
                                 )}
+                                {activeMode === 'history' && (
+                                    <GenerationHistory />
+                                )}
                                 {activeMode === 'image' && imageTemplateMode && (
                                     <ImageTemplateHub
-                                        activeCategory={styleCategory}
-                                        query={styleQuery}
-                                        styles={visibleStyles}
-                                        onCategoryChange={setStyleCategory}
-                                        onQueryChange={setStyleQuery}
+                                        builtInStyles={IMAGE_INSPIRATIONS}
                                         onApply={openImageTemplate}
                                     />
                                 )}

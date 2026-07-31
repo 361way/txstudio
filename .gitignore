@@ -47,6 +47,7 @@ src_backup_*/
 # Compiled binaries
 proxy-server-linux
 vodstudio-server
+release/
 
 # Keep production artifact checked in intentionally
 !dist/

@@ -256,6 +256,7 @@ function base64ToBlob(base64, mime = 'application/octet-stream') {
 // 后端负责：TC3-HMAC 签名 + SubAppId 注入 + 配额强制 + 用量记录
 // ============================================================================
 import { invokeVod } from './api/vod';
+import { createGenerationTracker } from './api/generationHistory';
 
 /**
  * 调用腾讯云 VOD API（经后端代签转发）
@@ -627,19 +628,54 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
  * @param {Object} ctx  { credentials, useProxy, localServerUrl, onStage(stage,info) }
  * @returns {Promise<{urls:string[], taskId:string, taskDetail:Object}>}
  */
-export async function runVodAigcPipeline(params, ctx) {
+export async function runVodAigcPipeline(params, ctx = {}) {
+    const historyOptions = ctx.history === false ? null : (ctx.history || {});
+    const storageMode = params.extraConfig?.StorageMode || 'Temporary';
+    const tracker = historyOptions ? await createGenerationTracker({
+        source: historyOptions.source || 'canvas',
+        type: params.type,
+        provider: 'tencent-vod',
+        prompt: params.prompt || '',
+        modelName: params.modelName,
+        modelVersion: params.modelVersion,
+        storageMode,
+        projectId: historyOptions.projectId,
+        parentJobId: historyOptions.parentJobId,
+        parameters: {
+            aspect_ratio: params.aspectRatio || '',
+            enhance_prompt: params.enhancePrompt || '',
+            reference_count: Array.isArray(params.sourceImages) ? params.sourceImages.filter(Boolean).length : 0,
+            output_config: params.extraConfig || {},
+            ...(historyOptions.parameters || {}),
+        },
+        assets: (Array.isArray(params.sourceImages) ? params.sourceImages : []).map((source, index) => ({
+            role: index === params.lastFrameSourceIndex ? 'last_frame' : index === 0 && params.sourceFileInfos?.[index]?.Usage === 'FirstFrame' ? 'first_frame' : 'reference',
+            ordinal: index,
+            media_type: 'image',
+            mime_type: typeof source === 'object' ? source?.type || '' : '',
+            file_size: typeof source === 'object' ? source?.size || 0 : 0,
+            metadata: { name: typeof source === 'object' ? source?.name || '' : '', direct_url: typeof source === 'string' },
+        })),
+    }) : null;
     const emit = (stage, info = {}) => {
         if (typeof ctx.onStage === 'function') {
             try { ctx.onStage(stage, info); } catch (_) {}
         }
+        tracker?.stage(stage, info);
     };
 
+    try {
     // 1) 上传参考图（如有）
     const sourceImages = Array.isArray(params.sourceImages)
         ? params.sourceImages.filter(Boolean)
         : [];
     const sourceFileInfos = Array.isArray(params.sourceFileInfos) ? params.sourceFileInfos : null;
     const uploadResults = [];
+    const sourceRoleAt = (index) => index === params.lastFrameSourceIndex
+        ? 'last_frame'
+        : index === 0 && sourceFileInfos?.[index]?.Usage === 'FirstFrame'
+            ? 'first_frame'
+            : 'reference';
     const isInnerIpUrl = (url) => {
         if (typeof url !== 'string') return false;
         // 内网 IP / 本地地址：127.x.x.x、192.168.x.x、10.x.x.x、172.16-31.x.x、localhost、0.0.0.0
@@ -651,12 +687,12 @@ export async function runVodAigcPipeline(params, ctx) {
         emit('upload_start', { index: i, total: sourceImages.length, directUrl: canReferenceUrlDirectly });
         if (canReferenceUrlDirectly) {
             uploadResults.push({ url: source });
-            emit('upload_done', { index: i, total: sourceImages.length, url: source, directUrl: true });
+            emit('upload_done', { index: i, total: sourceImages.length, role: sourceRoleAt(i), url: source, directUrl: true });
             continue;
         }
         const uploadResult = await uploadImageToVod(source, ctx);
         uploadResults.push(uploadResult);
-        emit('upload_done', { index: i, total: sourceImages.length, fileId: uploadResult.fileId });
+        emit('upload_done', { index: i, total: sourceImages.length, role: sourceRoleAt(i), fileId: uploadResult.fileId });
     }
     const fileIds = uploadResults.map((item) => item.fileId).filter(Boolean);
     const fileInfos = sourceFileInfos
@@ -714,7 +750,12 @@ export async function runVodAigcPipeline(params, ctx) {
     if (!urls.length) {
         throw new Error('[VOD Task] 任务完成但未返回可用的输出 URL');
     }
-    return { urls, taskId, taskDetail, outputFileIds };
+    await tracker?.complete({ urls, fileIds: outputFileIds, mediaType: params.type });
+    return { urls, taskId, taskDetail, outputFileIds, historyJobId: tracker?.id };
+    } catch (error) {
+        await tracker?.fail(error, error?.name === 'AbortError' ? 'cancelled' : 'failed');
+        throw error;
+    }
 }
 
 // ============================================================================

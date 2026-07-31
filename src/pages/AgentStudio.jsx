@@ -13,6 +13,7 @@ import {
     VOD_VIDEO_RATIOS,
 } from '../vodAdapter';
 import { getAgentTextModels, runScriptAgentLoop } from '../api/agentLoop';
+import { createGenerationTracker } from '../api/generationHistory';
 import i18n from '../i18n';
 
 const t = (value) => (i18n.t ? i18n.t(value) : value);
@@ -93,8 +94,19 @@ export default function AgentStudio() {
         setRun(null);
         runningRef.current = true;
         abortRef.current = new AbortController();
+        const tracker = await createGenerationTracker({
+            source: 'agent',
+            type: 'agent',
+            provider: 'txstudio-agentloop',
+            prompt: value,
+            modelName: textModel,
+            modelVersion: `${imageModel}/${imageVersion} · ${videoModel}/${videoVersion}`,
+            storageMode: 'Temporary',
+            parameters: { text_model: textModel, image_model: imageModel, image_version: imageVersion, video_model: videoModel, video_version: videoVersion, aspect_ratio: aspectRatio, resolution, duration, audio_generation: audioGeneration, max_shots: maxShots },
+        });
+        let finalRun = null;
         try {
-            await runScriptAgentLoop({
+            finalRun = await runScriptAgentLoop({
                 script: value,
                 textModel,
                 imageModel,
@@ -106,12 +118,28 @@ export default function AgentStudio() {
                 duration,
                 audioGeneration,
                 maxShots,
+                historyParentJobId: tracker?.id,
                 signal: abortRef.current.signal,
                 shouldContinue: () => runningRef.current,
-                onUpdate: setRun,
+                onUpdate: (nextRun) => {
+                    setRun(nextRun);
+                    tracker?.stage(nextRun.currentStage, {
+                        progress: nextRun.progress,
+                        message: STAGE_LABELS[nextRun.currentStage] || 'AgentLoop 正在运行',
+                    });
+                },
             });
+            const assets = [
+                ...finalRun.characters.filter((item) => item.imageUrl).map((item, index) => ({ role: 'agent_character', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', metadata: { name: item.name, role: item.role } })),
+                ...finalRun.shots.filter((item) => item.imageUrl).map((item, index) => ({ role: 'storyboard', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', metadata: { title: item.title, shot_index: item.index } })),
+                ...finalRun.shots.filter((item) => item.videoUrl).map((item, index) => ({ role: 'output', ordinal: index, media_type: 'video', cloud_url: item.videoUrl, storage_provider: 'tencent-vod', metadata: { title: item.title, shot_index: item.index } })),
+            ];
+            if (finalRun.status === 'stopped') await tracker?.fail(new Error('AgentLoop 已停止'), 'cancelled');
+            else if (finalRun.status === 'failed') await tracker?.fail(new Error(finalRun.errors.join('；') || 'AgentLoop 运行失败'));
+            else await tracker?.complete({ assets, status: finalRun.status });
         } catch (nextError) {
             setError(nextError?.message || 'AgentLoop 运行失败');
+            await tracker?.fail(nextError);
         } finally {
             runningRef.current = false;
             abortRef.current = null;

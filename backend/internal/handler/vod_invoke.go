@@ -140,8 +140,10 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 	if h.Client == nil {
 		h.Client = &http.Client{Timeout: 120 * time.Second}
 	}
+	upstreamStartedAt := time.Now()
 	response, err := h.Client.Do(httpReq)
 	if err != nil {
+		logUpstreamTransportError(c, "tencent-cloud", h.Service, req.Action, upstreamStartedAt, err)
 		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
 			InternalError(c, "腾讯云 API 响应超时")
 		} else {
@@ -151,6 +153,7 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 	}
 	defer response.Body.Close()
 	responseBody, _ := io.ReadAll(response.Body)
+	logUpstreamResult(c, "tencent-cloud", h.Service, req.Action, response.StatusCode, upstreamStartedAt, response.Header, responseBody)
 	contentType := response.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/json; charset=utf-8"
