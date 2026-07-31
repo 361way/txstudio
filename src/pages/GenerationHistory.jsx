@@ -38,13 +38,33 @@ function parseJSON(value) {
     try { return JSON.parse(value || '{}'); } catch { return {}; }
 }
 
+// 将素材地址转换为浏览器可访问的安全 URL：
+// - 同源 /file/ 或 /api/cache/ 路径直接可用
+// - 远程 http(s) 地址原样返回
+// - 本地绝对路径按 cache 目录映射到后端 /file/ 静态接口
+function safeMediaURL(value) {
+    const url = String(value || '').trim();
+    if (!url) return '';
+    if (url.startsWith('/file/') || url.startsWith('/api/cache/')) return url;
+    if (/^https?:\/\//i.test(url)) return url;
+    const marker = '/cache/';
+    const idx = url.lastIndexOf(marker);
+    if (idx >= 0) {
+        const rel = url.slice(idx + marker.length).split('\\').join('/');
+        return `/file/${rel}`;
+    }
+    const slash = url.lastIndexOf('/');
+    const name = slash >= 0 ? url.slice(slash + 1) : url;
+    return `/file/${name}`;
+}
+
 function StatusBadge({ status }) {
     const info = STATUS[status] || { label: status || '未知', className: 'bg-gray-100 text-gray-500' };
     return <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${info.className}`}>{t(info.label)}</span>;
 }
 
 function MediaPreview({ job, asset, compact = false }) {
-    const url = asset?.cloud_url || asset?.local_path || '';
+    const url = safeMediaURL(asset?.cloud_url || asset?.local_path) || '';
     const isVideo = job?.type === 'video' || asset?.media_type === 'video';
     if (!url) {
         const Icon = job?.type === 'agent' ? Bot : isVideo ? Video : ImageIcon;

@@ -86,8 +86,8 @@ type GenerationAsset struct {
 // GenerationEvent 保存用户可读的任务阶段变化，不记录高频轮询明细或敏感信息。
 type GenerationEvent struct {
 	Base
-	JobID    uint   `gorm:"index;not null" json:"job_id"`
-	Sequence int    `gorm:"index:idx_job_sequence,unique;not null" json:"sequence"`
+	JobID    uint   `gorm:"index:idx_event_sequence,unique;not null" json:"job_id"`
+	Sequence int    `gorm:"index:idx_event_sequence,unique;not null" json:"sequence"`
 	Stage    string `gorm:"size:64;index" json:"stage"`
 	Level    string `gorm:"size:16;not null" json:"level"`
 	Message  string `gorm:"size:1000" json:"message"`
@@ -119,7 +119,7 @@ type Credential struct {
 }
 
 func AutoMigrateAll(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&Project{},
 		&ProjectSnapshot{},
 		&ProjectHistory{},
@@ -128,5 +128,18 @@ func AutoMigrateAll(db *gorm.DB) error {
 		&GenerationEvent{},
 		&ImageTemplate{},
 		&Credential{},
-	)
+	); err != nil {
+		return err
+	}
+	// 旧版本误将 generation_events.sequence 建为全局唯一索引（idx_job_sequence），
+	// 导致不同任务的同一序号互相冲突，后续任务写入事件时触发 UNIQUE 约束失败（500）。
+	// 此处删除遗留索引，复合唯一索引 (job_id, sequence) 已由上面的 AutoMigrate 重建。
+	for _, stmt := range []string{
+		"DROP INDEX IF EXISTS idx_job_sequence",
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
