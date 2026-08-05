@@ -1,5 +1,5 @@
 /**
- * FlowHome —「Flow with ideas」本地统一工作台。
+ * FlowHome —「txstudio empowers your success」本地统一工作台。
  *
  * 左侧边栏 + Hero + 输入卡片 + 底部功能标签。
  * 所有功能（图片 / 视频 / 画布 / 场景化能力）都在主区域中切换，
@@ -40,6 +40,8 @@ import VideoTool from './VideoTool';
 import AIOutfitTool from './AIOutfitTool';
 import WatermarkEraseTool from './WatermarkEraseTool';
 import OldPhotoRestoreTool from './OldPhotoRestoreTool';
+import ForegroundExtractionTool from './ForegroundExtractionTool';
+import ChangeModelTool from './ChangeModelTool';
 import AgentStudio from './AgentStudio';
 import GenerationHistory from './GenerationHistory';
 import ProjectList from './ProjectList';
@@ -686,6 +688,14 @@ export default function FlowHome() {
             setActiveMode('old-photo-restore');
             return;
         }
+        if (capability.id === 'foreground') {
+            setActiveMode('foreground-extraction');
+            return;
+        }
+        if (capability.id === 'change-model') {
+            setActiveMode('change-model');
+            return;
+        }
         handleApplyTemplate({
             type: 'image',
             capability_id: capability.id,
@@ -710,7 +720,11 @@ export default function FlowHome() {
         ? 'AI 换装'
         : activeMode === 'watermark-erase'
             ? '智能擦除'
-            : activeMode === 'history'
+            : activeMode === 'foreground-extraction'
+                ? '前景提取'
+                : activeMode === 'change-model'
+                    ? 'AI 换模特'
+                    : activeMode === 'history'
                 ? '生成历史'
                 : (MODES.find((m) => m.id === activeMode) || {}).label || '';
     const canvasToolItems = [
@@ -841,9 +855,9 @@ export default function FlowHome() {
                             <div className="mx-auto flex min-h-full w-full max-w-[1180px] flex-col items-center justify-center py-14 sm:py-16">
                                 <h1 className="flex max-w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 px-3 pb-2 text-center text-[36px] font-bold leading-[1.15] tracking-[-0.035em] text-[#1f2329] sm:text-[46px]">
                                     <span className="font-script inline-block bg-gradient-to-r from-[#4cc2c4] to-[#4a90d9] bg-clip-text px-1 pb-1 text-[48px] leading-[1.15] text-transparent sm:text-[60px]">
-                                        Flow
+                                        txstudio empowers
                                     </span>
-                                    <span className="whitespace-nowrap">with ideas</span>
+                                    <span className="whitespace-nowrap">your success</span>
                                 </h1>
                                 <p className="mt-2.5 text-sm text-gray-400 sm:mt-3.5">{t('好的灵感，从这里开始')}</p>
 
@@ -1299,6 +1313,12 @@ export default function FlowHome() {
                                 )}
                                 {activeMode === 'old-photo-restore' && (
                                     <OldPhotoRestoreTool />
+                                )}
+                                {activeMode === 'foreground-extraction' && (
+                                    <ForegroundExtractionTool />
+                                )}
+                                {activeMode === 'change-model' && (
+                                    <ChangeModelTool />
                                 )}
                                 {activeMode === 'scenario' && (
                                     <ScenarioCapabilityHub

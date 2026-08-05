@@ -137,6 +137,7 @@ func (a *App) registerRoutes() error {
 		api.POST("/agent/chat", agentChatHandler.Chat)
 		api.POST("/mps/assets", mpsAssetHandler.Upload)
 		api.POST("/mps/assets/from-url", mpsAssetHandler.UploadFromURL)
+		api.GET("/mps/assets/output", mpsAssetHandler.Output)
 	}
 
 	router.NoRoute(func(c *gin.Context) {
@@ -144,6 +145,10 @@ func (a *App) registerRoutes() error {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
+		// 单文件首页不允许缓存，确保浏览器总能拿到最新前端构建。
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
 		c.Data(http.StatusOK, "text/html; charset=utf-8", frontend.IndexHTML)
 	})
 	return nil

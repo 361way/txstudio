@@ -87,6 +87,59 @@ export function createOldPhotoRestoreTask(options) {
     return submitCosImageTask(payload, options.outputRegion, '创建老照片修复任务失败');
 }
 
+// 腾讯云 MPS AiCutoutConfig：foreground 为默认前景提取模式。
+export function buildForegroundExtractionPayload({ input, outputBucket, outputRegion }) {
+    return buildCosImageTaskPayload({
+        input, outputBucket, outputRegion,
+        outputDir: '/mps-saas/output/foreground/',
+        imageTask: {
+            AiCutoutConfig: {
+                Switch: 'ON',
+                Type: 'foreground',
+            },
+        },
+    });
+}
+
+export function createForegroundExtractionTask(options) {
+    const payload = buildForegroundExtractionPayload(options);
+    return submitCosImageTask(payload, options.outputRegion, '创建前景提取任务失败');
+}
+
+// 换模特体型枚举（沙漏型为默认）。
+export const CHANGE_MODEL_BODY_TYPES = [
+    { value: 'hourglass', label: '沙漏型', default: true },
+    { value: 'H', label: 'H 型' },
+    { value: 'plus', label: '大码型' },
+    { value: 'apple', label: '苹果型' },
+    { value: 'pear', label: '梨型' },
+];
+
+// 换模特：保留服装，将参考模特替换为目标体型的虚拟模特。
+// 结构沿用 MPS ProcessImage（InputInfo=模特图，AddOnParameter.ImageSet=服装图）。
+// 注意：AiChangeModelConfig 的具体字段名（BodyType/Ratio）需与控制台 Dry Run 核对。
+export function buildChangeModelPayload({ modelImageUrl, garmentImageUrl, bodyType, ratio, outputBucket, outputRegion }) {
+    return {
+        InputInfo: { Type: 'URL', UrlInputInfo: { Url: modelImageUrl } },
+        OutputStorage: { Type: 'COS', CosOutputStorage: { Bucket: outputBucket, Region: outputRegion } },
+        OutputDir: '/mps-saas/output/change-model/',
+        ImageTask: {
+            AiChangeModelConfig: {
+                BodyType: bodyType,
+                Ratio: ratio,
+            },
+        },
+        AddOnParameter: {
+            ImageSet: [{ Image: { Type: 'URL', UrlInputInfo: { Url: garmentImageUrl } } }],
+        },
+    };
+}
+
+export function createChangeModelTask(options) {
+    const payload = buildChangeModelPayload(options);
+    return submitCosImageTask(payload, options.outputRegion, '创建换模特任务失败');
+}
+
 export async function createAiTryOnTask({
     modelImageUrl,
     garmentImageUrls,
@@ -133,14 +186,56 @@ export async function describeImageTask(taskId, region = '') {
     return result?.Response || {};
 }
 
+function mpsOutputURL(path) {
+    const value = String(path || '').trim();
+    return value ? `/api/mps/assets/output?${new URLSearchParams({ path: value })}` : '';
+}
+
+// 递归扫描所有 Output 节点，提取可访问地址（SignedUrl/Url 或 COS Path），
+// 兼容不同任务类型与返回层级；只读取 Output 节点，避免误取输入素材地址。
+function collectFromOutputNodes(node, acc, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 10) return;
+    if (Array.isArray(node)) { node.forEach((child) => collectFromOutputNodes(child, acc, depth + 1)); return; }
+    for (const [key, value] of Object.entries(node)) {
+        if (key === 'Output' && value && typeof value === 'object') {
+            const signed = value.SignedUrl || value.Url || '';
+            if (/^https?:\/\//i.test(signed) && !acc.urls.includes(signed)) acc.urls.push(signed);
+            const proxy = mpsOutputURL(value.Path || value.FilePath || '');
+            if (proxy && !acc.urls.includes(proxy)) acc.urls.push(proxy);
+        } else if (typeof value === 'object') {
+            collectFromOutputNodes(value, acc, depth + 1);
+        }
+    }
+}
+
+// 生成响应结构的紧凑摘要，便于在错误信息中定位真实字段。
+function summarizeStructure(value, depth = 0) {
+    if (!value || typeof value !== 'object' || depth > 2) return '';
+    if (Array.isArray(value)) {
+        return `[${value.length}项${value[0] ? ':' + summarizeStructure(value[0], depth + 1) : ''}]`;
+    }
+    return Object.keys(value)
+        .map((key) => {
+            const child = value[key];
+            if (child && typeof child === 'object') return `${key}${summarizeStructure(child, depth + 1)}`;
+            return key;
+        })
+        .join(',');
+}
+
 export function extractImageTaskResults(detail) {
     return (detail?.ImageProcessTaskResultSet || [])
-        .map((item) => ({
-            status: String(item?.Status || '').toUpperCase(),
-            url: item?.Output?.SignedUrl || item?.Output?.Url || '',
-            path: item?.Output?.Path || '',
-            error: item?.ErrMsg || item?.ErrorMessage || '',
-        }))
+        .map((item) => {
+            const path = item?.Output?.Path || '';
+            return {
+                status: String(item?.Status || '').toUpperCase(),
+                // MPS 对私有 COS Bucket 常只返回 Output.Path；经本地服务代理读取，
+                // 避免把临时签名 URL 保存进结果和生成历史。
+                url: item?.Output?.SignedUrl || item?.Output?.Url || mpsOutputURL(path),
+                path,
+                error: item?.ErrMsg || item?.ErrorMessage || '',
+            };
+        })
         .filter((item) => item.url || item.path || item.error || item.status);
 }
 
@@ -155,8 +250,16 @@ export async function pollImageTask(taskId, region = '', options = {}) {
             const results = extractImageTaskResults(detail);
             const failed = results.find((item) => item.error || item.status === 'FAIL');
             if (failed) throw new Error(failed.error || '图片处理任务失败');
-            const urls = results.map((item) => item.url).filter(Boolean);
-            if (!urls.length) throw new Error('任务完成，但未返回可访问的结果 URL');
+            let urls = results.map((item) => item.url).filter(Boolean);
+            if (!urls.length) {
+                // 兜底：递归扫描所有 Output 节点，兼容不同的返回层级。
+                const acc = { urls: [] };
+                collectFromOutputNodes(detail, acc);
+                urls = acc.urls;
+            }
+            if (!urls.length) {
+                throw new Error(`任务完成，但未返回可访问的结果 URL（结果结构: ${summarizeStructure(detail)}）`);
+            }
             return { detail, urls };
         }
         if (['FAIL', 'FAILED', 'ABORTED'].includes(status)) {

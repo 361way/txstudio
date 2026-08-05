@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -41,6 +42,43 @@ type tencentCloudConfig struct {
 
 type uploadFromURLReq struct {
 	URL string `json:"url" binding:"required"`
+}
+
+// Output 通过本地服务读取 MPS 写入配置 COS Bucket 的处理结果，
+// 使私有 Bucket 的 Output.Path 也能作为浏览器可访问地址使用。
+func (h *MPSAssetHandler) Output(c *gin.Context) {
+	objectKey, err := mpsOutputObjectKey(c.Query("path"))
+	if err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+	config, err := h.loadConfig()
+	if err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+	client, err := newMPSCOSClient(config)
+	if err != nil {
+		InternalError(c, err.Error())
+		return
+	}
+	response, err := client.Object.Get(c.Request.Context(), objectKey, nil)
+	if err != nil {
+		InternalError(c, "读取 MPS 输出结果失败")
+		return
+	}
+	defer response.Body.Close()
+	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+	if contentLength := response.Header.Get("Content-Length"); contentLength != "" {
+		c.Header("Content-Length", contentLength)
+	}
+	c.Header("Cache-Control", "private, max-age=600")
+	c.Status(http.StatusOK)
+	if _, err := io.Copy(c.Writer, response.Body); err != nil {
+		log.Printf("[mps] 输出结果传输失败: %v", err)
+	}
 }
 
 // Upload 将本地图片安全上传到配置的 COS Bucket，作为 MPS ProcessImage 的 COS 输入。
@@ -160,14 +198,35 @@ func (h *MPSAssetHandler) loadConfig() (tencentCloudConfig, error) {
 	return config, nil
 }
 
-func uploadMPSObject(config tencentCloudConfig, body io.Reader, contentType, extension string) (string, error) {
+func newMPSCOSClient(config tencentCloudConfig) (*cos.Client, error) {
 	bucketURL, err := url.Parse(fmt.Sprintf("https://%s.cos.%s.myqcloud.com", config.Bucket, config.Region))
 	if err != nil {
-		return "", fmt.Errorf("COS Bucket 地址无效")
+		return nil, fmt.Errorf("COS Bucket 地址无效")
 	}
-	client := cos.NewClient(&cos.BaseURL{BucketURL: bucketURL}, &http.Client{
+	return cos.NewClient(&cos.BaseURL{BucketURL: bucketURL}, &http.Client{
 		Transport: &cos.AuthorizationTransport{SecretID: config.SecretID, SecretKey: config.SecretKey},
-	})
+	}), nil
+}
+
+func mpsOutputObjectKey(rawPath string) (string, error) {
+	objectKey := strings.TrimSpace(rawPath)
+	objectKey = strings.TrimPrefix(objectKey, "/")
+	if objectKey == "" || len(objectKey) > 2048 || strings.Contains(objectKey, "\\") || strings.ContainsRune(objectKey, '\x00') {
+		return "", fmt.Errorf("MPS 输出路径无效")
+	}
+	for _, segment := range strings.Split(objectKey, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", fmt.Errorf("MPS 输出路径无效")
+		}
+	}
+	return objectKey, nil
+}
+
+func uploadMPSObject(config tencentCloudConfig, body io.Reader, contentType, extension string) (string, error) {
+	client, err := newMPSCOSClient(config)
+	if err != nil {
+		return "", err
+	}
 	objectKey := mpsInputPrefix + time.Now().UTC().Format("20060102") + "/" + uuid.New().String() + extension
 	options := &cos.ObjectPutOptions{ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{ContentType: contentType}}
 	if _, err := client.Object.Put(context.Background(), objectKey, body, options); err != nil {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Bot, ChevronRight, Clock, Cloud, Database, Download,
-    ExternalLink, History, Image as ImageIcon, Loader2, RefreshCw, Search,
+    ExternalLink, History, Image as ImageIcon, Loader2, Play, RefreshCw, Search,
     Trash2, Video, X, XCircle,
 } from 'lucide-react';
 import { deleteGenerationJob, getGenerationJob, listGenerationJobs } from '../api/generationHistory';
@@ -45,7 +45,7 @@ function parseJSON(value) {
 function safeMediaURL(value) {
     const url = String(value || '').trim();
     if (!url) return '';
-    if (url.startsWith('/file/') || url.startsWith('/api/cache/')) return url;
+    if (url.startsWith('/file/') || url.startsWith('/api/')) return url;
     if (/^https?:\/\//i.test(url)) return url;
     const marker = '/cache/';
     const idx = url.lastIndexOf(marker);
@@ -63,14 +63,25 @@ function StatusBadge({ status }) {
     return <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${info.className}`}>{t(info.label)}</span>;
 }
 
-function MediaPreview({ job, asset, compact = false }) {
+function MediaPreview({ job, asset, compact = false, controls = false }) {
     const url = safeMediaURL(asset?.cloud_url || asset?.local_path) || '';
     const isVideo = job?.type === 'video' || asset?.media_type === 'video';
     if (!url) {
         const Icon = job?.type === 'agent' ? Bot : isVideo ? Video : ImageIcon;
         return <div className="flex h-full w-full items-center justify-center bg-[#f2f0e9] text-[#c5bda9]"><Icon size={compact ? 20 : 28} /></div>;
     }
-    if (isVideo) return <video src={url} muted playsInline preload="metadata" className="h-full w-full bg-black object-cover" />;
+    if (isVideo) {
+        return (
+            <div className="relative h-full w-full">
+                <video src={url} muted playsInline preload="metadata" controls={controls} className="h-full w-full bg-black object-cover" />
+                {!controls && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white shadow"><Play size={16} className="ml-0.5" /></span>
+                    </div>
+                )}
+            </div>
+        );
+    }
     return <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" />;
 }
 
@@ -107,7 +118,7 @@ function HistoryDetail({ id, onClose, onDelete }) {
                             {detail.error_message && <div className="mt-3 flex gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] leading-5 text-red-600"><XCircle size={14} className="mt-0.5 shrink-0" />{detail.error_message}</div>}
                         </section>
 
-                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><div className="aspect-video"><MediaPreview job={detail} asset={asset} /></div><div className="flex items-center justify-end gap-1 p-2">{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
+                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><div className="aspect-video"><MediaPreview job={detail} asset={asset} controls /></div><div className="flex items-center justify-end gap-1 p-2">{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
 
                         <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('生成参数')}</h3><div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-[#eee9de] p-4 text-[11px]">{[
                             ['类型', detail.type], ['来源', SOURCE_LABEL[detail.source] || detail.source],

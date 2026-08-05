@@ -14,14 +14,30 @@ import (
 
 var requestSequence atomic.Uint64
 
+// cstZone 为东八区（UTC+8），统一作为日志时间戳时区。
+var cstZone = time.FixedZone("CST", 8*3600)
+
+// timestampWriter 在每条日志前添加东八区时间戳。
+type timestampWriter struct {
+	w    io.Writer
+	zone *time.Location
+}
+
+func (t *timestampWriter) Write(p []byte) (int, error) {
+	ts := time.Now().In(t.zone).Format("2006-01-02 15:04:05")
+	line := fmt.Sprintf("[%s +08:00] %s", ts, p)
+	return t.w.Write([]byte(line))
+}
+
 func configureApplicationLog(cfg LoggingConfig) error {
 	writer, err := service.NewRotatingLogWriter(cfg.Path, cfg.MaxSizeMB, cfg.MaxBackups)
 	if err != nil {
 		return err
 	}
-	output := io.MultiWriter(os.Stdout, writer)
+	base := io.MultiWriter(os.Stdout, writer)
+	output := &timestampWriter{w: base, zone: cstZone}
 	log.SetOutput(output)
-	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
+	log.SetFlags(0)
 	gin.DefaultWriter = output
 	gin.DefaultErrorWriter = output
 	return nil
