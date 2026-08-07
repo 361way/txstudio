@@ -18,6 +18,8 @@ var allowedTemplateAccents = map[string]bool{
 	"cyan": true, "emerald": true, "red": true, "indigo": true,
 }
 
+const systemImageTemplateSource = "system"
+
 type ImageTemplateHandler struct {
 	DB *gorm.DB
 }
@@ -56,6 +58,7 @@ func validTemplateCoverURL(value string) bool {
 
 func normalizeTemplateRequest(req imageTemplateRequest) (model.ImageTemplate, string) {
 	template := model.ImageTemplate{
+		Source: "user", IsPublished: true,
 		Name: trimTemplateField(req.Name, 120), Category: strings.ToLower(trimTemplateField(req.Category, 64)),
 		Description: trimTemplateField(req.Description, 500), Prompt: trimTemplateField(req.Prompt, 20000),
 		ModelName: trimTemplateField(req.ModelName, 128), ModelVersion: trimTemplateField(req.ModelVersion, 128),
@@ -104,8 +107,12 @@ func parseTemplateID(c *gin.Context) (uint, bool) {
 
 func (h *ImageTemplateHandler) List(c *gin.Context) {
 	var templates []model.ImageTemplate
-	if err := h.DB.Order("updated_at DESC, id DESC").Find(&templates).Error; err != nil {
-		InternalError(c, "读取自定义模板失败")
+	query := h.DB.Where("source <> ? OR is_published = ?", systemImageTemplateSource, true).
+		Order("CASE WHEN source = 'system' THEN 0 ELSE 1 END").
+		Order("sort_order ASC").
+		Order("updated_at DESC, id DESC")
+	if err := query.Find(&templates).Error; err != nil {
+		InternalError(c, "读取图像模板失败")
 		return
 	}
 	OK(c, templates)
@@ -137,6 +144,10 @@ func (h *ImageTemplateHandler) Update(c *gin.Context) {
 	var existing model.ImageTemplate
 	if err := h.DB.First(&existing, id).Error; err != nil {
 		NotFound(c, "自定义模板不存在")
+		return
+	}
+	if existing.Source == systemImageTemplateSource {
+		BadRequest(c, "系统模板请在模板管理中维护，不能通过自定义模板接口修改")
 		return
 	}
 	var req imageTemplateRequest
@@ -171,13 +182,17 @@ func (h *ImageTemplateHandler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	result := h.DB.Delete(&model.ImageTemplate{}, id)
-	if result.Error != nil {
-		InternalError(c, "删除自定义模板失败")
+	var existing model.ImageTemplate
+	if err := h.DB.First(&existing, id).Error; err != nil {
+		NotFound(c, "自定义模板不存在")
 		return
 	}
-	if result.RowsAffected == 0 {
-		NotFound(c, "自定义模板不存在")
+	if existing.Source == systemImageTemplateSource {
+		BadRequest(c, "系统模板请在模板管理中维护，不能通过自定义模板接口删除")
+		return
+	}
+	if err := h.DB.Delete(&existing).Error; err != nil {
+		InternalError(c, "删除自定义模板失败")
 		return
 	}
 	OK(c, gin.H{"deleted": id})

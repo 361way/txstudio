@@ -94,21 +94,31 @@ type GenerationEvent struct {
 	Metadata string `gorm:"type:text" json:"metadata"`
 }
 
-// ImageTemplate 保存用户可跨浏览器复用的完整图像生成模板配置。
+// ImageTemplate 保存系统与用户可跨浏览器复用的完整图像生成模板配置。
+// 媒体文件不存入数据库，CoverURL 仅保存受控本地路径或 HTTPS URL。
 type ImageTemplate struct {
 	Base
-	Name          string `gorm:"size:120;not null" json:"name"`
-	Category      string `gorm:"size:64;index;not null" json:"category"`
-	Description   string `gorm:"size:500" json:"description"`
-	Prompt        string `gorm:"type:text;not null" json:"prompt"`
-	ModelName     string `gorm:"size:128;not null" json:"model_name"`
-	ModelVersion  string `gorm:"size:128;not null" json:"model_version"`
-	Ratio         string `gorm:"size:32" json:"ratio"`
-	Resolution    string `gorm:"size:32" json:"resolution"`
-	EnhancePrompt string `gorm:"size:16;not null;default:Enabled" json:"enhance_prompt"`
-	StorageMode   string `gorm:"size:16;not null;default:Temporary" json:"storage_mode"`
-	Accent        string `gorm:"size:32;not null;default:amber" json:"accent"`
-	CoverURL      string `gorm:"size:2048" json:"cover_url"`
+	Source         string `gorm:"size:16;index;not null;default:user" json:"source"`
+	SourceKey      string `gorm:"size:160;index" json:"source_key"`
+	SourceName     string `gorm:"size:120" json:"source_name"`
+	SourceURL      string `gorm:"size:2048" json:"source_url"`
+	SortOrder      int    `gorm:"index;not null;default:0" json:"sort_order"`
+	IsPublished    bool   `gorm:"index;not null;default:true" json:"is_published"`
+	Name           string `gorm:"size:120;not null" json:"name"`
+	Category       string `gorm:"size:64;index;not null" json:"category"`
+	Description    string `gorm:"size:500" json:"description"`
+	Prompt         string `gorm:"type:text;not null" json:"prompt"`
+	PromptZH       string `gorm:"type:text" json:"prompt_zh"`
+	PromptEN       string `gorm:"type:text" json:"prompt_en"`
+	PromptLanguage string `gorm:"size:16" json:"prompt_language"`
+	ModelName      string `gorm:"size:128;not null" json:"model_name"`
+	ModelVersion   string `gorm:"size:128;not null" json:"model_version"`
+	Ratio          string `gorm:"size:32" json:"ratio"`
+	Resolution     string `gorm:"size:32" json:"resolution"`
+	EnhancePrompt  string `gorm:"size:16;not null;default:Enabled" json:"enhance_prompt"`
+	StorageMode    string `gorm:"size:16;not null;default:Temporary" json:"storage_mode"`
+	Accent         string `gorm:"size:32;not null;default:amber" json:"accent"`
+	CoverURL       string `gorm:"size:2048" json:"cover_url"`
 }
 
 // Credential 保存全局 API 凭证的 AES-GCM 密文。

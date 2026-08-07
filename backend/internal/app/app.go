@@ -9,6 +9,7 @@ import (
 	"cnb.cool/txcloud/txstudio/backend/frontend"
 	"cnb.cool/txcloud/txstudio/backend/internal/handler"
 	"cnb.cool/txcloud/txstudio/backend/internal/model"
+	"cnb.cool/txcloud/txstudio/backend/internal/seed"
 	"cnb.cool/txcloud/txstudio/backend/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,9 @@ func NewApp(cfg *Config) (*App, error) {
 		return nil, err
 	}
 	if err := model.AutoMigrateAll(db); err != nil {
+		return nil, err
+	}
+	if err := seed.EnsureSystemImageTemplates(db); err != nil {
 		return nil, err
 	}
 	cryptoSvc, err := service.NewCryptoService(cfg.Crypto.AESKey)

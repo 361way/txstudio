@@ -48,12 +48,13 @@ function emptyTemplate() {
     };
 }
 
-function normalizeCustomTemplate(item) {
+function normalizeTemplate(item) {
+    const source = item.source || 'user';
     return {
         ...item,
-        id: `custom-${item.id}`,
+        id: `${source}-${item.id}`,
         database_id: item.id,
-        is_custom: true,
+        is_custom: source === 'user',
         accent_key: item.accent || 'amber',
         accent: ACCENTS[item.accent] || ACCENTS.amber,
     };
@@ -69,6 +70,12 @@ function safeCoverURL(value) {
     } catch {
         return '';
     }
+}
+
+function localizedPrompt(style, language) {
+    if (language === 'zh' && style.prompt_zh) return style.prompt_zh;
+    if (language === 'en' && style.prompt_en) return style.prompt_en;
+    return style.prompt || '';
 }
 
 function TemplateEditor({ initialValue, saving, error, onSave, onClose }) {
@@ -161,8 +168,8 @@ function TemplateEditor({ initialValue, saving, error, onSave, onClose }) {
     );
 }
 
-export default function ImageTemplateHub({ builtInStyles, onApply }) {
-    const [customTemplates, setCustomTemplates] = useState([]);
+export default function ImageTemplateHub({ language = 'zh', onApply }) {
+    const [templates, setTemplates] = useState([]);
     const [activeCategory, setActiveCategory] = useState('all');
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(true);
@@ -173,13 +180,14 @@ export default function ImageTemplateHub({ builtInStyles, onApply }) {
 
     const load = async () => {
         setLoading(true); setError('');
-        try { setCustomTemplates((await listImageTemplates()).map(normalizeCustomTemplate)); }
-        catch (nextError) { setError(nextError?.message || '读取自定义模板失败'); }
+        try { setTemplates((await listImageTemplates()).map(normalizeTemplate)); }
+        catch (nextError) { setError(nextError?.message || '读取图像模板失败'); }
         finally { setLoading(false); }
     };
     useEffect(() => { load(); }, []);
 
-    const styles = useMemo(() => [...builtInStyles, ...customTemplates], [builtInStyles, customTemplates]);
+    const customTemplates = useMemo(() => templates.filter((item) => item.is_custom), [templates]);
+    const styles = templates;
     const normalizedQuery = query.trim().toLowerCase();
     const visibleStyles = styles.filter((style) => {
         const matchesCategory = activeCategory === 'all'
@@ -239,14 +247,15 @@ export default function ImageTemplateHub({ builtInStyles, onApply }) {
                     {loading ? <div className="flex h-48 items-center justify-center"><Loader2 size={22} className="animate-spin text-[#b68112]" /></div> : visibleStyles.length ? (
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleStyles.map((style) => {
                             const coverURL = safeCoverURL(style.cover_url);
-                            return <article key={style.id} className="group relative min-h-[210px] overflow-hidden rounded-2xl border border-[#e9e5db] bg-white shadow-[0_3px_12px_rgba(45,37,17,0.035)] transition-all hover:-translate-y-0.5 hover:border-[#d9c991] hover:shadow-[0_15px_34px_rgba(57,49,24,0.11)]">
-                                <button type="button" onClick={() => onApply(style)} className="absolute inset-0 z-0 text-left" aria-label={t(`应用模板 ${style.name}`)} />
-                                <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${style.accent || ACCENTS.amber}`} />
-                                {coverURL ? <><img src={coverURL} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-25" /><div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/65" /></> : <div className={`absolute -right-8 -top-10 h-28 w-28 rounded-full bg-gradient-to-br opacity-15 blur-2xl ${style.accent || ACCENTS.amber}`} />}
-                                <div className="pointer-events-none relative flex min-h-[210px] flex-col p-5">
-                                    <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="text-[16px] font-semibold text-[#292722]">{style.name}</h2>{style.is_custom && <span className="rounded-full bg-[#f5ead0] px-2 py-0.5 text-[8.5px] font-semibold text-[#876417]">{t('自定义')}</span>}</div><p className="mt-1 text-[11.5px] font-medium text-[#aa8750]">{style.description}</p></div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f8efcf] text-[#a97710]"><ArrowUp size={15} className="rotate-45" /></span></div>
-                                    <p className="mt-4 line-clamp-3 text-[12px] leading-5 text-gray-400">{style.prompt}</p>
-                                    <div className="mt-auto flex items-end justify-between gap-3 pt-4"><div className="text-[9.5px] text-[#81765c]">{style.is_custom ? `${style.model_name} ${style.model_version} · ${style.ratio} · ${style.resolution || t('自动')}` : t('应用模版并开始创作')}</div>{style.is_custom && <div className="pointer-events-auto relative z-10 flex gap-1"><button type="button" onClick={() => { setEditorError(''); setEditorValue(style); }} title={t('编辑')} className="rounded-md p-1.5 text-gray-400 hover:bg-[#f5f2ea] hover:text-[#8d6816]"><Pencil size={13} /></button><button type="button" onClick={() => duplicate(style)} title={t('复制')} className="rounded-md p-1.5 text-gray-400 hover:bg-[#f5f2ea] hover:text-[#8d6816]"><Copy size={13} /></button><button type="button" onClick={() => remove(style)} title={t('删除')} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={13} /></button></div>}</div>
+                            const prompt = localizedPrompt(style, language);
+                            return <article key={style.id} className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#e9e5db] bg-[#f1eee6] shadow-[0_3px_12px_rgba(45,37,17,0.035)] transition-all hover:-translate-y-0.5 hover:border-[#d9c991] hover:shadow-[0_15px_34px_rgba(57,49,24,0.16)] focus-within:-translate-y-0.5 focus-within:border-[#d9c991]">
+                                {coverURL ? <img src={coverURL} alt={style.name} className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] group-focus-within:scale-[1.04]" /> : <div className={`absolute inset-0 bg-gradient-to-br ${style.accent || ACCENTS.amber}`}><div className="flex h-full items-center justify-center text-white/75"><ImageIcon size={38} /></div></div>}
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/65 to-black/20 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100" />
+                                <div className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 ${style.accent || ACCENTS.amber}`} />
+                                <div className="pointer-events-none absolute inset-0 flex flex-col justify-end p-5 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                                    <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="text-[16px] font-semibold">{style.name}</h2>{style.is_custom && <span className="rounded-full bg-white/20 px-2 py-0.5 text-[8.5px] font-semibold text-white">{t('自定义')}</span>}</div><p className="mt-1 text-[11.5px] font-medium text-white/70">{style.description}</p></div></div>
+                                    <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-white/85">{prompt}</p>
+                                    <div className="pointer-events-auto mt-4 flex items-center justify-between gap-3"><button type="button" onClick={() => onApply({ ...style, prompt })} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11.5px] font-semibold text-[#322a1e] shadow-sm transition hover:bg-[#f7e7b5]"><ArrowUp size={14} className="rotate-45" />{t('应用模版')}</button>{style.is_custom && <div className="flex gap-1"><button type="button" onClick={() => { setEditorError(''); setEditorValue(style); }} title={t('编辑')} className="rounded-md bg-white/15 p-1.5 text-white hover:bg-white/25"><Pencil size={13} /></button><button type="button" onClick={() => duplicate(style)} title={t('复制')} className="rounded-md bg-white/15 p-1.5 text-white hover:bg-white/25"><Copy size={13} /></button><button type="button" onClick={() => remove(style)} title={t('删除')} className="rounded-md bg-white/15 p-1.5 text-white hover:bg-red-400/70"><Trash2 size={13} /></button></div>}</div>
                                 </div>
                             </article>;
                         })}</div>

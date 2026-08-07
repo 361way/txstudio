@@ -61,6 +61,33 @@ export default function ImageTool({ onBack, template, embedded = false }) {
     const [results, setResults] = useState([]);
     const [error, setError] = useState('');
 
+    // 模版中心可在不卸载本组件的情况下切换模版；同步全部生成参数，避免沿用旧模版的提示词或模型。
+    useEffect(() => {
+        const nextModelName = VOD_IMAGE_MODEL_MATRIX[template?.model_name]
+            ? template.model_name
+            : VOD_DEFAULT_IMAGE_MODEL_NAME;
+        const availableVersions = VOD_IMAGE_MODEL_MATRIX[nextModelName] || [];
+        const nextModelVersion = availableVersions.includes(template?.model_version)
+            ? template.model_version
+            : (nextModelName === VOD_DEFAULT_IMAGE_MODEL_NAME && availableVersions.includes(VOD_DEFAULT_IMAGE_MODEL_VERSION)
+                ? VOD_DEFAULT_IMAGE_MODEL_VERSION
+                : availableVersions[0] || '');
+        const nextCapability = getVodImageModelCapability(nextModelName, nextModelVersion);
+        setRefImages(template?.reference_images || []);
+        setModelName(nextModelName);
+        setModelVersion(nextModelVersion);
+        setRatio(nextCapability.ratios.includes(template?.ratio) ? template.ratio : nextCapability.defaultRatio);
+        setResolution(nextCapability.resolutions.includes(template?.resolution) ? template.resolution : nextCapability.defaultResolution);
+        setEnhancePrompt(template?.enhance_prompt || 'Enabled');
+        if (template?.storage_mode) {
+            setStorageMode(template.storage_mode === 'Permanent' ? 'Permanent' : 'Temporary');
+        }
+        setPrompt(template?.prompt || '');
+        setResults([]);
+        setError('');
+        setStage('');
+    }, [template?.id, template?.prompt, template?.model_name, template?.model_version, template?.ratio, template?.resolution, template?.enhance_prompt, template?.storage_mode]);
+
     const versions = VOD_IMAGE_MODEL_MATRIX[modelName] || [];
     const modelCapability = getVodImageModelCapability(modelName, modelVersion);
 

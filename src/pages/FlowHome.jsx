@@ -19,7 +19,7 @@ import {
     Paperclip, Star, ArrowUp, ArrowLeft, Settings,
     Image as ImageIcon, Video, Layout, Sparkles, MousePointer2,
     History, Users, MessageSquare, Download, UploadCloud, Home, Search,
-    X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot,
+    X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot, Globe,
 } from 'lucide-react';
 import GlobalAPISettings from '../components/GlobalAPISettings';
 import {
@@ -33,7 +33,7 @@ import {
     runVodAigcPipeline,
 } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
-import i18n from '../i18n';
+import i18n, { LANGUAGE_STORAGE_KEY } from '../i18n';
 import ImageTool from './ImageTool';
 import ImageTemplateHub from './ImageTemplateHub';
 import VideoTool from './VideoTool';
@@ -46,12 +46,7 @@ import AgentStudio from './AgentStudio';
 import GenerationHistory from './GenerationHistory';
 import ProjectList from './ProjectList';
 import CanvasApp from '../App.jsx';
-import {
-    HOME_QUICK_INSPIRATIONS,
-    IMAGE_INSPIRATION_CATEGORIES,
-    IMAGE_INSPIRATIONS,
-    IMAGE_TEMPLATE_STYLES,
-} from '../data/imageInspiration';
+import { HOME_QUICK_INSPIRATIONS } from '../data/imageInspiration';
 
 const t = (s) => (i18n.t ? i18n.t(s) : s);
 
@@ -233,88 +228,6 @@ function ScenarioCapabilityHub({ activeCategory, onCategoryChange, capabilities,
     );
 }
 
-function LegacyImageTemplateHub({ activeCategory, query, styles, onCategoryChange, onQueryChange, onApply }) {
-    return (
-        <div className="mx-auto w-full max-w-[1240px] px-6 py-10 lg:px-10">
-            <section aria-labelledby="image-template-title">
-                <div className="flex flex-col gap-5 border-b border-[#efede7] pb-7 lg:flex-row lg:items-end lg:justify-between">
-                    <div>
-                        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#b68112]">
-                            <span className="h-px w-7 bg-[#e2b849]" />
-                            Image Templates
-                        </div>
-                        <h1 id="image-template-title" className="text-[28px] font-semibold tracking-[-0.02em] text-[#1f2329]">{t('图像模版')}</h1>
-                        <p className="mt-2 text-[13px] text-gray-400">{t('选择灵感样式，自动带入对应提示词后继续创作。')}</p>
-                    </div>
-                    <label className="flex w-full items-center gap-2 rounded-xl border border-[#e8e5dd] bg-[#fafaf8] px-3 py-2.5 text-gray-400 transition focus-within:border-[#d9b354] focus-within:bg-white lg:w-[300px]">
-                        <Search size={15} />
-                        <input
-                            value={query}
-                            onChange={(event) => onQueryChange(event.target.value)}
-                            placeholder={t('搜索模版、风格或提示词')}
-                            className="w-full bg-transparent text-[12px] text-[#292722] outline-none placeholder:text-gray-400"
-                        />
-                    </label>
-                </div>
-
-                <div className="mt-5 flex gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label={t('图像模版分类')}>
-                    {IMAGE_INSPIRATION_CATEGORIES.map((category) => {
-                        const active = activeCategory === category.id;
-                        return (
-                            <button
-                                key={category.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                onClick={() => onCategoryChange(category.id)}
-                                className={`whitespace-nowrap rounded-full px-3.5 py-2 text-[12px] transition ${active
-                                    ? 'bg-[#f6e7b4] font-medium text-[#604914] shadow-[0_3px_10px_rgba(197,139,21,0.12)]'
-                                    : 'text-gray-500 hover:bg-[#f5f4f1] hover:text-[#292722]'
-                                    }`}
-                            >
-                                {t(category.label)}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                <div className="mt-7">
-                    {styles.length ? (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                            {styles.map((style) => (
-                                <button
-                                    key={style.id}
-                                    type="button"
-                                    onClick={() => onApply(style)}
-                                    className="group relative flex min-h-[190px] overflow-hidden rounded-2xl border border-[#e9e5db] bg-white p-5 text-left shadow-[0_3px_12px_rgba(45,37,17,0.035)] transition-all hover:-translate-y-0.5 hover:border-[#d9c991] hover:shadow-[0_15px_34px_rgba(57,49,24,0.11)] focus:outline-none focus:ring-2 focus:ring-[#e4ae29] focus:ring-offset-2"
-                                >
-                                    <span className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${style.accent}`} />
-                                    <span className={`absolute -right-8 -top-10 h-28 w-28 rounded-full bg-gradient-to-br opacity-15 blur-2xl ${style.accent}`} />
-                                    <span className="relative flex min-w-0 flex-1 flex-col">
-                                        <span className="flex items-start justify-between gap-3">
-                                            <span>
-                                                <span className="block text-[16px] font-semibold text-[#292722]">{t(style.name)}</span>
-                                                <span className="mt-1 block text-[11.5px] font-medium text-[#aa8750]">{t(style.description)}</span>
-                                            </span>
-                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f8efcf] text-[#a97710] transition group-hover:bg-[#edc663] group-hover:text-[#4e3706]">
-                                                <ArrowUp size={15} className="rotate-45" />
-                                            </span>
-                                        </span>
-                                        <span className="mt-5 line-clamp-4 text-[12px] leading-5 text-gray-400">{t(style.prompt)}</span>
-                                        <span className="mt-auto pt-5 text-[11px] font-medium text-[#81765c]">{t('应用模版并开始创作')}</span>
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="rounded-2xl border border-dashed border-[#e6e1d5] py-16 text-center text-[13px] text-gray-400">{t('没有找到匹配的图像模版')}</div>
-                    )}
-                </div>
-            </section>
-        </div>
-    );
-}
-
 export default function FlowHome() {
     const [activeMode, setActiveMode] = useState('home');
     const [text, setText] = useState('');
@@ -358,10 +271,10 @@ export default function FlowHome() {
     const homeReferenceInputRef = useRef(null);
     const [modelOpen, setModelOpen] = useState(false);
     const [quickInspirationOpen, setQuickInspirationOpen] = useState(false);
-    const [styleCategory, setStyleCategory] = useState('all');
-    const [styleQuery, setStyleQuery] = useState('');
     const [imageTemplateMode, setImageTemplateMode] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [language, setLanguage] = useState(() => i18n.resolvedLanguage === 'en' || i18n.language === 'en' ? 'en' : 'zh');
+    const [languageOpen, setLanguageOpen] = useState(false);
     const [capabilityCategory, setCapabilityCategory] = useState('commerce');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [canvasToolsOpen, setCanvasToolsOpen] = useState(true);
@@ -405,13 +318,18 @@ export default function FlowHome() {
     const visibleCapabilities = capabilityCategory === 'all'
         ? IMAGE_CAPABILITIES
         : IMAGE_CAPABILITIES.filter((item) => item.category === capabilityCategory);
-    const normalizedStyleQuery = styleQuery.trim().toLowerCase();
-    const visibleStyles = IMAGE_INSPIRATIONS.filter((style) => {
-        const matchesCategory = styleCategory === 'all' || style.category === styleCategory;
-        const matchesQuery = !normalizedStyleQuery || [style.name, style.description, style.prompt]
-            .some((value) => value.toLowerCase().includes(normalizedStyleQuery));
-        return matchesCategory && matchesQuery;
-    });
+    const changeInterfaceLanguage = async (nextLanguage) => {
+        if (nextLanguage !== 'zh' && nextLanguage !== 'en') return;
+        await i18n.changeLanguage(nextLanguage);
+        try { localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage); } catch { /* 忽略受限环境的存储失败。 */ }
+        document.documentElement.lang = nextLanguage === 'zh' ? 'zh-CN' : 'en';
+        setLanguage(nextLanguage);
+        setLanguageOpen(false);
+    };
+
+    useEffect(() => {
+        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+    }, [language]);
 
     useEffect(() => {
         const openGlobalSettings = () => setSettingsOpen(true);
@@ -472,10 +390,16 @@ export default function FlowHome() {
     const goHome = () => { setActiveMode('home'); setCurrentProject(null); };
 
     const openImageTemplate = (style) => {
+        // 内置案例也可以携带指定模型；仅在模型不存在时回退到当前首页选择。
+        const templateModelName = VOD_IMAGE_MODEL_MATRIX[style.model_name] ? style.model_name : imageModel;
+        const templateVersions = VOD_IMAGE_MODEL_MATRIX[templateModelName] || [];
+        const templateModelVersion = templateVersions.includes(style.model_version)
+            ? style.model_version
+            : (templateModelName === imageModel ? imageModelVersion : defaultImageModelVersion(templateModelName));
         setAppliedTemplate({
             type: 'image',
-            model_name: style.is_custom ? style.model_name : imageModel,
-            model_version: style.is_custom ? style.model_version : imageModelVersion,
+            model_name: templateModelName,
+            model_version: templateModelVersion,
             prompt: style.prompt,
             source_prompt: '',
             ratio: style.is_custom ? style.ratio : homeAspectRatio,
@@ -837,7 +761,27 @@ export default function FlowHome() {
 
             {/* ============ 主区域 ============ */}
             <main className="relative flex min-w-0 flex-1 flex-col">
-                <div className="absolute right-5 top-4 z-50">
+                <div className="absolute right-5 top-4 z-50 flex items-start gap-2">
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setLanguageOpen((open) => !open)}
+                            aria-label={t('切换语言')}
+                            aria-haspopup="menu"
+                            aria-expanded={languageOpen}
+                            className="flex items-center gap-1.5 rounded-xl border border-[#e4e4e7] bg-white/95 px-3 py-2 text-[13px] font-medium text-[#3f3f46] shadow-sm backdrop-blur hover:bg-[#f4f4f5]"
+                        >
+                            <Globe size={15} />
+                            {language === 'zh' ? '中文' : 'EN'}
+                            <ChevronDown size={13} className={languageOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                        </button>
+                        {languageOpen && (
+                            <div role="menu" className="absolute right-0 mt-2 w-36 overflow-hidden rounded-xl border border-[#e4e4e7] bg-white p-1 shadow-lg">
+                                <button type="button" role="menuitemradio" aria-checked={language === 'zh'} onClick={() => changeInterfaceLanguage('zh')} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12px] ${language === 'zh' ? 'bg-[#f6e7b4] text-[#604914]' : 'text-[#3f3f46] hover:bg-[#f4f4f5]'}`}><span>中文</span><span className="text-[10px]">ZH</span></button>
+                                <button type="button" role="menuitemradio" aria-checked={language === 'en'} onClick={() => changeInterfaceLanguage('en')} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12px] ${language === 'en' ? 'bg-[#f6e7b4] text-[#604914]' : 'text-[#3f3f46] hover:bg-[#f4f4f5]'}`}><span>English</span><span className="text-[10px]">EN</span></button>
+                            </div>
+                        )}
+                    </div>
                     <button
                         type="button"
                         onClick={() => setSettingsOpen(true)}
@@ -1296,7 +1240,7 @@ export default function FlowHome() {
                                 )}
                                 {activeMode === 'image' && imageTemplateMode && (
                                     <ImageTemplateHub
-                                        builtInStyles={IMAGE_TEMPLATE_STYLES}
+                                        language={language}
                                         onApply={openImageTemplate}
                                     />
                                 )}

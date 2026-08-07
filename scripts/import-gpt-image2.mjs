@@ -1,6 +1,6 @@
-// 将 awesome-gpt-image-2 仓库的案例（提示词 + 图片 + 分类）导入为图像模版。
+// 将 awesome-gpt-image-2 仓库的案例（提示词 + 图片 + 分类）导入数据库启动种子。
 // 用法：node scripts/import-gpt-image2.mjs <repoDir>
-//  - 生成 src/data/gptImage2Cases.js（模版数据）
+//  - 更新 backend/internal/seed/system_image_templates.json 中的上游案例元数据
 //  - 拷贝案例图片到 backend/data/cache/cases/（经 /file/cases/... 访问）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,7 @@ const ROOT = path.resolve(__dirname, '..');
 const repoDir = process.argv[2] || '/tmp/gptimg2';
 const casesFile = path.join(repoDir, 'data', 'cases.json');
 const imagesDir = path.join(repoDir, 'data', 'images');
-const outModule = path.join(ROOT, 'src', 'data', 'gptImage2Cases.js');
+const outSeed = path.join(ROOT, 'backend', 'internal', 'seed', 'system_image_templates.json');
 const outImages = path.join(ROOT, 'backend', 'data', 'cache', 'cases');
 
 // 英文分类 -> 目标分类（近似名称合并到现有分类，其余新建）
@@ -33,16 +33,9 @@ const CATEGORY_MAP = {
 
 // 每个目标分类的主题渐变（作为无图/加载失败时的兜底视觉）。
 const ACCENT_MAP = {
-    portrait: 'from-slate-800 via-slate-600 to-amber-300',
-    brand: 'from-zinc-950 via-zinc-700 to-amber-400',
-    illustration: 'from-red-500 via-orange-400 to-yellow-200',
-    poster: 'from-cyan-400 via-blue-500 to-violet-600',
-    infographic: 'from-emerald-700 via-teal-400 to-cyan-200',
-    ui: 'from-indigo-700 via-violet-500 to-sky-300',
-    architecture: 'from-stone-700 via-stone-400 to-amber-200',
-    history: 'from-amber-800 via-yellow-600 to-orange-300',
-    documents: 'from-slate-600 via-slate-400 to-stone-200',
-    other: 'from-fuchsia-600 via-pink-400 to-rose-200',
+    portrait: 'slate', brand: 'amber', illustration: 'red', poster: 'cyan',
+    infographic: 'emerald', ui: 'indigo', architecture: 'slate', history: 'amber',
+    documents: 'slate', other: 'violet',
 };
 
 // 将 {argument name="X" default="Y"} 占位符替换为默认值，使提示词可直接使用。
@@ -51,6 +44,16 @@ function cleanPrompt(text) {
         .replace(/\{argument\s+name="([^"]*)"(?:\s+default="([^"]*)")?\s*\}/g, (m, name, def) => (def ?? name ?? '').trim())
         .replace(/\s+\n/g, '\n')
         .trim();
+}
+
+// 上游案例每条只提供一种原始语言的 prompt。保留其语言标识，供前端按系统语言优先选用；
+// 不伪造机器翻译，缺少目标语言时由前端安全回退到原始提示词。
+function detectPromptLanguage(prompt) {
+    const chineseCount = (prompt.match(/[\u3400-\u9fff]/g) || []).length;
+    const latinCount = (prompt.match(/[A-Za-z]/g) || []).length;
+    if (chineseCount >= 8 && chineseCount >= latinCount * 0.08) return 'zh';
+    if (latinCount >= 16 && chineseCount < 8) return 'en';
+    return 'other';
 }
 
 const raw = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
@@ -72,24 +75,41 @@ for (const item of cases) {
         }
     }
     const styles = Array.isArray(item.styles) ? item.styles : [];
+    const prompt = cleanPrompt(item.prompt);
+    const promptLanguage = detectPromptLanguage(prompt);
     templates.push({
-        id: `gpt2-case-${item.id}`,
+        source_key: `gpt2-case-${item.id}`,
+        source_name: 'awesome-gpt-image-2',
+        source_url: 'https://github.com/freestylefly/awesome-gpt-image-2',
         category,
         name: item.title || `案例 ${item.id}`,
         description: styles.slice(0, 3).join(' · ') || 'GPT 图像案例',
         accent: ACCENT_MAP[category] || ACCENT_MAP.other,
-        prompt: cleanPrompt(item.prompt),
+        // awesome-gpt-image-2 案例统一以 OG 的高质量图像模型执行。
+        model_name: 'OG',
+        model_version: 'image2_high',
+        prompt,
+        prompt_language: promptLanguage,
+        ...(promptLanguage === 'zh' ? { prompt_zh: prompt } : {}),
+        ...(promptLanguage === 'en' ? { prompt_en: prompt } : {}),
         cover_url: cover,
     });
 }
 
-const banner = '// 由 scripts/import-gpt-image2.mjs 从 awesome-gpt-image-2 自动生成，请勿手改。\n'
-    + '// 案例图片经本地 /file/cases/ 访问；prompt 已清理 {argument} 占位符。\n';
-const body = `${banner}export const GPT_IMAGE2_CASES = ${JSON.stringify(templates, null, 2)};\n`;
-fs.writeFileSync(outModule, body, 'utf8');
+const existingSeed = fs.existsSync(outSeed) ? JSON.parse(fs.readFileSync(outSeed, 'utf8')) : [];
+const preservedTemplates = existingSeed.filter((item) => item.source_name !== 'awesome-gpt-image-2');
+const normalizedCases = templates.map((item, index) => ({
+    ...item,
+    sort_order: preservedTemplates.length + index,
+    enhance_prompt: 'Enabled',
+    storage_mode: 'Temporary',
+    ratio: '',
+    resolution: '',
+}));
+fs.writeFileSync(outSeed, `${JSON.stringify([...preservedTemplates, ...normalizedCases], null, 2)}\n`, 'utf8');
 
 console.log(`生成模版 ${templates.length} 条，拷贝图片 ${copied} 张`);
-console.log(`数据模块: ${path.relative(ROOT, outModule)} (${(fs.statSync(outModule).size / 1024).toFixed(0)}KB)`);
+console.log(`数据库种子: ${path.relative(ROOT, outSeed)} (${(fs.statSync(outSeed).size / 1024).toFixed(0)}KB)`);
 const byCat = {};
 for (const t of templates) byCat[t.category] = (byCat[t.category] || 0) + 1;
 console.log('分类分布:', JSON.stringify(byCat));
