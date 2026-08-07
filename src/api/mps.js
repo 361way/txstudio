@@ -106,31 +106,46 @@ export function createForegroundExtractionTask(options) {
     return submitCosImageTask(payload, options.outputRegion, '创建前景提取任务失败');
 }
 
-// 换模特体型枚举（沙漏型为默认）。
+// 换模特编排 ID（MPS ProcessImage ScheduleId，来自控制台 Dry Run）。
+export const CHANGE_MODEL_SCHEDULE_ID = 30110;
+
+// 换模特体型枚举（沙漏型为默认）。API 取值为小写（Dry Run 实测默认值为 "hourglass"）。
 export const CHANGE_MODEL_BODY_TYPES = [
     { value: 'hourglass', label: '沙漏型', default: true },
-    { value: 'H', label: 'H 型' },
-    { value: 'plus', label: '大码型' },
-    { value: 'apple', label: '苹果型' },
-    { value: 'pear', label: '梨型' },
+    { value: 'rectangle', label: 'H 型' },
+    { value: 'plus-size', label: '大码型' },
+    { value: 'apple-shape', label: '苹果型' },
+    { value: 'pear-shape', label: '梨型' },
 ];
 
 // 换模特：保留服装，将参考模特替换为目标体型的虚拟模特。
-// 结构沿用 MPS ProcessImage（InputInfo=模特图，AddOnParameter.ImageSet=服装图）。
-// 注意：AiChangeModelConfig 的具体字段名（BodyType/Ratio）需与控制台 Dry Run 核对。
-export function buildChangeModelPayload({ modelImageUrl, garmentImageUrl, bodyType, ratio, outputBucket, outputRegion }) {
+// 结构与控制台 Dry Run 完全一致：ScheduleId 编排 + StdExtInfo(JSON 字符串) 内的
+// ChangeGarmentModelConfig；模特图为 InputInfo(COS)，服装图经 AddOnParameter.ImageSet(COS)。
+export function buildChangeModelPayload({ modelInput, garmentInput, bodyShape, precisionScale, outputBucket, outputRegion }) {
     return {
-        InputInfo: { Type: 'URL', UrlInputInfo: { Url: modelImageUrl } },
-        OutputStorage: { Type: 'COS', CosOutputStorage: { Bucket: outputBucket, Region: outputRegion } },
-        OutputDir: '/mps-saas/output/change-model/',
-        ImageTask: {
-            AiChangeModelConfig: {
-                BodyType: bodyType,
-                Ratio: ratio,
-            },
+        InputInfo: {
+            Type: 'COS',
+            CosInputInfo: { Bucket: modelInput.bucket, Region: modelInput.region, Object: modelInput.object },
         },
+        OutputStorage: {
+            Type: 'COS',
+            CosOutputStorage: { Bucket: outputBucket, Region: outputRegion },
+        },
+        OutputDir: '/mps-saas/output/changemodel/',
+        ScheduleId: CHANGE_MODEL_SCHEDULE_ID,
+        StdExtInfo: JSON.stringify({
+            ChangeGarmentModelConfig: { BodyShape: bodyShape, PrecisionScale: precisionScale },
+        }),
         AddOnParameter: {
-            ImageSet: [{ Image: { Type: 'URL', UrlInputInfo: { Url: garmentImageUrl } } }],
+            ImageSet: [
+                {
+                    Type: 'garment',
+                    Image: {
+                        Type: 'COS',
+                        CosInputInfo: { Bucket: garmentInput.bucket, Region: garmentInput.region, Object: garmentInput.object },
+                    },
+                },
+            ],
         },
     };
 }

@@ -3,15 +3,15 @@ import {
     Check, ChevronDown, Clipboard, UploadCloud, Loader2, RotateCcw, Sparkles, UserRound, X,
 } from 'lucide-react';
 import { listCredentials } from '../api/credential';
-import { buildChangeModelPayload, createChangeModelTask, pollImageTask, CHANGE_MODEL_BODY_TYPES } from '../api/mps';
+import {
+    buildChangeModelPayload, createChangeModelTask, pollImageTask,
+    uploadMpsImage, uploadMpsImageFromURL, CHANGE_MODEL_BODY_TYPES,
+} from '../api/mps';
 import { createGenerationTracker } from '../api/generationHistory';
-import { uploadImageToVod } from '../vodAdapter';
 import ImageComparisonPanel from '../components/ImageComparisonPanel';
 
 const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const LOCAL_SERVICE_URL = import.meta.env.DEV ? 'http://127.0.0.1:8080' : window.location.origin;
-const UPLOAD_CONTEXT = { credentials: {}, useProxy: true, localServerUrl: LOCAL_SERVICE_URL };
 
 function validateFile(file) {
     if (!ACCEPTED_TYPES.has(file.type)) throw new Error('仅支持 JPG、PNG、WEBP 图片');
@@ -125,24 +125,29 @@ export default function ChangeModelTool() {
         }).catch(() => {});
     }, []);
 
-    const modelUrl = modelImages[0]?.kind === 'url' ? modelImages[0].url : '<本地图片上传后 URL>';
-    const garmentUrl = garmentImages[0]?.kind === 'url' ? garmentImages[0].url : '<本地图片上传后 URL>';
+    const modelInput = modelImages[0]
+        ? { bucket: storage.bucket, region: storage.region, object: modelImages[0].kind === 'url' ? '<URL 转存后的 COS 对象>' : '<本地上传后的 COS 对象>' }
+        : { bucket: storage.bucket, region: storage.region, object: '/mps-saas/input/<模特图>' };
+    const garmentInput = garmentImages[0]
+        ? { bucket: storage.bucket, region: storage.region, object: garmentImages[0].kind === 'url' ? '<URL 转存后的 COS 对象>' : '<本地上传后的 COS 对象>' }
+        : { bucket: storage.bucket, region: storage.region, object: '/mps-saas/input/<服装图>' };
     const dryRunPayload = useMemo(() => buildChangeModelPayload({
-        modelImageUrl: modelUrl, garmentImageUrl: garmentUrl, bodyType, ratio,
+        modelInput, garmentInput, bodyShape: bodyType, precisionScale: ratio,
         outputBucket: storage.bucket || '<请在 API 设置中配置>', outputRegion: storage.region,
-    }), [modelUrl, garmentUrl, bodyType, ratio, storage]);
+    }), [modelInput, garmentInput, bodyType, ratio, storage]);
 
     const reset = () => {
         [...modelImages, ...garmentImages].forEach((item) => { if (item.kind === 'file') URL.revokeObjectURL(item.preview); });
         setModelImages([]); setGarmentImages([]); setResults([]); setTaskId(''); setError(''); setStage('');
     };
 
-    const resolveUrl = async (item, label) => {
-        if (item.kind === 'url') return validatePublicUrl(item.url);
-        setStage(`正在上传${label}…`);
-        const uploaded = await uploadImageToVod(item.file, UPLOAD_CONTEXT);
-        if (!uploaded.mediaUrl) throw new Error(`${label}上传成功，但未返回公网 URL`);
-        return uploaded.mediaUrl;
+    const resolveInput = async (item, label) => {
+        setStage(`正在上传${label}到 COS…`);
+        const input = item.kind === 'url'
+            ? await uploadMpsImageFromURL(item.url)
+            : await uploadMpsImage(item.file);
+        if (!input?.object) throw new Error(`${label}上传成功，但未返回 COS 对象`);
+        return input;
     };
 
     const submit = async () => {
@@ -161,12 +166,12 @@ export default function ChangeModelTool() {
         });
         try {
             await tracker?.stage('upload_start', { progress: 8, message: '正在上传模特图与服装图' });
-            const modelImageUrl = await resolveUrl(modelImages[0], '模特图');
-            const garmentImageUrl = await resolveUrl(garmentImages[0], '服装图');
+            const modelInput = await resolveInput(modelImages[0], '模特图');
+            const garmentInput = await resolveInput(garmentImages[0], '服装图');
             await tracker?.stage('upload_done', { progress: 25, message: '图片上传完成' });
             setStage('正在提交换模特任务…');
             const created = await createChangeModelTask({
-                modelImageUrl, garmentImageUrl, bodyType, ratio,
+                modelInput, garmentInput, bodyShape: bodyType, precisionScale: ratio,
                 outputBucket: storage.bucket, outputRegion: storage.region,
             });
             setTaskId(created.taskId);
