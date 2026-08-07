@@ -50,6 +50,7 @@ import {
     HOME_QUICK_INSPIRATIONS,
     IMAGE_INSPIRATION_CATEGORIES,
     IMAGE_INSPIRATIONS,
+    IMAGE_TEMPLATE_STYLES,
 } from '../data/imageInspiration';
 
 const t = (s) => (i18n.t ? i18n.t(s) : s);
@@ -1295,7 +1296,7 @@ export default function FlowHome() {
                                 )}
                                 {activeMode === 'image' && imageTemplateMode && (
                                     <ImageTemplateHub
-                                        builtInStyles={IMAGE_INSPIRATIONS}
+                                        builtInStyles={IMAGE_TEMPLATE_STYLES}
                                         onApply={openImageTemplate}
                                     />
                                 )}

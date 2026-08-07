@@ -10,7 +10,7 @@ import {
     VOD_DEFAULT_IMAGE_MODEL_NAME, VOD_DEFAULT_IMAGE_MODEL_VERSION, VOD_IMAGE_MODEL_MATRIX,
 } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
-import { IMAGE_INSPIRATION_CATEGORIES } from '../data/imageInspiration';
+import { IMAGE_TEMPLATE_CATEGORIES } from '../data/imageInspiration';
 import i18n from '../i18n';
 
 const t = (value) => (i18n.t ? i18n.t(value) : value);
@@ -26,8 +26,8 @@ const ACCENTS = {
     indigo: 'from-indigo-950 via-indigo-600 to-sky-200',
 };
 const CUSTOM_CATEGORY = { id: 'custom', label: '我的模板' };
-const CATEGORIES = [...IMAGE_INSPIRATION_CATEGORIES, CUSTOM_CATEGORY];
-const EDITABLE_CATEGORIES = IMAGE_INSPIRATION_CATEGORIES.filter((item) => item.id !== 'all');
+const CATEGORIES = [...IMAGE_TEMPLATE_CATEGORIES, CUSTOM_CATEGORY];
+const EDITABLE_CATEGORIES = IMAGE_TEMPLATE_CATEGORIES.filter((item) => item.id !== 'all');
 
 function defaultModelVersion(modelName) {
     const versions = VOD_IMAGE_MODEL_MATRIX[modelName] || [];
@@ -244,8 +244,8 @@ export default function ImageTemplateHub({ builtInStyles, onApply }) {
                                 <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${style.accent || ACCENTS.amber}`} />
                                 {coverURL ? <><img src={coverURL} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-25" /><div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/65" /></> : <div className={`absolute -right-8 -top-10 h-28 w-28 rounded-full bg-gradient-to-br opacity-15 blur-2xl ${style.accent || ACCENTS.amber}`} />}
                                 <div className="pointer-events-none relative flex min-h-[210px] flex-col p-5">
-                                    <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="text-[16px] font-semibold text-[#292722]">{t(style.name)}</h2>{style.is_custom && <span className="rounded-full bg-[#f5ead0] px-2 py-0.5 text-[8.5px] font-semibold text-[#876417]">{t('自定义')}</span>}</div><p className="mt-1 text-[11.5px] font-medium text-[#aa8750]">{t(style.description)}</p></div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f8efcf] text-[#a97710]"><ArrowUp size={15} className="rotate-45" /></span></div>
-                                    <p className="mt-4 line-clamp-3 text-[12px] leading-5 text-gray-400">{t(style.prompt)}</p>
+                                    <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h2 className="text-[16px] font-semibold text-[#292722]">{style.name}</h2>{style.is_custom && <span className="rounded-full bg-[#f5ead0] px-2 py-0.5 text-[8.5px] font-semibold text-[#876417]">{t('自定义')}</span>}</div><p className="mt-1 text-[11.5px] font-medium text-[#aa8750]">{style.description}</p></div><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f8efcf] text-[#a97710]"><ArrowUp size={15} className="rotate-45" /></span></div>
+                                    <p className="mt-4 line-clamp-3 text-[12px] leading-5 text-gray-400">{style.prompt}</p>
                                     <div className="mt-auto flex items-end justify-between gap-3 pt-4"><div className="text-[9.5px] text-[#81765c]">{style.is_custom ? `${style.model_name} ${style.model_version} · ${style.ratio} · ${style.resolution || t('自动')}` : t('应用模版并开始创作')}</div>{style.is_custom && <div className="pointer-events-auto relative z-10 flex gap-1"><button type="button" onClick={() => { setEditorError(''); setEditorValue(style); }} title={t('编辑')} className="rounded-md p-1.5 text-gray-400 hover:bg-[#f5f2ea] hover:text-[#8d6816]"><Pencil size={13} /></button><button type="button" onClick={() => duplicate(style)} title={t('复制')} className="rounded-md p-1.5 text-gray-400 hover:bg-[#f5f2ea] hover:text-[#8d6816]"><Copy size={13} /></button><button type="button" onClick={() => remove(style)} title={t('删除')} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={13} /></button></div>}</div>
                                 </div>
                             </article>;

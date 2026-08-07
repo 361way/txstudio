@@ -1,3 +1,5 @@
+import { GPT_IMAGE2_CASES } from './gptImage2Cases';
+
 export const IMAGE_INSPIRATION_CATEGORIES = [
     { id: 'all', label: '全部' },
     { id: 'portrait', label: '人像写真' },
@@ -5,6 +7,19 @@ export const IMAGE_INSPIRATION_CATEGORIES = [
     { id: 'illustration', label: '插画叙事' },
     { id: 'craft', label: '创意质感' },
     { id: 'festival', label: '节日海报' },
+];
+
+// 图像模版中心使用的完整分类（首页预览仍沿用上面的精简分类）。
+// 新增分类来自 awesome-gpt-image-2 案例库；近似分类已合并到 portrait/brand/illustration。
+export const IMAGE_TEMPLATE_CATEGORIES = [
+    ...IMAGE_INSPIRATION_CATEGORIES,
+    { id: 'poster', label: '海报设计' },
+    { id: 'infographic', label: '图表信息' },
+    { id: 'ui', label: '界面设计' },
+    { id: 'architecture', label: '建筑空间' },
+    { id: 'history', label: '历史古典' },
+    { id: 'documents', label: '文档出版' },
+    { id: 'other', label: '其他创意' },
 ];
 
 // 图像模版灵感库：选中后将 prompt 作为风格补充词带入图像创作。
@@ -218,3 +233,6 @@ export const HOME_QUICK_INSPIRATIONS = [
 export function buildStyledImagePrompt(basePrompt, inspiration) {
     return [basePrompt?.trim(), inspiration?.prompt?.trim()].filter(Boolean).join('\n\n');
 }
+
+// 图像模版中心的完整模版集 = 内置灵感 + 导入的 awesome-gpt-image-2 案例。
+export const IMAGE_TEMPLATE_STYLES = [...IMAGE_INSPIRATIONS, ...GPT_IMAGE2_CASES];
