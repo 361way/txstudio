@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+training/
+vodstudio-cache/
+docs/
+cloudbaserc.json
+
+# Sensitive SSH, certificate, signing, and private key files
+id_rsa*
+id_ed25519*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+*.csr
+*.pub
+.ssh/
+sshpush/
+
+# Environment, credentials, and local secrets
+.env
+.env.*
+*.local
+*.secret
+*.secrets
+*.token
+*credential*.json
+service-account*.json
+/backend/config.yaml
+
+
+# Local saved runtime configs / exported browser configs
+localStorage*.json
+
+# IDE / system files
+.DS_Store
+.vscode/
+.idea/
+.codebuddy/
+
+# Local SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
+backend/data/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local source backups
+src_backup_*/
+
+# Compiled binaries
+proxy-server-linux
+vodstudio-server
+release/
+
+# Keep production artifact checked in intentionally
+!dist/
+!dist/index.html
