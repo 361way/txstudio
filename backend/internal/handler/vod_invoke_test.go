@@ -1,43 +1,32 @@
 package handler
 
-import (
-	"encoding/json"
-	"testing"
-)
+import "testing"
 
-func TestParsePositiveUint64(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   interface{}
-		want    uint64
-		wantErr bool
-	}{
-		{name: "string", input: "1500046368", want: 1500046368},
-		{name: "json number", input: json.Number("1500046368"), want: 1500046368},
-		{name: "float64", input: float64(1500046368), want: 1500046368},
-		{name: "uint64", input: uint64(1500046368), want: 1500046368},
-		{name: "empty", input: "", wantErr: true},
-		{name: "zero", input: 0, wantErr: true},
-		{name: "negative", input: -1, wantErr: true},
-		{name: "decimal", input: 1.5, wantErr: true},
-		{name: "invalid string", input: "not-a-number", wantErr: true},
+func TestNormalizeAigcStorageModeDefaultsToPermanent(t *testing.T) {
+	payload := map[string]interface{}{}
+	if err := normalizeAigcStorageMode("CreateAigcImageTask", payload); err != nil {
+		t.Fatal(err)
 	}
+	config, ok := payload["OutputConfig"].(map[string]interface{})
+	if !ok || config["StorageMode"] != "Permanent" {
+		t.Fatalf("unexpected default output config: %#v", payload)
+	}
+}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := parsePositiveUint64(test.input)
-			if test.wantErr {
-				if err == nil {
-					t.Fatalf("parsePositiveUint64(%v) expected error", test.input)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parsePositiveUint64(%v) returned error: %v", test.input, err)
-			}
-			if got != test.want {
-				t.Fatalf("parsePositiveUint64(%v) = %d, want %d", test.input, got, test.want)
-			}
-		})
+func TestNormalizeAigcStorageModePreservesTemporary(t *testing.T) {
+	payload := map[string]interface{}{"OutputConfig": map[string]interface{}{"StorageMode": "Temporary"}}
+	if err := normalizeAigcStorageMode("CreateAigcVideoTask", payload); err != nil {
+		t.Fatal(err)
+	}
+	config := payload["OutputConfig"].(map[string]interface{})
+	if config["StorageMode"] != "Temporary" {
+		t.Fatalf("temporary mode was changed: %#v", config)
+	}
+}
+
+func TestNormalizeAigcStorageModeRejectsInvalidValue(t *testing.T) {
+	payload := map[string]interface{}{"OutputConfig": map[string]interface{}{"StorageMode": "Archive"}}
+	if err := normalizeAigcStorageMode("CreateAigcImageTask", payload); err == nil {
+		t.Fatal("expected invalid storage mode to be rejected")
 	}
 }

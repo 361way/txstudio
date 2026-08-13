@@ -56,7 +56,7 @@ type GenerationJob struct {
 	ModelName    string     `gorm:"size:128" json:"model_name"`
 	ModelVersion string     `gorm:"size:128" json:"model_version"`
 	Parameters   string     `gorm:"type:text" json:"parameters"`
-	StorageMode  string     `gorm:"size:32" json:"storage_mode"`
+	StorageMode  string     `gorm:"size:32;not null;default:Permanent" json:"storage_mode"`
 	ErrorCode    string     `gorm:"size:128" json:"error_code"`
 	ErrorMessage string     `gorm:"type:text" json:"error_message"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
@@ -74,7 +74,7 @@ type GenerationAsset struct {
 	CloudURL        string     `gorm:"size:4096" json:"cloud_url"`
 	LocalPath       string     `gorm:"size:2048" json:"local_path"`
 	StorageProvider string     `gorm:"size:32" json:"storage_provider"`
-	StorageMode     string     `gorm:"size:32" json:"storage_mode"`
+	StorageMode     string     `gorm:"size:32;not null;default:Permanent" json:"storage_mode"`
 	MimeType        string     `gorm:"size:128" json:"mime_type"`
 	FileSize        int64      `json:"file_size"`
 	Width           int        `json:"width"`
@@ -115,7 +115,7 @@ type ImageTemplate struct {
 	Ratio          string `gorm:"size:32" json:"ratio"`
 	Resolution     string `gorm:"size:32" json:"resolution"`
 	EnhancePrompt  string `gorm:"size:16;not null;default:Enabled" json:"enhance_prompt"`
-	StorageMode    string `gorm:"size:16;not null;default:Temporary" json:"storage_mode"`
+	StorageMode    string `gorm:"size:16;not null;default:Permanent" json:"storage_mode"`
 	Accent         string `gorm:"size:32;not null;default:amber" json:"accent"`
 	CoverURL       string `gorm:"size:2048" json:"cover_url"`
 }

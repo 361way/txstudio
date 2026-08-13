@@ -168,6 +168,7 @@ export async function runScriptAgentLoop({
     resolution = '1080P',
     duration = '5s',
     audioGeneration = true,
+    storageMode = 'Permanent',
     maxShots = 4,
     historyParentJobId,
     onUpdate,
@@ -224,7 +225,7 @@ export async function runScriptAgentLoop({
                     prompt: `${character.visualPrompt}。角色名：${character.name}。角色设定图，单一人物，外貌与服装设计清晰稳定，无文字无水印。`,
                     aspectRatio: '3:4',
                     enhancePrompt: 'Enabled',
-                    extraConfig: { Resolution: '1K', StorageMode: 'Temporary' },
+                    extraConfig: { Resolution: '1K', StorageMode: storageMode },
                 }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'character' } } });
                 character.imageUrl = result.urls[0] || '';
                 character.status = 'completed';
@@ -272,7 +273,7 @@ export async function runScriptAgentLoop({
                     sourceFileInfos: relatedCharacters.map(() => ({})),
                     aspectRatio,
                     enhancePrompt: 'Enabled',
-                    extraConfig: { Resolution: '1K', StorageMode: 'Temporary' },
+                    extraConfig: { Resolution: '1K', StorageMode: storageMode },
                 }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'storyboard', shot_index: shot.index } } });
                 shot.imageUrl = result.urls[0] || '';
                 shot.status = 'storyboard_completed';
@@ -303,7 +304,7 @@ export async function runScriptAgentLoop({
                         Duration: Number.parseInt(duration, 10) || 5,
                         Resolution: resolution,
                         AudioGeneration: audioGeneration ? 'Enabled' : 'Disabled',
-                        StorageMode: 'Temporary',
+                        StorageMode: storageMode,
                     },
                 }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'video_clip', shot_index: shot.index } } });
                 shot.videoUrl = result.urls[0] || '';

@@ -35,7 +35,7 @@ func TestNormalizeImageTemplateDefaults(t *testing.T) {
 	if message != "" {
 		t.Fatal(message)
 	}
-	if template.EnhancePrompt != "Enabled" || template.StorageMode != "Temporary" || template.Accent != "amber" {
+	if template.EnhancePrompt != "Enabled" || template.StorageMode != "Permanent" || template.Accent != "amber" {
 		t.Fatalf("defaults not applied: %+v", template)
 	}
 }

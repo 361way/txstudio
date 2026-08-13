@@ -70,6 +70,9 @@ try {
     if (systemTemplates.some((item) => 'source_name' in item || 'source_url' in item)) {
         throw new Error('系统模板 API 仍返回已移除的来源字段');
     }
+    if (systemTemplates.some((item) => item.storage_mode !== 'Permanent')) {
+        throw new Error('系统模板未使用永久存储默认值');
+    }
     const templateWithCover = systemTemplates.find((item) => typeof item?.cover_url === 'string' && item.cover_url.startsWith('/file/cases/'));
     if (!templateWithCover) throw new Error('未找到系统模板封面');
     const coverResponse = await fetch(`http://127.0.0.1:${port}${templateWithCover.cover_url}`);

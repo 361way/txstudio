@@ -630,7 +630,7 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
  */
 export async function runVodAigcPipeline(params, ctx = {}) {
     const historyOptions = ctx.history === false ? null : (ctx.history || {});
-    const storageMode = params.extraConfig?.StorageMode || 'Temporary';
+    const storageMode = params.extraConfig?.StorageMode || 'Permanent';
     const tracker = historyOptions ? await createGenerationTracker({
         source: historyOptions.source || 'canvas',
         type: params.type,
@@ -713,7 +713,7 @@ export async function runVodAigcPipeline(params, ctx = {}) {
 
     // 2) 创建任务
     const outputConfig = {
-        StorageMode: 'Temporary',
+        StorageMode: 'Permanent',
         ...(params.aspectRatio ? { AspectRatio: params.aspectRatio } : {}),
         ...(params.extraConfig || {})
     };

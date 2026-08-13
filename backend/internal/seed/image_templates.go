@@ -65,6 +65,12 @@ func EnsureSystemImageTemplates(db *gorm.DB) error {
 			return fmt.Errorf("迁移历史自定义模板来源失败: %w", err)
 		}
 
+		if err := tx.Model(&model.ImageTemplate{}).
+			Where("source = ? AND storage_mode = ?", systemTemplateSource, "Temporary").
+			Update("storage_mode", "Permanent").Error; err != nil {
+			return fmt.Errorf("迁移系统图像模板存储模式失败: %w", err)
+		}
+
 		for _, item := range templates {
 			if item.SourceKey == "" {
 				return fmt.Errorf("系统图像模板缺少 source_key")

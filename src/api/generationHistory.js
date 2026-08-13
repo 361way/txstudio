@@ -49,7 +49,7 @@ export async function createGenerationTracker(meta) {
             model_name: meta.modelName || '',
             model_version: meta.modelVersion || '',
             parameters: compact(meta.parameters || {}),
-            storage_mode: meta.storageMode || '',
+            storage_mode: meta.storageMode || 'Permanent',
             project_id: meta.projectId || undefined,
             parent_job_id: meta.parentJobId || undefined,
             assets: compact(meta.assets || []),
@@ -103,7 +103,7 @@ export async function createGenerationTracker(meta) {
             const outputAssets = urls.map((url, index) => ({
                 role: 'output', ordinal: index, media_type: mediaType,
                 cloud_file_id: fileIds[index] || '', cloud_url: url,
-                storage_provider: 'tencent-vod', storage_mode: meta.storageMode || '',
+                storage_provider: 'tencent-vod', storage_mode: meta.storageMode || 'Permanent',
             }));
             await enqueue({
                 status: TERMINAL_STATUSES.has(status) ? status : 'completed',

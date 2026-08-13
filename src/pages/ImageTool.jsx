@@ -60,11 +60,12 @@ export default function ImageTool({ onBack, template, embedded = false }) {
     const [resolution, setResolution] = useState(() => initialCapability.resolutions.includes(template?.resolution) ? template.resolution : initialCapability.defaultResolution);
     const [enhancePrompt, setEnhancePrompt] = useState(template?.enhance_prompt || 'Enabled');
     const [storageMode, setStorageMode] = useState(() => {
-        if (template?.storage_mode === 'Permanent') return 'Permanent';
+        if (template?.storage_mode === 'Temporary' || template?.storage_mode === 'Permanent') return template.storage_mode;
         try {
-            return localStorage.getItem('txstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
+            const saved = localStorage.getItem('txstudio_aigc_storage_mode');
+            return saved === 'Temporary' || saved === 'Permanent' ? saved : 'Permanent';
         } catch {
-            return 'Temporary';
+            return 'Permanent';
         }
     });
     const [prompt, setPrompt] = useState(template?.prompt || '');
@@ -92,8 +93,15 @@ export default function ImageTool({ onBack, template, embedded = false }) {
         setRatio(nextCapability.ratios.includes(template?.ratio) ? template.ratio : nextCapability.defaultRatio);
         setResolution(nextCapability.resolutions.includes(template?.resolution) ? template.resolution : nextCapability.defaultResolution);
         setEnhancePrompt(template?.enhance_prompt || 'Enabled');
-        if (template?.storage_mode) {
-            setStorageMode(template.storage_mode === 'Permanent' ? 'Permanent' : 'Temporary');
+        if (template?.storage_mode === 'Temporary' || template?.storage_mode === 'Permanent') {
+            setStorageMode(template.storage_mode);
+        } else {
+            try {
+                const saved = localStorage.getItem('txstudio_aigc_storage_mode');
+                setStorageMode(saved === 'Temporary' || saved === 'Permanent' ? saved : 'Permanent');
+            } catch {
+                setStorageMode('Permanent');
+            }
         }
         setPrompt(template?.prompt || '');
         setResults([]);
@@ -283,7 +291,7 @@ export default function ImageTool({ onBack, template, embedded = false }) {
                                     <label className="min-w-0"><span className="mb-1.5 block text-[11px] font-medium text-[#686870]">{t('长宽比')}</span><select value={ratio} onChange={(event) => setRatio(event.target.value)} className="field h-10 text-[13px]">{modelCapability.ratios.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                                     <label className="min-w-0"><span className="mb-1.5 block text-[11px] font-medium text-[#686870]">{t('输出大小')}</span>{modelCapability.resolutions.length ? <select value={resolution} onChange={(event) => setResolution(event.target.value)} className="field h-10 text-[13px]">{modelCapability.resolutions.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <div className="field flex h-10 items-center text-[12px] text-gray-400">{t('模型自动尺寸')}</div>}</label>
                                     <label className="min-w-0"><span className="mb-1.5 block text-[11px] font-medium text-[#686870]">{t('提示词增强')}</span><select value={enhancePrompt} onChange={(event) => setEnhancePrompt(event.target.value)} className="field h-10 text-[13px]"><option value="Enabled">{t('开启')}</option><option value="Disabled">{t('关闭')}</option></select></label>
-                                    <label className="min-w-0"><span className="mb-1.5 block text-[11px] font-medium text-[#686870]">{t('存储模式')}</span><select value={storageMode} onChange={(event) => setStorageMode(event.target.value)} className="field h-10 text-[13px]"><option value="Temporary">{t('临时存储（7 天）')}</option><option value="Permanent">{t('永久保存到 VOD')}</option></select></label>
+                                    <label className="min-w-0"><span className="mb-1.5 block text-[11px] font-medium text-[#686870]">{t('存储模式')}</span><select value={storageMode} onChange={(event) => setStorageMode(event.target.value)} className="field h-10 text-[13px]"><option value="Permanent">{t('永久保存到 VOD')}</option><option value="Temporary">{t('临时存储（7 天）')}</option></select></label>
                                 </div>
 
                                 <div className="mt-4 rounded-xl border border-[#e7e7eb] bg-[#fcfcfc] p-3.5">

@@ -47,6 +47,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const [modelVersion, setModelVersion] = useState(template?.model_version || VOD_DEFAULT_VIDEO_MODEL_VERSION);
     const [ratio, setRatio] = useState(template?.ratio || '16:9');
     const [duration, setDuration] = useState('5s');
+    const [storageMode, setStorageMode] = useState(() => template?.storage_mode === 'Temporary' ? 'Temporary' : 'Permanent');
     const [prompt, setPrompt] = useState(template?.prompt || '');
     const [loading, setLoading] = useState(false);
     const [stage, setStage] = useState('');
@@ -132,6 +133,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 aspectRatio: ratio === 'Auto' ? undefined : ratio,
                 extraConfig: {
                     ...(Number.isFinite(durationValue) ? { Duration: durationValue } : {}),
+                    StorageMode: storageMode,
                 },
             }, {
                 ...PIPELINE_CONTEXT,
@@ -266,8 +268,8 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                         )}
                     </div>
 
-                    {/* 模型/版本/比例/时长 */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                    {/* 模型/版本/比例/时长/存储 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('模型')}</label>
                             <select value={modelName} onChange={(e) => { setModelName(e.target.value); setModelVersion((VOD_VIDEO_MODEL_MATRIX[e.target.value] || [''])[0]); }} className="field">
@@ -290,6 +292,13 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('时长')}</label>
                             <select value={duration} onChange={(e) => setDuration(e.target.value)} className="field">
                                 {VOD_VIDEO_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-2">{t('存储模式')}</label>
+                            <select value={storageMode} onChange={(e) => setStorageMode(e.target.value)} className="field">
+                                <option value="Permanent">{t('永久保存到 VOD')}</option>
+                                <option value="Temporary">{t('临时存储（7 天）')}</option>
                             </select>
                         </div>
                     </div>

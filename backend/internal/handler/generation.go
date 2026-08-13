@@ -126,12 +126,20 @@ func normalizeEventLevel(value string) string {
 	}
 }
 
+func normalizedStorageMode(value string) string {
+	value = cleanText(value, 32)
+	if value == "Temporary" || value == "Permanent" {
+		return value
+	}
+	return "Permanent"
+}
+
 func assetFromReq(jobID uint, item generationAssetReq) model.GenerationAsset {
 	return model.GenerationAsset{
 		JobID: jobID, Role: cleanText(item.Role, 64), Ordinal: item.Ordinal,
 		MediaType: cleanText(item.MediaType, 32), CloudFileID: cleanText(item.CloudFileID, 255),
 		CloudURL: cleanText(item.CloudURL, 4096), LocalPath: cleanText(item.LocalPath, 2048),
-		StorageProvider: cleanText(item.StorageProvider, 32), StorageMode: cleanText(item.StorageMode, 32),
+		StorageProvider: cleanText(item.StorageProvider, 32), StorageMode: normalizedStorageMode(item.StorageMode),
 		MimeType: cleanText(item.MimeType, 128), FileSize: item.FileSize, Width: item.Width,
 		Height: item.Height, Duration: item.Duration, ExpiresAt: item.ExpiresAt, Metadata: safeJSON(item.Metadata),
 	}
@@ -248,7 +256,7 @@ func (h *GenerationHandler) Create(c *gin.Context) {
 		Source: cleanText(req.Source, 32), Type: jobType, Provider: cleanText(req.Provider, 64),
 		Status: status, Prompt: cleanText(req.Prompt, 20000), ModelName: cleanText(req.ModelName, 128),
 		ModelVersion: cleanText(req.ModelVersion, 128), Parameters: safeJSON(req.Parameters),
-		StorageMode: cleanText(req.StorageMode, 32), StartedAt: &now,
+		StorageMode: normalizedStorageMode(req.StorageMode), StartedAt: &now,
 	}
 	if job.ClientID == "" || job.Source == "" {
 		BadRequest(c, "任务标识和来源不能为空")

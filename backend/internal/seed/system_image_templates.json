@@ -13,7 +13,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "slate",
     "cover_url": "/file/cases/mens-editorial-portrait.png",
     "sort_order": 0
@@ -32,7 +32,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "rose",
     "cover_url": "/file/cases/womens-studio-portrait.png",
     "sort_order": 1
@@ -51,7 +51,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "violet",
     "cover_url": "/file/cases/fashion-cover.png",
     "sort_order": 2
@@ -70,7 +70,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "indigo",
     "cover_url": "/file/cases/cinematic-storyboard.png",
     "sort_order": 3
@@ -89,7 +89,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "slate",
     "cover_url": "/file/cases/premium-brand.png",
     "sort_order": 4
@@ -108,7 +108,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "rose",
     "cover_url": "/file/cases/brand-vi.png",
     "sort_order": 5
@@ -127,7 +127,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "cyan",
     "cover_url": "/file/cases/metal-logo.png",
     "sort_order": 6
@@ -146,7 +146,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "violet",
     "cover_url": "/file/cases/inflated-poster.png",
     "sort_order": 7
@@ -165,7 +165,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "red",
     "cover_url": "/file/cases/four-panel-comic.jpg",
     "sort_order": 8
@@ -184,7 +184,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "red",
     "cover_url": "/file/cases/paper-cut-poster.png",
     "sort_order": 9
@@ -203,7 +203,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "slate",
     "cover_url": "/file/cases/chinese-ink-type.png",
     "sort_order": 10
@@ -222,7 +222,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "cyan",
     "cover_url": "/file/cases/scene-storyboard.png",
     "sort_order": 11
@@ -241,7 +241,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "emerald",
     "cover_url": "/file/cases/miniature-house.png",
     "sort_order": 12
@@ -260,7 +260,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "emerald",
     "cover_url": "/file/cases/miniature-store.png",
     "sort_order": 13
@@ -279,7 +279,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "violet",
     "cover_url": "/file/cases/acrylic-charm.jpg",
     "sort_order": 14
@@ -298,7 +298,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "rose",
     "cover_url": "/file/cases/texture-acrylic-type.png",
     "sort_order": 15
@@ -317,7 +317,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "red",
     "cover_url": "/file/cases/new-year-cover.png",
     "sort_order": 16
@@ -336,7 +336,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "red",
     "cover_url": "/file/cases/paper-lantern.png",
     "sort_order": 17
@@ -355,7 +355,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "red",
     "cover_url": "/file/cases/family-reunion-paper.png",
     "sort_order": 18
@@ -374,7 +374,7 @@
     "ratio": "",
     "resolution": "",
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "accent": "slate",
     "cover_url": "/file/cases/metal-blessing-type.png",
     "sort_order": 19
@@ -393,7 +393,7 @@
     "cover_url": "/file/cases/case520.jpg",
     "sort_order": 20,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -411,7 +411,7 @@
     "cover_url": "/file/cases/case519.jpg",
     "sort_order": 21,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -429,7 +429,7 @@
     "cover_url": "/file/cases/case518.jpg",
     "sort_order": 22,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -447,7 +447,7 @@
     "cover_url": "/file/cases/case517.jpg",
     "sort_order": 23,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -465,7 +465,7 @@
     "cover_url": "/file/cases/case516.jpg",
     "sort_order": 24,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -483,7 +483,7 @@
     "cover_url": "/file/cases/case515.jpg",
     "sort_order": 25,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -501,7 +501,7 @@
     "cover_url": "/file/cases/case514.jpg",
     "sort_order": 26,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -519,7 +519,7 @@
     "cover_url": "/file/cases/case513.jpg",
     "sort_order": 27,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -537,7 +537,7 @@
     "cover_url": "/file/cases/case512.jpg",
     "sort_order": 28,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -555,7 +555,7 @@
     "cover_url": "/file/cases/case511.jpg",
     "sort_order": 29,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -573,7 +573,7 @@
     "cover_url": "/file/cases/case510.jpg",
     "sort_order": 30,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -591,7 +591,7 @@
     "cover_url": "/file/cases/case509.jpg",
     "sort_order": 31,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -609,7 +609,7 @@
     "cover_url": "/file/cases/case508.jpg",
     "sort_order": 32,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -627,7 +627,7 @@
     "cover_url": "/file/cases/case507.jpg",
     "sort_order": 33,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -645,7 +645,7 @@
     "cover_url": "/file/cases/case506.jpg",
     "sort_order": 34,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -663,7 +663,7 @@
     "cover_url": "/file/cases/case505.jpg",
     "sort_order": 35,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -681,7 +681,7 @@
     "cover_url": "/file/cases/case504.jpg",
     "sort_order": 36,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -699,7 +699,7 @@
     "cover_url": "/file/cases/case503.jpg",
     "sort_order": 37,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -717,7 +717,7 @@
     "cover_url": "/file/cases/case502.jpg",
     "sort_order": 38,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -735,7 +735,7 @@
     "cover_url": "/file/cases/case501.jpg",
     "sort_order": 39,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -753,7 +753,7 @@
     "cover_url": "/file/cases/case500.jpg",
     "sort_order": 40,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -771,7 +771,7 @@
     "cover_url": "/file/cases/case499.jpg",
     "sort_order": 41,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -789,7 +789,7 @@
     "cover_url": "/file/cases/case498.jpg",
     "sort_order": 42,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -807,7 +807,7 @@
     "cover_url": "/file/cases/case497.jpg",
     "sort_order": 43,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -825,7 +825,7 @@
     "cover_url": "/file/cases/case496.jpg",
     "sort_order": 44,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -843,7 +843,7 @@
     "cover_url": "/file/cases/case495.jpg",
     "sort_order": 45,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -861,7 +861,7 @@
     "cover_url": "/file/cases/case494.jpg",
     "sort_order": 46,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -879,7 +879,7 @@
     "cover_url": "/file/cases/case493.jpg",
     "sort_order": 47,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -897,7 +897,7 @@
     "cover_url": "/file/cases/case492.jpg",
     "sort_order": 48,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -915,7 +915,7 @@
     "cover_url": "/file/cases/case491.jpg",
     "sort_order": 49,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -933,7 +933,7 @@
     "cover_url": "/file/cases/case490.jpg",
     "sort_order": 50,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -951,7 +951,7 @@
     "cover_url": "/file/cases/case489.jpg",
     "sort_order": 51,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -969,7 +969,7 @@
     "cover_url": "/file/cases/case488.jpg",
     "sort_order": 52,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -987,7 +987,7 @@
     "cover_url": "/file/cases/case487.jpg",
     "sort_order": 53,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1005,7 +1005,7 @@
     "cover_url": "/file/cases/case486.jpg",
     "sort_order": 54,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1023,7 +1023,7 @@
     "cover_url": "/file/cases/case485.jpg",
     "sort_order": 55,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1041,7 +1041,7 @@
     "cover_url": "/file/cases/case484.jpg",
     "sort_order": 56,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1059,7 +1059,7 @@
     "cover_url": "/file/cases/case483.jpg",
     "sort_order": 57,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1077,7 +1077,7 @@
     "cover_url": "/file/cases/case482.jpg",
     "sort_order": 58,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1095,7 +1095,7 @@
     "cover_url": "/file/cases/case481.jpg",
     "sort_order": 59,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1113,7 +1113,7 @@
     "cover_url": "/file/cases/case480.jpg",
     "sort_order": 60,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1131,7 +1131,7 @@
     "cover_url": "/file/cases/case479.jpg",
     "sort_order": 61,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1149,7 +1149,7 @@
     "cover_url": "/file/cases/case478.jpg",
     "sort_order": 62,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1167,7 +1167,7 @@
     "cover_url": "/file/cases/case477.jpg",
     "sort_order": 63,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1185,7 +1185,7 @@
     "cover_url": "/file/cases/case476.jpg",
     "sort_order": 64,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1203,7 +1203,7 @@
     "cover_url": "/file/cases/case475.jpg",
     "sort_order": 65,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1221,7 +1221,7 @@
     "cover_url": "/file/cases/case474.jpg",
     "sort_order": 66,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1239,7 +1239,7 @@
     "cover_url": "/file/cases/case473.jpg",
     "sort_order": 67,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1257,7 +1257,7 @@
     "cover_url": "/file/cases/case472.jpg",
     "sort_order": 68,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1275,7 +1275,7 @@
     "cover_url": "/file/cases/case471.jpg",
     "sort_order": 69,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1293,7 +1293,7 @@
     "cover_url": "/file/cases/case470.jpg",
     "sort_order": 70,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1311,7 +1311,7 @@
     "cover_url": "/file/cases/case469.jpg",
     "sort_order": 71,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1329,7 +1329,7 @@
     "cover_url": "/file/cases/case468.jpg",
     "sort_order": 72,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1347,7 +1347,7 @@
     "cover_url": "/file/cases/case467.jpg",
     "sort_order": 73,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1365,7 +1365,7 @@
     "cover_url": "/file/cases/case466.jpg",
     "sort_order": 74,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1383,7 +1383,7 @@
     "cover_url": "/file/cases/case465.jpg",
     "sort_order": 75,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1401,7 +1401,7 @@
     "cover_url": "/file/cases/case464.jpg",
     "sort_order": 76,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1419,7 +1419,7 @@
     "cover_url": "/file/cases/case463.jpg",
     "sort_order": 77,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1437,7 +1437,7 @@
     "cover_url": "/file/cases/case462.jpg",
     "sort_order": 78,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1455,7 +1455,7 @@
     "cover_url": "/file/cases/case461.jpg",
     "sort_order": 79,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1473,7 +1473,7 @@
     "cover_url": "/file/cases/case460.jpg",
     "sort_order": 80,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1491,7 +1491,7 @@
     "cover_url": "/file/cases/case459.jpg",
     "sort_order": 81,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1509,7 +1509,7 @@
     "cover_url": "/file/cases/case458.jpg",
     "sort_order": 82,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1527,7 +1527,7 @@
     "cover_url": "/file/cases/case457.jpg",
     "sort_order": 83,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1545,7 +1545,7 @@
     "cover_url": "/file/cases/case456.jpg",
     "sort_order": 84,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1563,7 +1563,7 @@
     "cover_url": "/file/cases/case455.jpg",
     "sort_order": 85,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1581,7 +1581,7 @@
     "cover_url": "/file/cases/case454.jpg",
     "sort_order": 86,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1599,7 +1599,7 @@
     "cover_url": "/file/cases/case453.jpg",
     "sort_order": 87,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1617,7 +1617,7 @@
     "cover_url": "/file/cases/case452.jpg",
     "sort_order": 88,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1635,7 +1635,7 @@
     "cover_url": "/file/cases/case451.jpg",
     "sort_order": 89,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1653,7 +1653,7 @@
     "cover_url": "/file/cases/case450.jpg",
     "sort_order": 90,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1671,7 +1671,7 @@
     "cover_url": "/file/cases/case449.jpg",
     "sort_order": 91,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1689,7 +1689,7 @@
     "cover_url": "/file/cases/case448.jpg",
     "sort_order": 92,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1707,7 +1707,7 @@
     "cover_url": "/file/cases/case447.jpg",
     "sort_order": 93,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1725,7 +1725,7 @@
     "cover_url": "/file/cases/case446.jpg",
     "sort_order": 94,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1742,7 +1742,7 @@
     "cover_url": "/file/cases/case445.jpg",
     "sort_order": 95,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1760,7 +1760,7 @@
     "cover_url": "/file/cases/case444.jpg",
     "sort_order": 96,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1778,7 +1778,7 @@
     "cover_url": "/file/cases/case443.jpg",
     "sort_order": 97,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1796,7 +1796,7 @@
     "cover_url": "/file/cases/case442.jpg",
     "sort_order": 98,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1814,7 +1814,7 @@
     "cover_url": "/file/cases/case441.jpg",
     "sort_order": 99,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1832,7 +1832,7 @@
     "cover_url": "/file/cases/case440.jpg",
     "sort_order": 100,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1850,7 +1850,7 @@
     "cover_url": "/file/cases/case439.jpg",
     "sort_order": 101,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1868,7 +1868,7 @@
     "cover_url": "/file/cases/case438.jpg",
     "sort_order": 102,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1886,7 +1886,7 @@
     "cover_url": "/file/cases/case437.jpg",
     "sort_order": 103,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1904,7 +1904,7 @@
     "cover_url": "/file/cases/case436.jpg",
     "sort_order": 104,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1922,7 +1922,7 @@
     "cover_url": "/file/cases/case435.jpg",
     "sort_order": 105,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1940,7 +1940,7 @@
     "cover_url": "/file/cases/case434.jpg",
     "sort_order": 106,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1958,7 +1958,7 @@
     "cover_url": "/file/cases/case433.jpg",
     "sort_order": 107,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1976,7 +1976,7 @@
     "cover_url": "/file/cases/case432.jpg",
     "sort_order": 108,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -1994,7 +1994,7 @@
     "cover_url": "/file/cases/case431.jpg",
     "sort_order": 109,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2012,7 +2012,7 @@
     "cover_url": "/file/cases/case430.jpg",
     "sort_order": 110,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2030,7 +2030,7 @@
     "cover_url": "/file/cases/case429.jpg",
     "sort_order": 111,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2048,7 +2048,7 @@
     "cover_url": "/file/cases/case428.jpg",
     "sort_order": 112,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2066,7 +2066,7 @@
     "cover_url": "/file/cases/case427.jpg",
     "sort_order": 113,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2084,7 +2084,7 @@
     "cover_url": "/file/cases/case426.jpg",
     "sort_order": 114,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2102,7 +2102,7 @@
     "cover_url": "/file/cases/case425.jpg",
     "sort_order": 115,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2120,7 +2120,7 @@
     "cover_url": "/file/cases/case424.jpg",
     "sort_order": 116,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2138,7 +2138,7 @@
     "cover_url": "/file/cases/case423.jpg",
     "sort_order": 117,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2156,7 +2156,7 @@
     "cover_url": "/file/cases/case422.jpg",
     "sort_order": 118,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2174,7 +2174,7 @@
     "cover_url": "/file/cases/case421.jpg",
     "sort_order": 119,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2192,7 +2192,7 @@
     "cover_url": "/file/cases/case420.jpg",
     "sort_order": 120,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2210,7 +2210,7 @@
     "cover_url": "/file/cases/case419.jpg",
     "sort_order": 121,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2228,7 +2228,7 @@
     "cover_url": "/file/cases/case418.jpg",
     "sort_order": 122,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2246,7 +2246,7 @@
     "cover_url": "/file/cases/case417.jpg",
     "sort_order": 123,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2264,7 +2264,7 @@
     "cover_url": "/file/cases/case416.jpg",
     "sort_order": 124,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2282,7 +2282,7 @@
     "cover_url": "/file/cases/case415.jpg",
     "sort_order": 125,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2300,7 +2300,7 @@
     "cover_url": "/file/cases/case414.jpg",
     "sort_order": 126,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2318,7 +2318,7 @@
     "cover_url": "/file/cases/case413.jpg",
     "sort_order": 127,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2336,7 +2336,7 @@
     "cover_url": "/file/cases/case412.jpg",
     "sort_order": 128,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2354,7 +2354,7 @@
     "cover_url": "/file/cases/case411.jpg",
     "sort_order": 129,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2372,7 +2372,7 @@
     "cover_url": "/file/cases/case410.jpg",
     "sort_order": 130,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2390,7 +2390,7 @@
     "cover_url": "/file/cases/case409.jpg",
     "sort_order": 131,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2408,7 +2408,7 @@
     "cover_url": "/file/cases/case408.jpg",
     "sort_order": 132,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2426,7 +2426,7 @@
     "cover_url": "/file/cases/case407.jpg",
     "sort_order": 133,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2444,7 +2444,7 @@
     "cover_url": "/file/cases/case406.jpg",
     "sort_order": 134,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2462,7 +2462,7 @@
     "cover_url": "/file/cases/case405.jpg",
     "sort_order": 135,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2480,7 +2480,7 @@
     "cover_url": "/file/cases/case404.jpg",
     "sort_order": 136,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2498,7 +2498,7 @@
     "cover_url": "/file/cases/case403.jpg",
     "sort_order": 137,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2516,7 +2516,7 @@
     "cover_url": "/file/cases/case402.jpg",
     "sort_order": 138,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2534,7 +2534,7 @@
     "cover_url": "/file/cases/case401.jpg",
     "sort_order": 139,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2552,7 +2552,7 @@
     "cover_url": "/file/cases/case400.png",
     "sort_order": 140,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2570,7 +2570,7 @@
     "cover_url": "/file/cases/case399.jpg",
     "sort_order": 141,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2588,7 +2588,7 @@
     "cover_url": "/file/cases/case398.jpg",
     "sort_order": 142,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2606,7 +2606,7 @@
     "cover_url": "/file/cases/case397.jpg",
     "sort_order": 143,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2624,7 +2624,7 @@
     "cover_url": "/file/cases/case396.jpg",
     "sort_order": 144,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2642,7 +2642,7 @@
     "cover_url": "/file/cases/case395.jpg",
     "sort_order": 145,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2660,7 +2660,7 @@
     "cover_url": "/file/cases/case394.jpg",
     "sort_order": 146,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2678,7 +2678,7 @@
     "cover_url": "/file/cases/case393.jpg",
     "sort_order": 147,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2696,7 +2696,7 @@
     "cover_url": "/file/cases/case392.jpg",
     "sort_order": 148,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2714,7 +2714,7 @@
     "cover_url": "/file/cases/case391.jpg",
     "sort_order": 149,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2732,7 +2732,7 @@
     "cover_url": "/file/cases/case390.jpg",
     "sort_order": 150,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2750,7 +2750,7 @@
     "cover_url": "/file/cases/case389.jpg",
     "sort_order": 151,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2768,7 +2768,7 @@
     "cover_url": "/file/cases/case388.jpg",
     "sort_order": 152,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2786,7 +2786,7 @@
     "cover_url": "/file/cases/case387.jpg",
     "sort_order": 153,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2804,7 +2804,7 @@
     "cover_url": "/file/cases/case386.jpg",
     "sort_order": 154,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2822,7 +2822,7 @@
     "cover_url": "/file/cases/case385.jpg",
     "sort_order": 155,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2840,7 +2840,7 @@
     "cover_url": "/file/cases/case384.jpg",
     "sort_order": 156,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2858,7 +2858,7 @@
     "cover_url": "/file/cases/case383.jpg",
     "sort_order": 157,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2876,7 +2876,7 @@
     "cover_url": "/file/cases/case382.jpg",
     "sort_order": 158,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2894,7 +2894,7 @@
     "cover_url": "/file/cases/case381.jpg",
     "sort_order": 159,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2912,7 +2912,7 @@
     "cover_url": "/file/cases/case380.jpg",
     "sort_order": 160,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2930,7 +2930,7 @@
     "cover_url": "/file/cases/case379.jpg",
     "sort_order": 161,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2948,7 +2948,7 @@
     "cover_url": "/file/cases/case378.jpg",
     "sort_order": 162,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2966,7 +2966,7 @@
     "cover_url": "/file/cases/case377.jpg",
     "sort_order": 163,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -2984,7 +2984,7 @@
     "cover_url": "/file/cases/case376.jpg",
     "sort_order": 164,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3002,7 +3002,7 @@
     "cover_url": "/file/cases/case375.jpg",
     "sort_order": 165,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3020,7 +3020,7 @@
     "cover_url": "/file/cases/case374.jpg",
     "sort_order": 166,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3038,7 +3038,7 @@
     "cover_url": "/file/cases/case373.jpg",
     "sort_order": 167,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3056,7 +3056,7 @@
     "cover_url": "/file/cases/case372.jpg",
     "sort_order": 168,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3074,7 +3074,7 @@
     "cover_url": "/file/cases/case371.jpg",
     "sort_order": 169,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3092,7 +3092,7 @@
     "cover_url": "/file/cases/case370.jpg",
     "sort_order": 170,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3109,7 +3109,7 @@
     "cover_url": "/file/cases/case369.jpg",
     "sort_order": 171,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3127,7 +3127,7 @@
     "cover_url": "/file/cases/case368.jpg",
     "sort_order": 172,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3145,7 +3145,7 @@
     "cover_url": "/file/cases/case367.jpg",
     "sort_order": 173,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3163,7 +3163,7 @@
     "cover_url": "/file/cases/case366.jpg",
     "sort_order": 174,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3181,7 +3181,7 @@
     "cover_url": "/file/cases/case365.jpg",
     "sort_order": 175,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3199,7 +3199,7 @@
     "cover_url": "/file/cases/case364.jpg",
     "sort_order": 176,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3217,7 +3217,7 @@
     "cover_url": "/file/cases/case363.jpg",
     "sort_order": 177,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3235,7 +3235,7 @@
     "cover_url": "/file/cases/case362.jpg",
     "sort_order": 178,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3253,7 +3253,7 @@
     "cover_url": "/file/cases/case361.jpg",
     "sort_order": 179,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3271,7 +3271,7 @@
     "cover_url": "/file/cases/case360.jpg",
     "sort_order": 180,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3289,7 +3289,7 @@
     "cover_url": "/file/cases/case359.jpg",
     "sort_order": 181,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3307,7 +3307,7 @@
     "cover_url": "/file/cases/case358.jpg",
     "sort_order": 182,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3325,7 +3325,7 @@
     "cover_url": "/file/cases/case357.jpg",
     "sort_order": 183,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3343,7 +3343,7 @@
     "cover_url": "/file/cases/case356.jpg",
     "sort_order": 184,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3361,7 +3361,7 @@
     "cover_url": "/file/cases/case355.jpg",
     "sort_order": 185,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3379,7 +3379,7 @@
     "cover_url": "/file/cases/case354.jpg",
     "sort_order": 186,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3397,7 +3397,7 @@
     "cover_url": "/file/cases/case353.jpg",
     "sort_order": 187,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3415,7 +3415,7 @@
     "cover_url": "/file/cases/case352.jpg",
     "sort_order": 188,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3433,7 +3433,7 @@
     "cover_url": "/file/cases/case351.jpg",
     "sort_order": 189,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3451,7 +3451,7 @@
     "cover_url": "/file/cases/case350.jpg",
     "sort_order": 190,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3469,7 +3469,7 @@
     "cover_url": "/file/cases/case349.jpg",
     "sort_order": 191,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3487,7 +3487,7 @@
     "cover_url": "/file/cases/case348.jpg",
     "sort_order": 192,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3505,7 +3505,7 @@
     "cover_url": "/file/cases/case347.jpg",
     "sort_order": 193,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3523,7 +3523,7 @@
     "cover_url": "/file/cases/case346.jpg",
     "sort_order": 194,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3541,7 +3541,7 @@
     "cover_url": "/file/cases/case345.jpg",
     "sort_order": 195,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3559,7 +3559,7 @@
     "cover_url": "/file/cases/case344.jpg",
     "sort_order": 196,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3577,7 +3577,7 @@
     "cover_url": "/file/cases/case343.jpg",
     "sort_order": 197,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3595,7 +3595,7 @@
     "cover_url": "/file/cases/case342.jpg",
     "sort_order": 198,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3613,7 +3613,7 @@
     "cover_url": "/file/cases/case341.jpg",
     "sort_order": 199,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3631,7 +3631,7 @@
     "cover_url": "/file/cases/case340.png",
     "sort_order": 200,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3649,7 +3649,7 @@
     "cover_url": "/file/cases/case339.jpg",
     "sort_order": 201,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3667,7 +3667,7 @@
     "cover_url": "/file/cases/case338.png",
     "sort_order": 202,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3685,7 +3685,7 @@
     "cover_url": "/file/cases/case337.png",
     "sort_order": 203,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3703,7 +3703,7 @@
     "cover_url": "/file/cases/case336.png",
     "sort_order": 204,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3721,7 +3721,7 @@
     "cover_url": "/file/cases/case335.png",
     "sort_order": 205,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3739,7 +3739,7 @@
     "cover_url": "/file/cases/case334.png",
     "sort_order": 206,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3757,7 +3757,7 @@
     "cover_url": "/file/cases/case333.png",
     "sort_order": 207,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3775,7 +3775,7 @@
     "cover_url": "/file/cases/case332.png",
     "sort_order": 208,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3793,7 +3793,7 @@
     "cover_url": "/file/cases/case331.png",
     "sort_order": 209,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3811,7 +3811,7 @@
     "cover_url": "/file/cases/case330.png",
     "sort_order": 210,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3829,7 +3829,7 @@
     "cover_url": "/file/cases/case329.jpg",
     "sort_order": 211,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3847,7 +3847,7 @@
     "cover_url": "/file/cases/case328.jpg",
     "sort_order": 212,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3865,7 +3865,7 @@
     "cover_url": "/file/cases/case327.jpg",
     "sort_order": 213,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3883,7 +3883,7 @@
     "cover_url": "/file/cases/case326.jpg",
     "sort_order": 214,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3901,7 +3901,7 @@
     "cover_url": "/file/cases/case325.jpg",
     "sort_order": 215,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3919,7 +3919,7 @@
     "cover_url": "/file/cases/case324.jpg",
     "sort_order": 216,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3937,7 +3937,7 @@
     "cover_url": "/file/cases/case323.jpg",
     "sort_order": 217,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3955,7 +3955,7 @@
     "cover_url": "/file/cases/case322.jpg",
     "sort_order": 218,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3973,7 +3973,7 @@
     "cover_url": "/file/cases/case321.jpg",
     "sort_order": 219,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -3991,7 +3991,7 @@
     "cover_url": "/file/cases/case320.jpg",
     "sort_order": 220,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4009,7 +4009,7 @@
     "cover_url": "/file/cases/case319.jpg",
     "sort_order": 221,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4027,7 +4027,7 @@
     "cover_url": "/file/cases/case318.jpg",
     "sort_order": 222,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4045,7 +4045,7 @@
     "cover_url": "/file/cases/case317.jpg",
     "sort_order": 223,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4063,7 +4063,7 @@
     "cover_url": "/file/cases/case316.jpg",
     "sort_order": 224,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4081,7 +4081,7 @@
     "cover_url": "/file/cases/case315.jpg",
     "sort_order": 225,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4099,7 +4099,7 @@
     "cover_url": "/file/cases/case314.jpg",
     "sort_order": 226,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4117,7 +4117,7 @@
     "cover_url": "/file/cases/case313.jpg",
     "sort_order": 227,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4135,7 +4135,7 @@
     "cover_url": "/file/cases/case312.jpg",
     "sort_order": 228,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4153,7 +4153,7 @@
     "cover_url": "/file/cases/case311.jpg",
     "sort_order": 229,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4171,7 +4171,7 @@
     "cover_url": "/file/cases/case310.jpg",
     "sort_order": 230,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4189,7 +4189,7 @@
     "cover_url": "/file/cases/case309.jpg",
     "sort_order": 231,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4207,7 +4207,7 @@
     "cover_url": "/file/cases/case308.jpg",
     "sort_order": 232,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4225,7 +4225,7 @@
     "cover_url": "/file/cases/case307.jpg",
     "sort_order": 233,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4243,7 +4243,7 @@
     "cover_url": "/file/cases/case306.jpg",
     "sort_order": 234,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4261,7 +4261,7 @@
     "cover_url": "/file/cases/case305.jpg",
     "sort_order": 235,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4279,7 +4279,7 @@
     "cover_url": "/file/cases/case304.jpg",
     "sort_order": 236,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4297,7 +4297,7 @@
     "cover_url": "/file/cases/case303.jpg",
     "sort_order": 237,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4315,7 +4315,7 @@
     "cover_url": "/file/cases/case302.jpg",
     "sort_order": 238,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4333,7 +4333,7 @@
     "cover_url": "/file/cases/case301.jpg",
     "sort_order": 239,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4351,7 +4351,7 @@
     "cover_url": "/file/cases/case300.jpg",
     "sort_order": 240,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4369,7 +4369,7 @@
     "cover_url": "/file/cases/case299.jpg",
     "sort_order": 241,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4387,7 +4387,7 @@
     "cover_url": "/file/cases/case298.jpg",
     "sort_order": 242,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4405,7 +4405,7 @@
     "cover_url": "/file/cases/case297.jpg",
     "sort_order": 243,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4423,7 +4423,7 @@
     "cover_url": "/file/cases/case296.jpg",
     "sort_order": 244,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4441,7 +4441,7 @@
     "cover_url": "/file/cases/case295.jpg",
     "sort_order": 245,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4459,7 +4459,7 @@
     "cover_url": "/file/cases/case294.jpg",
     "sort_order": 246,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4477,7 +4477,7 @@
     "cover_url": "/file/cases/case293.jpg",
     "sort_order": 247,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4495,7 +4495,7 @@
     "cover_url": "/file/cases/case292.jpg",
     "sort_order": 248,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4513,7 +4513,7 @@
     "cover_url": "/file/cases/case291.jpg",
     "sort_order": 249,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4531,7 +4531,7 @@
     "cover_url": "/file/cases/case290.jpg",
     "sort_order": 250,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4549,7 +4549,7 @@
     "cover_url": "/file/cases/case289.jpg",
     "sort_order": 251,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4567,7 +4567,7 @@
     "cover_url": "/file/cases/case288.jpg",
     "sort_order": 252,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4585,7 +4585,7 @@
     "cover_url": "/file/cases/case287.jpg",
     "sort_order": 253,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4603,7 +4603,7 @@
     "cover_url": "/file/cases/case286.jpg",
     "sort_order": 254,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4621,7 +4621,7 @@
     "cover_url": "/file/cases/case285.jpg",
     "sort_order": 255,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4639,7 +4639,7 @@
     "cover_url": "/file/cases/case284.jpg",
     "sort_order": 256,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4657,7 +4657,7 @@
     "cover_url": "/file/cases/case283.jpg",
     "sort_order": 257,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4675,7 +4675,7 @@
     "cover_url": "/file/cases/case282.jpg",
     "sort_order": 258,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4693,7 +4693,7 @@
     "cover_url": "/file/cases/case281.jpg",
     "sort_order": 259,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4711,7 +4711,7 @@
     "cover_url": "/file/cases/case280.jpg",
     "sort_order": 260,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4729,7 +4729,7 @@
     "cover_url": "/file/cases/case279.jpg",
     "sort_order": 261,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4747,7 +4747,7 @@
     "cover_url": "/file/cases/case278.jpg",
     "sort_order": 262,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4765,7 +4765,7 @@
     "cover_url": "/file/cases/case277.jpg",
     "sort_order": 263,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4783,7 +4783,7 @@
     "cover_url": "/file/cases/case276.jpg",
     "sort_order": 264,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4801,7 +4801,7 @@
     "cover_url": "/file/cases/case275.jpg",
     "sort_order": 265,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4819,7 +4819,7 @@
     "cover_url": "/file/cases/case274.jpg",
     "sort_order": 266,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4837,7 +4837,7 @@
     "cover_url": "/file/cases/case273.jpg",
     "sort_order": 267,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4855,7 +4855,7 @@
     "cover_url": "/file/cases/case272.jpg",
     "sort_order": 268,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4872,7 +4872,7 @@
     "cover_url": "/file/cases/case271.jpg",
     "sort_order": 269,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4890,7 +4890,7 @@
     "cover_url": "/file/cases/case270.jpg",
     "sort_order": 270,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4908,7 +4908,7 @@
     "cover_url": "/file/cases/case269.jpg",
     "sort_order": 271,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4926,7 +4926,7 @@
     "cover_url": "/file/cases/case268.jpg",
     "sort_order": 272,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4944,7 +4944,7 @@
     "cover_url": "/file/cases/case267.jpg",
     "sort_order": 273,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4962,7 +4962,7 @@
     "cover_url": "/file/cases/case266.jpg",
     "sort_order": 274,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4980,7 +4980,7 @@
     "cover_url": "/file/cases/case265.jpg",
     "sort_order": 275,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -4998,7 +4998,7 @@
     "cover_url": "/file/cases/case264.jpg",
     "sort_order": 276,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5016,7 +5016,7 @@
     "cover_url": "/file/cases/case263.jpg",
     "sort_order": 277,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5034,7 +5034,7 @@
     "cover_url": "/file/cases/case262.jpg",
     "sort_order": 278,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5052,7 +5052,7 @@
     "cover_url": "/file/cases/case261.jpg",
     "sort_order": 279,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5070,7 +5070,7 @@
     "cover_url": "/file/cases/case260.jpg",
     "sort_order": 280,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5088,7 +5088,7 @@
     "cover_url": "/file/cases/case259.jpg",
     "sort_order": 281,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5106,7 +5106,7 @@
     "cover_url": "/file/cases/case258.jpg",
     "sort_order": 282,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5124,7 +5124,7 @@
     "cover_url": "/file/cases/case257.jpg",
     "sort_order": 283,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5142,7 +5142,7 @@
     "cover_url": "/file/cases/case256.jpg",
     "sort_order": 284,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5160,7 +5160,7 @@
     "cover_url": "/file/cases/case255.jpg",
     "sort_order": 285,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5178,7 +5178,7 @@
     "cover_url": "/file/cases/case254.jpg",
     "sort_order": 286,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5196,7 +5196,7 @@
     "cover_url": "/file/cases/case253.jpg",
     "sort_order": 287,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5214,7 +5214,7 @@
     "cover_url": "/file/cases/case252.jpg",
     "sort_order": 288,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5232,7 +5232,7 @@
     "cover_url": "/file/cases/case251.jpg",
     "sort_order": 289,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5250,7 +5250,7 @@
     "cover_url": "/file/cases/case250.jpg",
     "sort_order": 290,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5268,7 +5268,7 @@
     "cover_url": "/file/cases/case249.jpg",
     "sort_order": 291,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5286,7 +5286,7 @@
     "cover_url": "/file/cases/case248.jpg",
     "sort_order": 292,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5304,7 +5304,7 @@
     "cover_url": "/file/cases/case247.jpg",
     "sort_order": 293,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5322,7 +5322,7 @@
     "cover_url": "/file/cases/case246.jpg",
     "sort_order": 294,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5340,7 +5340,7 @@
     "cover_url": "/file/cases/case245.jpg",
     "sort_order": 295,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5358,7 +5358,7 @@
     "cover_url": "/file/cases/case244.jpg",
     "sort_order": 296,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5376,7 +5376,7 @@
     "cover_url": "/file/cases/case243.jpg",
     "sort_order": 297,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5394,7 +5394,7 @@
     "cover_url": "/file/cases/case242.jpg",
     "sort_order": 298,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5412,7 +5412,7 @@
     "cover_url": "/file/cases/case241.jpg",
     "sort_order": 299,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5430,7 +5430,7 @@
     "cover_url": "/file/cases/case240.jpg",
     "sort_order": 300,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5448,7 +5448,7 @@
     "cover_url": "/file/cases/case239.jpg",
     "sort_order": 301,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5466,7 +5466,7 @@
     "cover_url": "/file/cases/case238.jpg",
     "sort_order": 302,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5484,7 +5484,7 @@
     "cover_url": "/file/cases/case237.jpg",
     "sort_order": 303,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5502,7 +5502,7 @@
     "cover_url": "/file/cases/case236.jpg",
     "sort_order": 304,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5520,7 +5520,7 @@
     "cover_url": "/file/cases/case235.jpg",
     "sort_order": 305,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5538,7 +5538,7 @@
     "cover_url": "/file/cases/case234.jpg",
     "sort_order": 306,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5556,7 +5556,7 @@
     "cover_url": "/file/cases/case233.jpg",
     "sort_order": 307,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5574,7 +5574,7 @@
     "cover_url": "/file/cases/case232.jpg",
     "sort_order": 308,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5592,7 +5592,7 @@
     "cover_url": "/file/cases/case231.jpg",
     "sort_order": 309,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5610,7 +5610,7 @@
     "cover_url": "/file/cases/case230.jpg",
     "sort_order": 310,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5628,7 +5628,7 @@
     "cover_url": "/file/cases/case229.jpg",
     "sort_order": 311,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5646,7 +5646,7 @@
     "cover_url": "/file/cases/case228.jpg",
     "sort_order": 312,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5664,7 +5664,7 @@
     "cover_url": "/file/cases/case227.jpg",
     "sort_order": 313,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5682,7 +5682,7 @@
     "cover_url": "/file/cases/case226.jpg",
     "sort_order": 314,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5700,7 +5700,7 @@
     "cover_url": "/file/cases/case225.jpg",
     "sort_order": 315,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5718,7 +5718,7 @@
     "cover_url": "/file/cases/case224.jpg",
     "sort_order": 316,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5736,7 +5736,7 @@
     "cover_url": "/file/cases/case223.jpg",
     "sort_order": 317,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5754,7 +5754,7 @@
     "cover_url": "/file/cases/case222.jpg",
     "sort_order": 318,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5772,7 +5772,7 @@
     "cover_url": "/file/cases/case221.jpg",
     "sort_order": 319,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5790,7 +5790,7 @@
     "cover_url": "/file/cases/case220.jpg",
     "sort_order": 320,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5808,7 +5808,7 @@
     "cover_url": "/file/cases/case219.jpg",
     "sort_order": 321,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5826,7 +5826,7 @@
     "cover_url": "/file/cases/case218.jpg",
     "sort_order": 322,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5844,7 +5844,7 @@
     "cover_url": "/file/cases/case217.jpg",
     "sort_order": 323,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5862,7 +5862,7 @@
     "cover_url": "/file/cases/case216.png",
     "sort_order": 324,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5880,7 +5880,7 @@
     "cover_url": "/file/cases/case215.jpg",
     "sort_order": 325,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5897,7 +5897,7 @@
     "cover_url": "/file/cases/case214.jpg",
     "sort_order": 326,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5915,7 +5915,7 @@
     "cover_url": "/file/cases/case213.jpg",
     "sort_order": 327,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5933,7 +5933,7 @@
     "cover_url": "/file/cases/case212.jpg",
     "sort_order": 328,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5951,7 +5951,7 @@
     "cover_url": "/file/cases/case211.jpg",
     "sort_order": 329,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5969,7 +5969,7 @@
     "cover_url": "/file/cases/case210.jpg",
     "sort_order": 330,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -5987,7 +5987,7 @@
     "cover_url": "/file/cases/case209.jpg",
     "sort_order": 331,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6005,7 +6005,7 @@
     "cover_url": "/file/cases/case208.jpg",
     "sort_order": 332,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6023,7 +6023,7 @@
     "cover_url": "/file/cases/case207.jpg",
     "sort_order": 333,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6041,7 +6041,7 @@
     "cover_url": "/file/cases/case206.jpg",
     "sort_order": 334,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6059,7 +6059,7 @@
     "cover_url": "/file/cases/case205.jpg",
     "sort_order": 335,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6077,7 +6077,7 @@
     "cover_url": "/file/cases/case204.jpg",
     "sort_order": 336,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6095,7 +6095,7 @@
     "cover_url": "/file/cases/case203.jpg",
     "sort_order": 337,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6113,7 +6113,7 @@
     "cover_url": "/file/cases/case202.jpg",
     "sort_order": 338,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6131,7 +6131,7 @@
     "cover_url": "/file/cases/case201.jpg",
     "sort_order": 339,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6149,7 +6149,7 @@
     "cover_url": "/file/cases/case200.jpg",
     "sort_order": 340,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6167,7 +6167,7 @@
     "cover_url": "/file/cases/case199.jpg",
     "sort_order": 341,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6185,7 +6185,7 @@
     "cover_url": "/file/cases/case198.jpg",
     "sort_order": 342,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6203,7 +6203,7 @@
     "cover_url": "/file/cases/case197.jpg",
     "sort_order": 343,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6221,7 +6221,7 @@
     "cover_url": "/file/cases/case196.jpg",
     "sort_order": 344,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6239,7 +6239,7 @@
     "cover_url": "/file/cases/case195.jpg",
     "sort_order": 345,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6257,7 +6257,7 @@
     "cover_url": "/file/cases/case194.jpg",
     "sort_order": 346,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6275,7 +6275,7 @@
     "cover_url": "/file/cases/case193.jpg",
     "sort_order": 347,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6293,7 +6293,7 @@
     "cover_url": "/file/cases/case192.jpg",
     "sort_order": 348,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6311,7 +6311,7 @@
     "cover_url": "/file/cases/case191.jpg",
     "sort_order": 349,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6329,7 +6329,7 @@
     "cover_url": "/file/cases/case190.jpg",
     "sort_order": 350,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6347,7 +6347,7 @@
     "cover_url": "/file/cases/case189.jpg",
     "sort_order": 351,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6365,7 +6365,7 @@
     "cover_url": "/file/cases/case188.jpg",
     "sort_order": 352,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6383,7 +6383,7 @@
     "cover_url": "/file/cases/case187.jpg",
     "sort_order": 353,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6401,7 +6401,7 @@
     "cover_url": "/file/cases/case186.jpg",
     "sort_order": 354,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6419,7 +6419,7 @@
     "cover_url": "/file/cases/case185.jpg",
     "sort_order": 355,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6437,7 +6437,7 @@
     "cover_url": "/file/cases/case184.jpg",
     "sort_order": 356,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6455,7 +6455,7 @@
     "cover_url": "/file/cases/case183.jpg",
     "sort_order": 357,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6473,7 +6473,7 @@
     "cover_url": "/file/cases/case182.jpg",
     "sort_order": 358,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6491,7 +6491,7 @@
     "cover_url": "/file/cases/case181.jpg",
     "sort_order": 359,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6509,7 +6509,7 @@
     "cover_url": "/file/cases/case180.jpg",
     "sort_order": 360,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6527,7 +6527,7 @@
     "cover_url": "/file/cases/case179.jpg",
     "sort_order": 361,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6545,7 +6545,7 @@
     "cover_url": "/file/cases/case178.jpg",
     "sort_order": 362,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6563,7 +6563,7 @@
     "cover_url": "/file/cases/case177.jpg",
     "sort_order": 363,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6581,7 +6581,7 @@
     "cover_url": "/file/cases/case176.jpg",
     "sort_order": 364,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6599,7 +6599,7 @@
     "cover_url": "/file/cases/case175.jpg",
     "sort_order": 365,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6617,7 +6617,7 @@
     "cover_url": "/file/cases/case174.jpg",
     "sort_order": 366,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6635,7 +6635,7 @@
     "cover_url": "/file/cases/case173.jpg",
     "sort_order": 367,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6653,7 +6653,7 @@
     "cover_url": "/file/cases/case172.jpg",
     "sort_order": 368,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6671,7 +6671,7 @@
     "cover_url": "/file/cases/case171.jpg",
     "sort_order": 369,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6689,7 +6689,7 @@
     "cover_url": "/file/cases/case168.jpg",
     "sort_order": 370,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6707,7 +6707,7 @@
     "cover_url": "/file/cases/case167.jpg",
     "sort_order": 371,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6725,7 +6725,7 @@
     "cover_url": "/file/cases/case166.jpg",
     "sort_order": 372,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6743,7 +6743,7 @@
     "cover_url": "/file/cases/case165.jpg",
     "sort_order": 373,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6761,7 +6761,7 @@
     "cover_url": "/file/cases/case164.jpg",
     "sort_order": 374,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6779,7 +6779,7 @@
     "cover_url": "/file/cases/case163.jpg",
     "sort_order": 375,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6797,7 +6797,7 @@
     "cover_url": "/file/cases/case162.jpg",
     "sort_order": 376,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6815,7 +6815,7 @@
     "cover_url": "/file/cases/case161.jpg",
     "sort_order": 377,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6833,7 +6833,7 @@
     "cover_url": "/file/cases/case160.jpg",
     "sort_order": 378,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6851,7 +6851,7 @@
     "cover_url": "/file/cases/case159.jpg",
     "sort_order": 379,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6869,7 +6869,7 @@
     "cover_url": "/file/cases/case158.jpg",
     "sort_order": 380,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6887,7 +6887,7 @@
     "cover_url": "/file/cases/case157.jpg",
     "sort_order": 381,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6905,7 +6905,7 @@
     "cover_url": "/file/cases/case156.jpg",
     "sort_order": 382,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6923,7 +6923,7 @@
     "cover_url": "/file/cases/case155.jpg",
     "sort_order": 383,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6941,7 +6941,7 @@
     "cover_url": "/file/cases/case154.jpg",
     "sort_order": 384,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6959,7 +6959,7 @@
     "cover_url": "/file/cases/case153.jpg",
     "sort_order": 385,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6977,7 +6977,7 @@
     "cover_url": "/file/cases/case152.jpg",
     "sort_order": 386,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -6994,7 +6994,7 @@
     "cover_url": "/file/cases/case151.jpg",
     "sort_order": 387,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7012,7 +7012,7 @@
     "cover_url": "/file/cases/case150.jpg",
     "sort_order": 388,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7030,7 +7030,7 @@
     "cover_url": "/file/cases/case149.jpg",
     "sort_order": 389,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7048,7 +7048,7 @@
     "cover_url": "/file/cases/case148.jpg",
     "sort_order": 390,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7066,7 +7066,7 @@
     "cover_url": "/file/cases/case147.jpg",
     "sort_order": 391,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7084,7 +7084,7 @@
     "cover_url": "/file/cases/case146.jpg",
     "sort_order": 392,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7102,7 +7102,7 @@
     "cover_url": "/file/cases/case145.jpg",
     "sort_order": 393,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7119,7 +7119,7 @@
     "cover_url": "/file/cases/case144.jpg",
     "sort_order": 394,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7137,7 +7137,7 @@
     "cover_url": "/file/cases/case143.jpg",
     "sort_order": 395,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7155,7 +7155,7 @@
     "cover_url": "/file/cases/case142.jpg",
     "sort_order": 396,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7172,7 +7172,7 @@
     "cover_url": "/file/cases/case141.jpg",
     "sort_order": 397,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7189,7 +7189,7 @@
     "cover_url": "/file/cases/case140.jpg",
     "sort_order": 398,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7207,7 +7207,7 @@
     "cover_url": "/file/cases/case139.jpg",
     "sort_order": 399,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7224,7 +7224,7 @@
     "cover_url": "/file/cases/case138.jpg",
     "sort_order": 400,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7242,7 +7242,7 @@
     "cover_url": "/file/cases/case137.jpg",
     "sort_order": 401,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7260,7 +7260,7 @@
     "cover_url": "/file/cases/case136.jpg",
     "sort_order": 402,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7277,7 +7277,7 @@
     "cover_url": "/file/cases/case135.jpg",
     "sort_order": 403,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7294,7 +7294,7 @@
     "cover_url": "/file/cases/case134.jpg",
     "sort_order": 404,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7312,7 +7312,7 @@
     "cover_url": "/file/cases/case133.jpg",
     "sort_order": 405,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7329,7 +7329,7 @@
     "cover_url": "/file/cases/case132.jpg",
     "sort_order": 406,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7346,7 +7346,7 @@
     "cover_url": "/file/cases/case131.jpg",
     "sort_order": 407,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7364,7 +7364,7 @@
     "cover_url": "/file/cases/case130.jpg",
     "sort_order": 408,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7382,7 +7382,7 @@
     "cover_url": "/file/cases/case129.png",
     "sort_order": 409,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7399,7 +7399,7 @@
     "cover_url": "/file/cases/case128.jpg",
     "sort_order": 410,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7416,7 +7416,7 @@
     "cover_url": "/file/cases/case127.jpg",
     "sort_order": 411,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7433,7 +7433,7 @@
     "cover_url": "/file/cases/case126.jpg",
     "sort_order": 412,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7450,7 +7450,7 @@
     "cover_url": "/file/cases/case125.jpg",
     "sort_order": 413,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7468,7 +7468,7 @@
     "cover_url": "/file/cases/case124.jpg",
     "sort_order": 414,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7486,7 +7486,7 @@
     "cover_url": "/file/cases/case123.jpg",
     "sort_order": 415,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7503,7 +7503,7 @@
     "cover_url": "/file/cases/case122.jpg",
     "sort_order": 416,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7521,7 +7521,7 @@
     "cover_url": "/file/cases/case121.jpg",
     "sort_order": 417,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7539,7 +7539,7 @@
     "cover_url": "/file/cases/case120.jpg",
     "sort_order": 418,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7556,7 +7556,7 @@
     "cover_url": "/file/cases/case119.jpg",
     "sort_order": 419,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7574,7 +7574,7 @@
     "cover_url": "/file/cases/case118.jpg",
     "sort_order": 420,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7592,7 +7592,7 @@
     "cover_url": "/file/cases/case117.jpg",
     "sort_order": 421,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7609,7 +7609,7 @@
     "cover_url": "/file/cases/case116.jpg",
     "sort_order": 422,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7626,7 +7626,7 @@
     "cover_url": "/file/cases/case115.jpg",
     "sort_order": 423,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7644,7 +7644,7 @@
     "cover_url": "/file/cases/case114.jpg",
     "sort_order": 424,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7662,7 +7662,7 @@
     "cover_url": "/file/cases/case113.jpg",
     "sort_order": 425,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7680,7 +7680,7 @@
     "cover_url": "/file/cases/case112.jpg",
     "sort_order": 426,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7698,7 +7698,7 @@
     "cover_url": "/file/cases/case111.jpg",
     "sort_order": 427,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7716,7 +7716,7 @@
     "cover_url": "/file/cases/case110.jpg",
     "sort_order": 428,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7734,7 +7734,7 @@
     "cover_url": "/file/cases/case109.jpg",
     "sort_order": 429,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7752,7 +7752,7 @@
     "cover_url": "/file/cases/case108.jpg",
     "sort_order": 430,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7770,7 +7770,7 @@
     "cover_url": "/file/cases/case107.jpg",
     "sort_order": 431,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7788,7 +7788,7 @@
     "cover_url": "/file/cases/case106.jpg",
     "sort_order": 432,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7805,7 +7805,7 @@
     "cover_url": "/file/cases/case105.jpg",
     "sort_order": 433,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7823,7 +7823,7 @@
     "cover_url": "/file/cases/case104.jpg",
     "sort_order": 434,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7841,7 +7841,7 @@
     "cover_url": "/file/cases/case103.jpg",
     "sort_order": 435,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7859,7 +7859,7 @@
     "cover_url": "/file/cases/case102.jpg",
     "sort_order": 436,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7876,7 +7876,7 @@
     "cover_url": "/file/cases/case101.jpg",
     "sort_order": 437,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7893,7 +7893,7 @@
     "cover_url": "/file/cases/case100.jpg",
     "sort_order": 438,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7911,7 +7911,7 @@
     "cover_url": "/file/cases/case99.jpg",
     "sort_order": 439,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7928,7 +7928,7 @@
     "cover_url": "/file/cases/case98.jpg",
     "sort_order": 440,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7946,7 +7946,7 @@
     "cover_url": "/file/cases/case97.jpg",
     "sort_order": 441,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7963,7 +7963,7 @@
     "cover_url": "/file/cases/case96.jpg",
     "sort_order": 442,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7980,7 +7980,7 @@
     "cover_url": "/file/cases/case95.jpg",
     "sort_order": 443,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -7997,7 +7997,7 @@
     "cover_url": "/file/cases/case94.jpg",
     "sort_order": 444,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8014,7 +8014,7 @@
     "cover_url": "/file/cases/case93.jpg",
     "sort_order": 445,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8032,7 +8032,7 @@
     "cover_url": "/file/cases/case92.jpg",
     "sort_order": 446,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8050,7 +8050,7 @@
     "cover_url": "/file/cases/case91.jpg",
     "sort_order": 447,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8068,7 +8068,7 @@
     "cover_url": "/file/cases/case90.jpg",
     "sort_order": 448,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8086,7 +8086,7 @@
     "cover_url": "/file/cases/case89.jpg",
     "sort_order": 449,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8104,7 +8104,7 @@
     "cover_url": "/file/cases/case88.jpg",
     "sort_order": 450,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8122,7 +8122,7 @@
     "cover_url": "/file/cases/case87.jpg",
     "sort_order": 451,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8140,7 +8140,7 @@
     "cover_url": "/file/cases/case86.jpg",
     "sort_order": 452,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8158,7 +8158,7 @@
     "cover_url": "/file/cases/case85.jpg",
     "sort_order": 453,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8176,7 +8176,7 @@
     "cover_url": "/file/cases/case84.jpg",
     "sort_order": 454,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8194,7 +8194,7 @@
     "cover_url": "/file/cases/case83.jpg",
     "sort_order": 455,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8212,7 +8212,7 @@
     "cover_url": "/file/cases/case82.jpg",
     "sort_order": 456,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8230,7 +8230,7 @@
     "cover_url": "/file/cases/case81.jpg",
     "sort_order": 457,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8248,7 +8248,7 @@
     "cover_url": "/file/cases/case80.jpg",
     "sort_order": 458,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8266,7 +8266,7 @@
     "cover_url": "/file/cases/case79.jpg",
     "sort_order": 459,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8284,7 +8284,7 @@
     "cover_url": "/file/cases/case78.jpg",
     "sort_order": 460,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8302,7 +8302,7 @@
     "cover_url": "/file/cases/case77.jpg",
     "sort_order": 461,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8320,7 +8320,7 @@
     "cover_url": "/file/cases/case76.jpg",
     "sort_order": 462,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8338,7 +8338,7 @@
     "cover_url": "/file/cases/case75.jpg",
     "sort_order": 463,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8356,7 +8356,7 @@
     "cover_url": "/file/cases/case74.jpg",
     "sort_order": 464,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8374,7 +8374,7 @@
     "cover_url": "/file/cases/case73.jpg",
     "sort_order": 465,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8391,7 +8391,7 @@
     "cover_url": "/file/cases/case72.jpg",
     "sort_order": 466,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8408,7 +8408,7 @@
     "cover_url": "/file/cases/case71.jpg",
     "sort_order": 467,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8425,7 +8425,7 @@
     "cover_url": "/file/cases/case70.jpg",
     "sort_order": 468,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8442,7 +8442,7 @@
     "cover_url": "/file/cases/case69.jpg",
     "sort_order": 469,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8459,7 +8459,7 @@
     "cover_url": "/file/cases/case68.jpg",
     "sort_order": 470,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8477,7 +8477,7 @@
     "cover_url": "/file/cases/case67.jpg",
     "sort_order": 471,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8494,7 +8494,7 @@
     "cover_url": "/file/cases/case66.jpg",
     "sort_order": 472,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8511,7 +8511,7 @@
     "cover_url": "/file/cases/case65.jpg",
     "sort_order": 473,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8529,7 +8529,7 @@
     "cover_url": "/file/cases/case64.jpg",
     "sort_order": 474,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8546,7 +8546,7 @@
     "cover_url": "/file/cases/case63.jpg",
     "sort_order": 475,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8563,7 +8563,7 @@
     "cover_url": "/file/cases/case62.jpg",
     "sort_order": 476,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8580,7 +8580,7 @@
     "cover_url": "/file/cases/case61.jpg",
     "sort_order": 477,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8598,7 +8598,7 @@
     "cover_url": "/file/cases/case60.jpg",
     "sort_order": 478,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8615,7 +8615,7 @@
     "cover_url": "/file/cases/case59.jpg",
     "sort_order": 479,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8633,7 +8633,7 @@
     "cover_url": "/file/cases/case58.jpg",
     "sort_order": 480,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8651,7 +8651,7 @@
     "cover_url": "/file/cases/case57.jpg",
     "sort_order": 481,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8669,7 +8669,7 @@
     "cover_url": "/file/cases/case56.jpg",
     "sort_order": 482,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8687,7 +8687,7 @@
     "cover_url": "/file/cases/case55.jpg",
     "sort_order": 483,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8705,7 +8705,7 @@
     "cover_url": "/file/cases/case54.jpg",
     "sort_order": 484,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8723,7 +8723,7 @@
     "cover_url": "/file/cases/case53.jpg",
     "sort_order": 485,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8741,7 +8741,7 @@
     "cover_url": "/file/cases/case52.jpg",
     "sort_order": 486,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8759,7 +8759,7 @@
     "cover_url": "/file/cases/case51.jpg",
     "sort_order": 487,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8777,7 +8777,7 @@
     "cover_url": "/file/cases/case50.jpg",
     "sort_order": 488,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8795,7 +8795,7 @@
     "cover_url": "/file/cases/case49.jpg",
     "sort_order": 489,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8813,7 +8813,7 @@
     "cover_url": "/file/cases/case48.jpg",
     "sort_order": 490,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8831,7 +8831,7 @@
     "cover_url": "/file/cases/case47.jpg",
     "sort_order": 491,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8849,7 +8849,7 @@
     "cover_url": "/file/cases/case46.jpg",
     "sort_order": 492,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8867,7 +8867,7 @@
     "cover_url": "/file/cases/case45.jpg",
     "sort_order": 493,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8885,7 +8885,7 @@
     "cover_url": "/file/cases/case44.jpg",
     "sort_order": 494,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8903,7 +8903,7 @@
     "cover_url": "/file/cases/case43.jpg",
     "sort_order": 495,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8921,7 +8921,7 @@
     "cover_url": "/file/cases/case42.jpg",
     "sort_order": 496,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8938,7 +8938,7 @@
     "cover_url": "/file/cases/case41.jpg",
     "sort_order": 497,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8956,7 +8956,7 @@
     "cover_url": "/file/cases/case40.jpg",
     "sort_order": 498,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8974,7 +8974,7 @@
     "cover_url": "/file/cases/case39.jpg",
     "sort_order": 499,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -8992,7 +8992,7 @@
     "cover_url": "/file/cases/case38.jpg",
     "sort_order": 500,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9010,7 +9010,7 @@
     "cover_url": "/file/cases/case37.jpg",
     "sort_order": 501,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9028,7 +9028,7 @@
     "cover_url": "/file/cases/case36.jpg",
     "sort_order": 502,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9046,7 +9046,7 @@
     "cover_url": "/file/cases/case35.jpg",
     "sort_order": 503,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9064,7 +9064,7 @@
     "cover_url": "/file/cases/case34.jpg",
     "sort_order": 504,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9082,7 +9082,7 @@
     "cover_url": "/file/cases/case33.jpg",
     "sort_order": 505,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9100,7 +9100,7 @@
     "cover_url": "/file/cases/case32.jpg",
     "sort_order": 506,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9118,7 +9118,7 @@
     "cover_url": "/file/cases/case31.jpg",
     "sort_order": 507,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9136,7 +9136,7 @@
     "cover_url": "/file/cases/case30.jpg",
     "sort_order": 508,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9154,7 +9154,7 @@
     "cover_url": "/file/cases/case29.jpg",
     "sort_order": 509,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9172,7 +9172,7 @@
     "cover_url": "/file/cases/case28.jpg",
     "sort_order": 510,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9190,7 +9190,7 @@
     "cover_url": "/file/cases/case27.jpg",
     "sort_order": 511,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9208,7 +9208,7 @@
     "cover_url": "/file/cases/case26.jpg",
     "sort_order": 512,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9226,7 +9226,7 @@
     "cover_url": "/file/cases/case25.jpg",
     "sort_order": 513,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9244,7 +9244,7 @@
     "cover_url": "/file/cases/case24.jpg",
     "sort_order": 514,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9261,7 +9261,7 @@
     "cover_url": "/file/cases/case23.jpg",
     "sort_order": 515,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9279,7 +9279,7 @@
     "cover_url": "/file/cases/case22.jpg",
     "sort_order": 516,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9297,7 +9297,7 @@
     "cover_url": "/file/cases/case21.jpg",
     "sort_order": 517,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9315,7 +9315,7 @@
     "cover_url": "/file/cases/case20.jpg",
     "sort_order": 518,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9333,7 +9333,7 @@
     "cover_url": "/file/cases/case19.jpg",
     "sort_order": 519,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9351,7 +9351,7 @@
     "cover_url": "/file/cases/case18.jpg",
     "sort_order": 520,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9369,7 +9369,7 @@
     "cover_url": "/file/cases/case17.jpg",
     "sort_order": 521,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9387,7 +9387,7 @@
     "cover_url": "/file/cases/case16.jpg",
     "sort_order": 522,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9405,7 +9405,7 @@
     "cover_url": "/file/cases/case15.jpg",
     "sort_order": 523,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9423,7 +9423,7 @@
     "cover_url": "/file/cases/case14.jpg",
     "sort_order": 524,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9441,7 +9441,7 @@
     "cover_url": "/file/cases/case13.jpg",
     "sort_order": 525,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9459,7 +9459,7 @@
     "cover_url": "/file/cases/case11.jpg",
     "sort_order": 526,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9477,7 +9477,7 @@
     "cover_url": "/file/cases/case10.jpg",
     "sort_order": 527,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9495,7 +9495,7 @@
     "cover_url": "/file/cases/case9.jpg",
     "sort_order": 528,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9513,7 +9513,7 @@
     "cover_url": "/file/cases/case8.jpg",
     "sort_order": 529,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9531,7 +9531,7 @@
     "cover_url": "/file/cases/case7.jpg",
     "sort_order": 530,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9549,7 +9549,7 @@
     "cover_url": "/file/cases/case6.jpg",
     "sort_order": 531,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9567,7 +9567,7 @@
     "cover_url": "/file/cases/case5.jpg",
     "sort_order": 532,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9585,7 +9585,7 @@
     "cover_url": "/file/cases/case4.jpg",
     "sort_order": 533,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9603,7 +9603,7 @@
     "cover_url": "/file/cases/case3.jpg",
     "sort_order": 534,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9621,7 +9621,7 @@
     "cover_url": "/file/cases/case2.jpg",
     "sort_order": 535,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   },
@@ -9639,7 +9639,7 @@
     "cover_url": "/file/cases/case1.jpg",
     "sort_order": 536,
     "enhance_prompt": "Enabled",
-    "storage_mode": "Temporary",
+    "storage_mode": "Permanent",
     "ratio": "",
     "resolution": ""
   }

@@ -79,7 +79,7 @@ func normalizeTemplateRequest(req imageTemplateRequest) (model.ImageTemplate, st
 		return template, "提示词增强配置无效"
 	}
 	if template.StorageMode == "" {
-		template.StorageMode = "Temporary"
+		template.StorageMode = "Permanent"
 	}
 	if template.StorageMode != "Temporary" && template.StorageMode != "Permanent" {
 		return template, "存储模式配置无效"

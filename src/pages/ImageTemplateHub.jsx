@@ -44,7 +44,7 @@ function emptyTemplate() {
         name: '', category: 'portrait', description: '', prompt: '',
         model_name: modelName, model_version: modelVersion,
         ratio: capability.defaultRatio, resolution: capability.defaultResolution,
-        enhance_prompt: 'Enabled', storage_mode: 'Temporary', accent: 'amber', cover_url: '',
+        enhance_prompt: 'Enabled', storage_mode: 'Permanent', accent: 'amber', cover_url: '',
     };
 }
 
@@ -144,7 +144,7 @@ function TemplateEditor({ initialValue, saving, error, onSave, onClose }) {
                                 <label className="text-[10.5px] text-gray-500">{t('画面比例')}<select id="template-ratio" name="template-ratio" value={form.ratio} onChange={(e) => set('ratio', e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#e2dccf] bg-white px-2.5 text-[11.5px] outline-none">{capability.ratios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}</select></label>
                                 <label className="text-[10.5px] text-gray-500">{t('分辨率')}<select id="template-resolution" name="template-resolution" value={form.resolution} onChange={(e) => set('resolution', e.target.value)} disabled={!capability.resolutions.length} className="mt-1 h-9 w-full rounded-lg border border-[#e2dccf] bg-white px-2.5 text-[11.5px] outline-none disabled:bg-gray-100">{capability.resolutions.length ? capability.resolutions.map((resolution) => <option key={resolution} value={resolution}>{resolution}</option>) : <option value="">{t('模型自动')}</option>}</select></label>
                                 <label className="text-[10.5px] text-gray-500">{t('提示词增强')}<select id="template-enhance" name="template-enhance" value={form.enhance_prompt} onChange={(e) => set('enhance_prompt', e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#e2dccf] bg-white px-2.5 text-[11.5px] outline-none"><option value="Enabled">{t('开启')}</option><option value="Disabled">{t('关闭')}</option></select></label>
-                                <label className="text-[10.5px] text-gray-500">{t('存储模式')}<select id="template-storage" name="template-storage" value={form.storage_mode} onChange={(e) => set('storage_mode', e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#e2dccf] bg-white px-2.5 text-[11.5px] outline-none"><option value="Temporary">{t('临时存储')}</option><option value="Permanent">{t('永久存储')}</option></select></label>
+                                <label className="text-[10.5px] text-gray-500">{t('存储模式')}<select id="template-storage" name="template-storage" value={form.storage_mode} onChange={(e) => set('storage_mode', e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#e2dccf] bg-white px-2.5 text-[11.5px] outline-none"><option value="Permanent">{t('永久存储')}</option><option value="Temporary">{t('临时存储')}</option></select></label>
                             </div>
                         </section>
                     </div>
@@ -216,7 +216,7 @@ export default function ImageTemplateHub({ language = 'zh', onApply }) {
                 prompt: style.prompt, model_name: style.model_name || VOD_DEFAULT_IMAGE_MODEL_NAME,
                 model_version: style.model_version || VOD_DEFAULT_IMAGE_MODEL_VERSION,
                 ratio: style.ratio || '1:1', resolution: style.resolution || '1K',
-                enhance_prompt: style.enhance_prompt || 'Enabled', storage_mode: style.storage_mode || 'Temporary',
+                enhance_prompt: style.enhance_prompt || 'Enabled', storage_mode: style.storage_mode || 'Permanent',
                 accent: style.accent_key || 'amber', cover_url: style.cover_url || '',
             });
             await load(); setActiveCategory('custom');

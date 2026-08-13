@@ -261,9 +261,10 @@ export default function FlowHome() {
     const [homeEnhancePrompt, setHomeEnhancePrompt] = useState(true);
     const [homeStorageMode, setHomeStorageMode] = useState(() => {
         try {
-            return localStorage.getItem('txstudio_aigc_storage_mode') === 'Permanent' ? 'Permanent' : 'Temporary';
+            const saved = localStorage.getItem('txstudio_aigc_storage_mode');
+            return saved === 'Temporary' || saved === 'Permanent' ? saved : 'Permanent';
         } catch {
-            return 'Temporary';
+            return 'Permanent';
         }
     });
     const [homeParameterOpen, setHomeParameterOpen] = useState(null);

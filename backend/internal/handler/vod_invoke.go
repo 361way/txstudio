@@ -63,6 +63,32 @@ type invokeReq struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+func normalizeAigcStorageMode(action string, payload map[string]interface{}) error {
+	if action != "CreateAigcImageTask" && action != "CreateAigcVideoTask" {
+		return nil
+	}
+	outputConfig, exists := payload["OutputConfig"]
+	if !exists || outputConfig == nil {
+		payload["OutputConfig"] = map[string]interface{}{"StorageMode": "Permanent"}
+		return nil
+	}
+	config, ok := outputConfig.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("OutputConfig 必须是对象")
+	}
+	storageMode, _ := config["StorageMode"].(string)
+	storageMode = strings.TrimSpace(storageMode)
+	if storageMode == "" {
+		config["StorageMode"] = "Permanent"
+		return nil
+	}
+	if storageMode != "Permanent" && storageMode != "Temporary" {
+		return fmt.Errorf("StorageMode 仅支持 Permanent 或 Temporary")
+	}
+	config["StorageMode"] = storageMode
+	return nil
+}
+
 // Invoke 从 SQLite 解密全局腾讯云凭证，并仅向预设产品域名转发白名单 action。
 func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 	var req invokeReq
@@ -100,6 +126,10 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 			BadRequest(c, "payload 格式错误")
 			return
 		}
+	}
+	if err := normalizeAigcStorageMode(req.Action, payload); err != nil {
+		BadRequest(c, err.Error())
+		return
 	}
 	if h.InjectSubAppID {
 		subAppID, parseErr := parsePositiveUint64(credentialData["sub_app_id"])

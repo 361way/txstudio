@@ -71,6 +71,7 @@ export default function AgentStudio() {
     const [resolution, setResolution] = useState('1080P');
     const [duration, setDuration] = useState('5s');
     const [audioGeneration, setAudioGeneration] = useState(true);
+    const [storageMode, setStorageMode] = useState('Permanent');
     const [maxShots, setMaxShots] = useState('auto');
     const [run, setRun] = useState(null);
     const [error, setError] = useState('');
@@ -101,8 +102,8 @@ export default function AgentStudio() {
             prompt: value,
             modelName: textModel,
             modelVersion: `${imageModel}/${imageVersion} · ${videoModel}/${videoVersion}`,
-            storageMode: 'Temporary',
-            parameters: { text_model: textModel, image_model: imageModel, image_version: imageVersion, video_model: videoModel, video_version: videoVersion, aspect_ratio: aspectRatio, resolution, duration, audio_generation: audioGeneration, max_shots: maxShots },
+            storageMode,
+            parameters: { text_model: textModel, image_model: imageModel, image_version: imageVersion, video_model: videoModel, video_version: videoVersion, aspect_ratio: aspectRatio, resolution, duration, audio_generation: audioGeneration, storage_mode: storageMode, max_shots: maxShots },
         });
         let finalRun = null;
         try {
@@ -117,6 +118,7 @@ export default function AgentStudio() {
                 resolution,
                 duration,
                 audioGeneration,
+                storageMode,
                 maxShots,
                 historyParentJobId: tracker?.id,
                 signal: abortRef.current.signal,
@@ -130,9 +132,9 @@ export default function AgentStudio() {
                 },
             });
             const assets = [
-                ...finalRun.characters.filter((item) => item.imageUrl).map((item, index) => ({ role: 'agent_character', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', metadata: { name: item.name, role: item.role } })),
-                ...finalRun.shots.filter((item) => item.imageUrl).map((item, index) => ({ role: 'storyboard', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', metadata: { title: item.title, shot_index: item.index } })),
-                ...finalRun.shots.filter((item) => item.videoUrl).map((item, index) => ({ role: 'output', ordinal: index, media_type: 'video', cloud_url: item.videoUrl, storage_provider: 'tencent-vod', metadata: { title: item.title, shot_index: item.index } })),
+                ...finalRun.characters.filter((item) => item.imageUrl).map((item, index) => ({ role: 'agent_character', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', storage_mode: storageMode, metadata: { name: item.name, role: item.role } })),
+                ...finalRun.shots.filter((item) => item.imageUrl).map((item, index) => ({ role: 'storyboard', ordinal: index, media_type: 'image', cloud_url: item.imageUrl, storage_provider: 'tencent-vod', storage_mode: storageMode, metadata: { title: item.title, shot_index: item.index } })),
+                ...finalRun.shots.filter((item) => item.videoUrl).map((item, index) => ({ role: 'output', ordinal: index, media_type: 'video', cloud_url: item.videoUrl, storage_provider: 'tencent-vod', storage_mode: storageMode, metadata: { title: item.title, shot_index: item.index } })),
             ];
             if (finalRun.status === 'stopped') await tracker?.fail(new Error('AgentLoop 已停止'), 'cancelled');
             else if (finalRun.status === 'failed') await tracker?.fail(new Error(finalRun.errors.join('；') || 'AgentLoop 运行失败'));
@@ -219,6 +221,7 @@ export default function AgentStudio() {
                                 <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('画面比例')}</span><select value={aspectRatio} disabled={isRunning} onChange={(event) => setAspectRatio(event.target.value)} className={selectClass}>{VOD_VIDEO_RATIOS.map((ratio) => <option key={ratio}>{ratio}</option>)}</select></label>
                                 <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('清晰度')}</span><select value={resolution} disabled={isRunning} onChange={(event) => setResolution(event.target.value)} className={selectClass}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
                                 <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('单镜时长')}</span><select value={duration} disabled={isRunning} onChange={(event) => setDuration(event.target.value)} className={selectClass}>{DURATIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('存储模式')}</span><select value={storageMode} disabled={isRunning} onChange={(event) => setStorageMode(event.target.value)} className={selectClass}><option value="Permanent">{t('永久保存到 VOD')}</option><option value="Temporary">{t('临时存储（7 天）')}</option></select></label>
                             </div>
                             <button type="button" disabled={isRunning} onClick={() => setAudioGeneration((value) => !value)} className={`mt-3 flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-[12px] transition ${audioGeneration ? 'border-[#ead394] bg-[#fff6dc] text-[#755611]' : 'border-[#e6e2da] bg-white text-gray-500'}`}>
                                 <span className="flex items-center gap-2">{audioGeneration ? <Volume2 size={15} /> : <VolumeX size={15} />}{t('音画同步')}</span>

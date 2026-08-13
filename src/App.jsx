@@ -6355,9 +6355,9 @@ function TxStudioApp({
     const [aigcStorageMode, setAigcStorageMode] = useState(() => {
         try {
             const saved = localStorage.getItem('txstudio_aigc_storage_mode');
-            return saved === 'Permanent' ? 'Permanent' : 'Temporary';
+            return saved === 'Temporary' || saved === 'Permanent' ? saved : 'Permanent';
         } catch (e) {
-            return 'Temporary';
+            return 'Permanent';
         }
     });
 

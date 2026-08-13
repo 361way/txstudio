@@ -100,7 +100,7 @@ const normalizedCases = templates.map((item, index) => ({
     ...item,
     sort_order: preservedTemplates.length + index,
     enhance_prompt: 'Enabled',
-    storage_mode: 'Temporary',
+    storage_mode: 'Permanent',
     ratio: '',
     resolution: '',
 }));

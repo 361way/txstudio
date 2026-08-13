@@ -28,6 +28,10 @@ func TestSystemTemplateSeedExcludesRetiredSourceFields(t *testing.T) {
 				t.Fatalf("template %d still contains retired field %q", index, field)
 			}
 		}
+		var storageMode string
+		if err := json.Unmarshal(template["storage_mode"], &storageMode); err != nil || storageMode != "Permanent" {
+			t.Fatalf("template %d should default to Permanent storage", index)
+		}
 	}
 }
 
@@ -105,7 +109,7 @@ func TestEnsureSystemImageTemplatesImportsOnce(t *testing.T) {
 	if err := db.Where("source = ? AND source_key = ?", systemTemplateSource, "gpt2-case-1").First(&original).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Model(&original).Update("name", "数据库维护后的名称").Error; err != nil {
+	if err := db.Model(&original).Updates(map[string]interface{}{"name": "数据库维护后的名称", "storage_mode": "Temporary"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := EnsureSystemImageTemplates(db); err != nil {
@@ -125,5 +129,8 @@ func TestEnsureSystemImageTemplatesImportsOnce(t *testing.T) {
 	}
 	if maintained.Name != "数据库维护后的名称" {
 		t.Fatalf("seed overwrote database-maintained template: %q", maintained.Name)
+	}
+	if maintained.StorageMode != "Permanent" {
+		t.Fatalf("legacy system template storage mode was not migrated: %q", maintained.StorageMode)
 	}
 }
