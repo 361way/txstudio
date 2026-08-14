@@ -11,14 +11,14 @@ import {
     VOD_IMAGE_MODEL_MATRIX,
     VOD_VIDEO_MODEL_MATRIX,
     VOD_VIDEO_RATIOS,
+    getVodVideoModelCapability,
 } from '../vodAdapter';
 import { getAgentTextModels, runScriptAgentLoop } from '../api/agentLoop';
 import { createGenerationTracker } from '../api/generationHistory';
 import i18n from '../i18n';
 
 const t = (value) => (i18n.t ? i18n.t(value) : value);
-const RESOLUTIONS = ['720P', '1080P', '4K'];
-const DURATIONS = ['5s', '10s'];
+
 const STAGE_LABELS = {
     extracting_characters: '分析剧本与提取人物',
     generating_characters: '生成人物设定',
@@ -75,6 +75,7 @@ export default function AgentStudio() {
     const [maxShots, setMaxShots] = useState('auto');
     const [run, setRun] = useState(null);
     const [error, setError] = useState('');
+    const videoCapability = getVodVideoModelCapability(videoModel, videoVersion);
     const runningRef = useRef(false);
     const abortRef = useRef(null);
 
@@ -207,8 +208,8 @@ export default function AgentStudio() {
                                 <div>
                                     <span className="mb-1.5 block text-[11px] font-medium text-[#736c5d]">{t('视频片段')}</span>
                                     <div className="grid grid-cols-2 gap-2">
-                                        <select value={videoModel} disabled={isRunning} onChange={(event) => { const name = event.target.value; setVideoModel(name); setVideoVersion(VOD_VIDEO_MODEL_MATRIX[name]?.[0] || ''); }} className={selectClass}>{Object.keys(VOD_VIDEO_MODEL_MATRIX).map((name) => <option key={name}>{name}</option>)}</select>
-                                        <select value={videoVersion} disabled={isRunning} onChange={(event) => setVideoVersion(event.target.value)} className={selectClass}>{(VOD_VIDEO_MODEL_MATRIX[videoModel] || []).map((version) => <option key={version}>{version}</option>)}</select>
+                                        <select value={videoModel} disabled={isRunning} onChange={(event) => { const name = event.target.value; const version = VOD_VIDEO_MODEL_MATRIX[name]?.[0] || ''; const capability = getVodVideoModelCapability(name, version); setVideoModel(name); setVideoVersion(version); setAspectRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); }} className={selectClass}>{Object.keys(VOD_VIDEO_MODEL_MATRIX).map((name) => <option key={name}>{name}</option>)}</select>
+                                        <select value={videoVersion} disabled={isRunning} onChange={(event) => { const version = event.target.value; const capability = getVodVideoModelCapability(videoModel, version); setVideoVersion(version); setAspectRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); }} className={selectClass}>{(VOD_VIDEO_MODEL_MATRIX[videoModel] || []).map((version) => <option key={version}>{version}</option>)}</select>
                                     </div>
                                 </div>
                             </div>
@@ -218,9 +219,9 @@ export default function AgentStudio() {
                             <h2 className="text-[13px] font-semibold text-[#34312b]">{t('3. 输出设置')}</h2>
                             <div className="mt-4 grid grid-cols-2 gap-3">
                                 <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('镜头数量')}</span><select value={maxShots} disabled={isRunning} onChange={(event) => setMaxShots(event.target.value === 'auto' ? 'auto' : Number(event.target.value))} className={selectClass}><option value="auto">{t('自动规划')}</option>{[2, 3, 4, 5, 6, 8].map((count) => <option key={count} value={count}>{count} 个镜头</option>)}</select></label>
-                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('画面比例')}</span><select value={aspectRatio} disabled={isRunning} onChange={(event) => setAspectRatio(event.target.value)} className={selectClass}>{VOD_VIDEO_RATIOS.map((ratio) => <option key={ratio}>{ratio}</option>)}</select></label>
-                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('清晰度')}</span><select value={resolution} disabled={isRunning} onChange={(event) => setResolution(event.target.value)} className={selectClass}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
-                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('单镜时长')}</span><select value={duration} disabled={isRunning} onChange={(event) => setDuration(event.target.value)} className={selectClass}>{DURATIONS.map((value) => <option key={value}>{value}</option>)}</select></label>
+                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('画面比例')}</span><select value={aspectRatio} disabled={isRunning} onChange={(event) => setAspectRatio(event.target.value)} className={selectClass}>{videoCapability.ratios.map((ratio) => <option key={ratio}>{ratio}</option>)}</select></label>
+                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('清晰度')}</span><select value={resolution} disabled={isRunning} onChange={(event) => setResolution(event.target.value)} className={selectClass}>{videoCapability.resolutions.map((value) => <option key={value}>{value}</option>)}</select></label>
+                                <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('单镜时长')}</span><select value={duration} disabled={isRunning} onChange={(event) => setDuration(event.target.value)} className={selectClass}>{videoCapability.durations.map((value) => <option key={value}>{value}</option>)}</select></label>
                                 <label><span className="mb-1.5 block text-[11px] text-[#736c5d]">{t('存储模式')}</span><select value={storageMode} disabled={isRunning} onChange={(event) => setStorageMode(event.target.value)} className={selectClass}><option value="Permanent">{t('永久保存到 VOD')}</option><option value="Temporary">{t('临时存储（7 天）')}</option></select></label>
                             </div>
                             <button type="button" disabled={isRunning} onClick={() => setAudioGeneration((value) => !value)} className={`mt-3 flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-[12px] transition ${audioGeneration ? 'border-[#ead394] bg-[#fff6dc] text-[#755611]' : 'border-[#e6e2da] bg-white text-gray-500'}`}>

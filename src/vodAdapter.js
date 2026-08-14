@@ -40,7 +40,7 @@ export const VOD_IMAGE_MODEL_MATRIX = {
     Kling: ['2.1', '3.0', '3.0-Omni', 'O1']
 };
 export const VOD_VIDEO_MODEL_MATRIX = {
-    Hailuo: ['02', '2.3', '2.3-fast'],
+    Hailuo: ['02', '2.3', '2.3-fast', 'H3'],
     Kling: ['1.6', '2.0', '2.1', '2.5', '2.6', 'O1', '3.0', '3.0-Omni'],
     Vidu: ['q2', 'q2-pro', 'q2-turbo', 'q3', 'q3-pro', 'q3-turbo'],
     GV: ['3.1', '3.1-fast'],
@@ -765,6 +765,38 @@ export async function runVodAigcPipeline(params, ctx = {}) {
 export const VOD_IMAGE_RATIOS = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
 export const VOD_VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 export const VOD_VIDEO_DURATIONS = ['5s', '10s'];
+
+const HAILUO_H3_VIDEO_CAPABILITY = Object.freeze({
+    // VODoc 的 Hailuo H3 文档：时长仅支持 6/10 秒，比例范围为 2:5 至 5:2。
+    durations: ['6s', '10s'],
+    ratios: ['2:5', '9:16', '3:4', '1:1', '4:3', '16:9', '5:2'],
+    resolutions: ['768P', '1080P', '2K', '4K'],
+    maxReferenceImages: 1,
+    supportsFirstLastFrame: true,
+});
+
+const DEFAULT_VIDEO_CAPABILITY = Object.freeze({
+    durations: VOD_VIDEO_DURATIONS,
+    ratios: VOD_VIDEO_RATIOS,
+    resolutions: ['720P', '1080P', '2K', '4K'],
+    maxReferenceImages: 10,
+    supportsFirstLastFrame: false,
+});
+
+export function getVodVideoModelCapability(modelName, modelVersion) {
+    if (modelName === 'Hailuo' && modelVersion === 'H3') {
+        return HAILUO_H3_VIDEO_CAPABILITY;
+    }
+    if (modelName === 'Kling' && ['3.0', '3.0-Omni'].includes(modelVersion)) {
+        return {
+            ...DEFAULT_VIDEO_CAPABILITY,
+            durations: Array.from({ length: 13 }, (_, index) => `${index + 3}s`),
+            maxReferenceImages: modelVersion === '3.0' ? 2 : 10,
+            supportsFirstLastFrame: modelVersion === '3.0',
+        };
+    }
+    return DEFAULT_VIDEO_CAPABILITY;
+}
 
 /**
  * 判断一个 modelId 是否是 VOD AIGC 模型

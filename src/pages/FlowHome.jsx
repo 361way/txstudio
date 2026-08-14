@@ -29,7 +29,7 @@ import {
     VOD_VIDEO_MODEL_MATRIX,
     VOD_DEFAULT_VIDEO_MODEL_NAME,
     VOD_DEFAULT_VIDEO_MODEL_VERSION,
-    VOD_VIDEO_RATIOS,
+    getVodVideoModelCapability,
     runVodAigcPipeline,
 } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
@@ -71,10 +71,7 @@ const HISTORY = [];
 const IMAGE_MODELS = Object.keys(VOD_IMAGE_MODEL_MATRIX);
 const VIDEO_MODELS = Object.keys(VOD_VIDEO_MODEL_MATRIX);
 const HOME_REFERENCE_MAX_BYTES = 20 * 1024 * 1024;
-const VIDEO_REFERENCE_LIMIT = 10;
-const VIDEO_RESOLUTIONS = ['720P', '1080P', '2K', '4K'];
-const KLING_EXTENDED_DURATIONS = Array.from({ length: 13 }, (_, index) => `${index + 3}s`);
-const DEFAULT_VIDEO_DURATIONS = ['5s', '10s'];
+
 const REFERENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const REFERENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 const HOME_PIPELINE_CONTEXT = {
@@ -293,24 +290,26 @@ export default function FlowHome() {
     const homeModelVersions = VOD_IMAGE_MODEL_MATRIX[imageModel] || [];
     const homeVideoModelVersions = VOD_VIDEO_MODEL_MATRIX[videoModel] || [];
     const isHomeVideo = homeGenerationType === 'video';
-    const isKlingExtendedVideo = videoModel === 'Kling' && ['3.0', '3.0-Omni'].includes(videoModelVersion);
+    const homeVideoCapability = getVodVideoModelCapability(videoModel, videoModelVersion);
     const homeVideoReferenceFeature = !isHomeVideo
         ? ''
-        : videoModel === 'Kling' && videoModelVersion === '3.0'
+        : videoModel === 'Hailuo' && videoModelVersion === 'H3'
             ? 'firstLastFrame'
-            : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
-                ? 'multiReference'
-                : videoModel === 'Kling' && videoModelVersion === 'O1'
-                    ? 'subjectReference'
-                    : '';
+            : videoModel === 'Kling' && videoModelVersion === '3.0'
+                ? 'firstLastFrame'
+                : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
+                    ? 'multiReference'
+                    : videoModel === 'Kling' && videoModelVersion === 'O1'
+                        ? 'subjectReference'
+                        : '';
     const supportsHomeVideoSubjects = isHomeVideo && videoModel === 'Kling' && ['O1', '3.0-Omni'].includes(videoModelVersion);
     const homeVideoSubjectInfos = isHomeVideo ? parseHomeVideoSubjectInfos(homeVideoSubjectText) : [];
     const homeReferenceLimit = isHomeVideo
-        ? (homeVideoReferenceFeature === 'firstLastFrame' ? 2 : VIDEO_REFERENCE_LIMIT)
+        ? (homeVideoReferenceFeature === 'firstLastFrame' ? 2 : homeVideoCapability.maxReferenceImages)
         : homeModelCapability.maxReferences;
-    const homeRatioOptions = isHomeVideo ? VOD_VIDEO_RATIOS : homeModelCapability.ratios;
-    const homeResolutionOptions = isHomeVideo ? VIDEO_RESOLUTIONS : homeModelCapability.resolutions;
-    const homeVideoDurationOptions = isKlingExtendedVideo ? KLING_EXTENDED_DURATIONS : DEFAULT_VIDEO_DURATIONS;
+    const homeRatioOptions = isHomeVideo ? homeVideoCapability.ratios : homeModelCapability.ratios;
+    const homeResolutionOptions = isHomeVideo ? homeVideoCapability.resolutions : homeModelCapability.resolutions;
+    const homeVideoDurationOptions = homeVideoCapability.durations;
     const activeHomeModel = isHomeVideo ? videoModel : imageModel;
     const activeHomeModelVersion = isHomeVideo ? videoModelVersion : imageModelVersion;
     const homeGenerationLoading = isHomeVideo ? homeVideoLoading : homeImageLoading;
@@ -420,6 +419,14 @@ export default function FlowHome() {
         setQuickInspirationOpen(false);
     };
 
+    const syncHomeVideoCapability = (modelName, modelVersion) => {
+        const capability = getVodVideoModelCapability(modelName, modelVersion);
+        setHomeAspectRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]);
+        setHomeResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]);
+        setHomeVideoResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]);
+        setHomeVideoDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]);
+    };
+
     const switchHomeGenerationType = (type) => {
         if (homeAnyGenerationLoading) return;
         setHomeGenerationType(type);
@@ -427,8 +434,7 @@ export default function FlowHome() {
         setHomeParameterOpen(null);
         setHomeParameterError('');
         if (type === 'video') {
-            setHomeAspectRatio((current) => VOD_VIDEO_RATIOS.includes(current) ? current : '16:9');
-            setHomeResolution(homeVideoResolution);
+            syncHomeVideoCapability(videoModel, videoModelVersion);
         } else {
             setHomeAspectRatio((current) => homeModelCapability.ratios.includes(current) ? current : homeModelCapability.defaultRatio);
             setHomeResolution((current) => homeModelCapability.resolutions.includes(current) ? current : homeModelCapability.defaultResolution);
@@ -452,9 +458,7 @@ export default function FlowHome() {
             : versions[0] || '';
         setVideoModel(modelName);
         setVideoModelVersion(nextVersion);
-        if (!(modelName === 'Kling' && ['3.0', '3.0-Omni'].includes(nextVersion))) {
-            setHomeVideoDuration((current) => DEFAULT_VIDEO_DURATIONS.includes(current) ? current : '5s');
-        }
+        syncHomeVideoCapability(modelName, nextVersion);
         setHomeParameterError('');
     };
 
@@ -468,9 +472,7 @@ export default function FlowHome() {
 
     const selectHomeVideoModelVersion = (modelVersion) => {
         setVideoModelVersion(modelVersion);
-        if (!(videoModel === 'Kling' && ['3.0', '3.0-Omni'].includes(modelVersion))) {
-            setHomeVideoDuration((current) => DEFAULT_VIDEO_DURATIONS.includes(current) ? current : '5s');
-        }
+        syncHomeVideoCapability(videoModel, modelVersion);
         setHomeParameterError('');
     };
 
@@ -909,7 +911,7 @@ export default function FlowHome() {
                                                 <label>
                                                     <span className="mb-1 block text-[10px] font-medium text-[#81796a]">{t('清晰度')}</span>
                                                     <select value={homeVideoResolution} onChange={(event) => { setHomeVideoResolution(event.target.value); setHomeResolution(event.target.value); }} aria-label={t('视频清晰度')} className="h-8 w-full rounded-lg border border-[#e3ded1] bg-white px-2.5 text-[11.5px] text-[#36332d] outline-none focus:border-[#d4aa42]">
-                                                        {VIDEO_RESOLUTIONS.map((resolution) => <option key={resolution} value={resolution}>{resolution}</option>)}
+                                                        {homeResolutionOptions.map((resolution) => <option key={resolution} value={resolution}>{resolution}</option>)}
                                                     </select>
                                                 </label>
                                                 <label>
@@ -921,7 +923,7 @@ export default function FlowHome() {
                                                 <label>
                                                     <span className="mb-1 block text-[10px] font-medium text-[#81796a]">{t('比例')}</span>
                                                     <select value={homeAspectRatio} onChange={(event) => setHomeAspectRatio(event.target.value)} aria-label={t('画面比例')} className="h-8 w-full rounded-lg border border-[#e3ded1] bg-white px-2.5 text-[11.5px] text-[#36332d] outline-none focus:border-[#d4aa42]">
-                                                        {VOD_VIDEO_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+                                                        {homeRatioOptions.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
                                                     </select>
                                                 </label>
                                                 <div>

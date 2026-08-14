@@ -81,6 +81,7 @@ import {
     isVodModel,
     parseVodCredentials,
     resolveVodSubModel,
+    getVodVideoModelCapability,
     runVodAigcPipeline,
     runVodComposePipeline
 } from './vodAdapter';
@@ -1993,10 +1994,7 @@ const getVodKlingReferenceFeature = (modelName, modelVersion) => {
     return '';
 };
 
-// Kling 3.0 / 3.0-Omni 支持 3~15 秒可选时长
-const VOD_KLING_EXTENDED_DURATIONS = Array.from({ length: 13 }, (_, i) => `${i + 3}s`); // ['3s', '4s', ..., '15s']
-
-// 根据 VOD 视频子模型返回特定的可选时长列表；不适用时返回 null。
+// 根据 VOD 视频子模型返回统一能力表中的时长选项。
 const getVodSubModelDurations = (config, customParams) => {
     if (getVodConfigType(config) !== 'video') return null;
     const sel = resolveVodSubModel(
@@ -2004,10 +2002,7 @@ const getVodSubModelDurations = (config, customParams) => {
         customParams,
         Array.isArray(config?.customParams) ? config.customParams : []
     );
-    if (String(sel?.modelName || '').trim().toLowerCase() !== 'kling') return null;
-    const version = normalizeVodKlingVersion(sel?.modelVersion);
-    if (version === '3.0' || version === '3.0-omni') return VOD_KLING_EXTENDED_DURATIONS;
-    return null;
+    return getVodVideoModelCapability(sel.modelName, sel.modelVersion).durations;
 };
 
 const parseVodKlingSubjectInfos = (raw) => {

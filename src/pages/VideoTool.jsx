@@ -8,7 +8,7 @@ import {
     Film, Images,
 } from 'lucide-react';
 import {
-    VOD_VIDEO_MODEL_MATRIX, VOD_VIDEO_RATIOS, VOD_VIDEO_DURATIONS,
+    VOD_VIDEO_MODEL_MATRIX, getVodVideoModelCapability,
     VOD_DEFAULT_VIDEO_MODEL_NAME, VOD_DEFAULT_VIDEO_MODEL_VERSION,
     runVodAigcPipeline,
 } from '../vodAdapter';
@@ -22,7 +22,6 @@ const PIPELINE_CONTEXT = {
     localServerUrl: LOCAL_SERVICE_URL,
 };
 const VIDEO_REFERENCE_MAX_BYTES = 20 * 1024 * 1024;
-const VIDEO_MULTI_REFERENCE_LIMIT = 10;
 const REFERENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const REFERENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 
@@ -55,6 +54,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const [error, setError] = useState('');
 
     const versions = VOD_VIDEO_MODEL_MATRIX[modelName] || [];
+    const videoCapability = getVodVideoModelCapability(modelName, modelVersion);
 
     const makePreview = useCallback((file) => ({
         file,
@@ -79,10 +79,10 @@ export default function VideoTool({ onBack, template, embedded = false }) {
         });
     };
     const handleUploadMulti = (files) => {
-        const remaining = Math.max(0, VIDEO_MULTI_REFERENCE_LIMIT - multiImages.length);
+        const remaining = Math.max(0, videoCapability.maxReferenceImages - multiImages.length);
         const validFiles = Array.from(files || []).filter(isValidReferenceImage);
         if (!remaining) {
-            setError(`最多支持 ${VIDEO_MULTI_REFERENCE_LIMIT} 张参考图`);
+            setError(`当前模型最多支持 ${videoCapability.maxReferenceImages} 张参考图`);
             return;
         }
         if (!validFiles.length) {
@@ -239,7 +239,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                             </button>
                                         </div>
                                     ))}
-                                    {multiImages.length < VIDEO_MULTI_REFERENCE_LIMIT && (
+                                    {multiImages.length < videoCapability.maxReferenceImages && (
                                         <>
                                             <input
                                                 ref={multiImagesInputRef}
@@ -256,8 +256,8 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                                 type="button"
                                                 onClick={() => multiImagesInputRef.current?.click()}
                                                 className="dropzone w-20 h-20 cursor-pointer"
-                                                title={t(`添加参考图（最多 ${VIDEO_MULTI_REFERENCE_LIMIT} 张）`)}
-                                                aria-label={t(`添加参考图（最多 ${VIDEO_MULTI_REFERENCE_LIMIT} 张）`)}
+                                                title={t(`添加参考图（最多 ${videoCapability.maxReferenceImages} 张）`)}
+                                                aria-label={t(`添加参考图（最多 ${videoCapability.maxReferenceImages} 张）`)}
                                             >
                                                 <Plus className="w-5 h-5" />
                                             </button>
@@ -272,26 +272,26 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('模型')}</label>
-                            <select value={modelName} onChange={(e) => { setModelName(e.target.value); setModelVersion((VOD_VIDEO_MODEL_MATRIX[e.target.value] || [''])[0]); }} className="field">
+                            <select value={modelName} onChange={(e) => { const name = e.target.value; const version = (VOD_VIDEO_MODEL_MATRIX[name] || [''])[0]; const capability = getVodVideoModelCapability(name, version); setModelName(name); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages([]); }} className="field">
                                 {Object.keys(VOD_VIDEO_MODEL_MATRIX).map((m) => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('版本')}</label>
-                            <select value={modelVersion} onChange={(e) => setModelVersion(e.target.value)} className="field">
+                            <select value={modelVersion} onChange={(e) => { const version = e.target.value; const capability = getVodVideoModelCapability(modelName, version); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages((current) => current.slice(0, capability.maxReferenceImages)); }} className="field">
                                 {versions.map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('比例')}</label>
                             <select value={ratio} onChange={(e) => setRatio(e.target.value)} className="field">
-                                {VOD_VIDEO_RATIOS.map((r) => <option key={r} value={r}>{r}</option>)}
+                                {videoCapability.ratios.map((r) => <option key={r} value={r}>{r}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('时长')}</label>
                             <select value={duration} onChange={(e) => setDuration(e.target.value)} className="field">
-                                {VOD_VIDEO_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                                {videoCapability.durations.map((d) => <option key={d} value={d}>{d}</option>)}
                             </select>
                         </div>
                         <div>
