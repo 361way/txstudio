@@ -5,6 +5,7 @@ import {
     Trash2, Video, X, XCircle,
 } from 'lucide-react';
 import { deleteGenerationJob, getGenerationJob, listGenerationJobs } from '../api/generationHistory';
+import { listProjects } from '../api/project';
 import i18n from '../i18n';
 
 const t = (value) => (i18n.t ? i18n.t(value) : value);
@@ -139,9 +140,11 @@ function HistoryDetail({ id, onClose, onDelete }) {
     );
 }
 
-export default function GenerationHistory() {
+export default function GenerationHistory({ initialProjectId = '' }) {
     const [type, setType] = useState('');
     const [status, setStatus] = useState('');
+    const [projectId, setProjectId] = useState(initialProjectId ? String(initialProjectId) : '');
+    const [projects, setProjects] = useState([]);
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
     const [data, setData] = useState({ items: [], total: 0, page_size: 24 });
@@ -151,15 +154,23 @@ export default function GenerationHistory() {
 
     const load = useCallback(async () => {
         setLoading(true); setError('');
-        try { setData(await listGenerationJobs({ type, status, q: query.trim(), page, page_size: 24 })); }
+        try { setData(await listGenerationJobs({ type, status, project_id: projectId, q: query.trim(), page, page_size: 24 })); }
         catch (nextError) { setError(nextError?.message || '加载生成历史失败'); }
         finally { setLoading(false); }
-    }, [type, status, query, page]);
+    }, [type, status, projectId, query, page]);
     useEffect(() => { load(); }, [load]);
-    useEffect(() => { setPage(1); }, [type, status, query]);
+    useEffect(() => { setPage(1); }, [type, status, projectId, query]);
+    useEffect(() => {
+        listProjects().then((items) => setProjects(Array.isArray(items) ? items : [])).catch(() => setProjects([]));
+    }, []);
+    useEffect(() => {
+        setProjectId(initialProjectId ? String(initialProjectId) : '');
+        setPage(1);
+    }, [initialProjectId]);
 
     const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.page_size || 24)));
     const counts = useMemo(() => `${data.total || 0} 条记录`, [data.total]);
+    const projectNames = useMemo(() => new Map(projects.map((project) => [String(project.id), project.name || `项目 #${project.id}`])), [projects]);
     const remove = async (id) => {
         if (!window.confirm(t('仅删除历史元数据，不会删除腾讯云媒体文件。确定继续吗？'))) return;
         await deleteGenerationJob(id);
@@ -178,6 +189,7 @@ export default function GenerationHistory() {
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                     <div className="inline-flex rounded-xl border border-[#e8e3d8] bg-white p-1">{FILTERS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setType(id)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11.5px] transition ${type === id ? 'bg-[#f4ead0] font-medium text-[#73530d]' : 'text-gray-400 hover:text-gray-600'}`}><Icon size={13} />{t(label)}</button>)}</div>
                     <select id="generation-history-status" name="generation-history-status" value={status} onChange={(event) => setStatus(event.target.value)} aria-label={t('任务状态')} className="h-9 rounded-lg border border-[#e5dfd2] bg-white px-3 text-[11.5px] text-gray-500 outline-none focus:border-[#d4aa42]"><option value="">{t('全部状态')}</option>{Object.entries(STATUS).map(([value, item]) => <option key={value} value={value}>{t(item.label)}</option>)}</select>
+                    <select id="generation-history-project" name="generation-history-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} aria-label={t('画布项目')} className="h-9 max-w-[220px] rounded-lg border border-[#e5dfd2] bg-white px-3 text-[11.5px] text-gray-500 outline-none focus:border-[#d4aa42]"><option value="">{t('全部画布项目')}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name || `项目 #${project.id}`}</option>)}</select>
                     <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#e5dfd2] bg-white px-3 text-gray-400 sm:max-w-[340px]"><Search size={14} /><input id="generation-history-search" name="generation-history-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('搜索提示词或模型')} className="w-full bg-transparent text-[11.5px] text-[#403c34] outline-none" /></label>
                     <span className="ml-auto text-[10.5px] text-gray-400">{counts}</span>
                 </div>
@@ -186,7 +198,7 @@ export default function GenerationHistory() {
                 {loading ? <div className="flex h-72 items-center justify-center"><Loader2 size={24} className="animate-spin text-[#b98b25]" /></div> : !data.items?.length ? (
                     <div className="mt-8 flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#ddd6c7] bg-white text-center"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f6edd8] text-[#9e751c]"><History size={25} /></div><h2 className="mt-4 text-[14px] font-semibold text-[#514b40]">{t('暂无生成历史')}</h2><p className="mt-2 text-[11px] text-gray-400">{t('从首页、图片、视频或 Agent 发起任务后，记录会自动出现在这里。')}</p></div>
                 ) : <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{data.items.map(({ job, preview }) => {
-                    return <button key={job.id} type="button" onClick={() => setSelectedId(job.id)} className="group overflow-hidden rounded-2xl border border-[#e8e2d6] bg-white text-left shadow-[0_6px_20px_rgba(58,49,28,0.04)] transition hover:-translate-y-0.5 hover:border-[#d8c99e] hover:shadow-[0_12px_28px_rgba(58,49,28,0.09)]"><div className="relative aspect-[16/10] overflow-hidden"><MediaPreview job={job} asset={preview} /><div className="absolute left-2.5 top-2.5"><StatusBadge status={job.status} /></div>{job.status === 'running' && <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10"><div className="h-full bg-[#e1ae35]" style={{ width: `${job.progress || 0}%` }} /></div>}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate text-[12.5px] font-semibold text-[#3e3a32]">{job.model_name || (job.type === 'agent' ? 'AgentLoop' : t('生成任务'))}</h2><div className="mt-1 flex items-center gap-1.5 text-[9.5px] text-gray-400"><span>{SOURCE_LABEL[job.source] || job.source}</span><span>·</span><span>{job.model_version || job.type}</span></div></div><ChevronRight size={15} className="mt-1 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-[#a77c1c]" /></div><p className="mt-3 line-clamp-2 min-h-[34px] text-[10.5px] leading-[17px] text-gray-500">{job.prompt || t('无提示词')}</p><div className="mt-3 flex items-center justify-between border-t border-[#f0ede6] pt-3 text-[9.5px] text-gray-400"><span className="flex items-center gap-1"><Clock size={11} />{formatTime(job.created_at)}</span><span className="flex items-center gap-1">{job.storage_mode === 'Permanent' ? <Database size={11} /> : <Cloud size={11} />}{job.storage_mode === 'Permanent' ? t('永久') : t('云端')}</span></div></div></button>;
+                    return <button key={job.id} type="button" onClick={() => setSelectedId(job.id)} className="group overflow-hidden rounded-2xl border border-[#e8e2d6] bg-white text-left shadow-[0_6px_20px_rgba(58,49,28,0.04)] transition hover:-translate-y-0.5 hover:border-[#d8c99e] hover:shadow-[0_12px_28px_rgba(58,49,28,0.09)]"><div className="relative aspect-[16/10] overflow-hidden"><MediaPreview job={job} asset={preview} /><div className="absolute left-2.5 top-2.5"><StatusBadge status={job.status} /></div>{job.status === 'running' && <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10"><div className="h-full bg-[#e1ae35]" style={{ width: `${job.progress || 0}%` }} /></div>}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate text-[12.5px] font-semibold text-[#3e3a32]">{job.model_name || (job.type === 'agent' ? 'AgentLoop' : t('生成任务'))}</h2><div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-gray-400"><span>{SOURCE_LABEL[job.source] || job.source}</span><span>·</span><span>{job.model_version || job.type}</span>{job.project_id && <><span>·</span><span className="max-w-[130px] truncate text-[#9a741f]">{projectNames.get(String(job.project_id)) || `项目 #${job.project_id}`}</span></>}</div></div><ChevronRight size={15} className="mt-1 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-[#a77c1c]" /></div><p className="mt-3 line-clamp-2 min-h-[34px] text-[10.5px] leading-[17px] text-gray-500">{job.prompt || t('无提示词')}</p><div className="mt-3 flex items-center justify-between border-t border-[#f0ede6] pt-3 text-[9.5px] text-gray-400"><span className="flex items-center gap-1"><Clock size={11} />{formatTime(job.created_at)}</span><span className="flex items-center gap-1">{job.storage_mode === 'Permanent' ? <Database size={11} /> : <Cloud size={11} />}{job.storage_mode === 'Permanent' ? t('永久') : t('云端')}</span></div></div></button>;
                 })}</div>}
 
                 {totalPages > 1 && <div className="mt-7 flex items-center justify-center gap-3"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('上一页')}</button><span className="text-[10.5px] text-gray-400">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('下一页')}</button></div>}
