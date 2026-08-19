@@ -17,8 +17,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     PanelLeft, LayoutGrid, ChevronDown,
     Paperclip, Star, ArrowUp, ArrowLeft, Settings,
-    Image as ImageIcon, Video, Layout, Sparkles, MousePointer2,
-    History, Users, MessageSquare, Download, UploadCloud, Home, Search,
+    Image as ImageIcon, Video, Layout, Sparkles,
+    History, Download, Home, Search,
     X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot, Globe,
 } from 'lucide-react';
 import GlobalAPISettings from '../components/GlobalAPISettings';
@@ -276,15 +276,6 @@ export default function FlowHome() {
     const [languageOpen, setLanguageOpen] = useState(false);
     const [capabilityCategory, setCapabilityCategory] = useState('commerce');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [canvasToolsOpen, setCanvasToolsOpen] = useState(true);
-    const [canvasUiState, setCanvasUiState] = useState({
-        activeTool: 'select',
-        historyOpen: false,
-        charactersOpen: false,
-        storyboardAssetsOpen: false,
-        isChatOpen: false,
-    });
-    const canvasActionsRef = useRef(null);
 
     const MODES = BASE_MODES;
     const homeModelCapability = getVodImageModelCapability(imageModel, imageModelVersion);
@@ -347,35 +338,10 @@ export default function FlowHome() {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [quickInspirationOpen]);
 
-    const registerCanvasActions = useCallback((actions) => {
-        canvasActionsRef.current = actions;
-    }, []);
-    const syncCanvasUiState = useCallback((nextState) => {
-        setCanvasUiState((previous) => {
-            const unchanged = Object.keys(previous).every((key) => previous[key] === nextState[key]);
-            return unchanged ? previous : nextState;
-        });
-    }, []);
     const openGenerationHistory = useCallback((project = null) => {
         setHistoryProjectId(project?.id ? String(project.id) : '');
         setActiveMode('history');
     }, []);
-    const runCanvasAction = useCallback((action) => {
-        if (action === 'history') {
-            openGenerationHistory(currentProject);
-            return;
-        }
-        const handler = canvasActionsRef.current?.[action];
-        if (typeof handler === 'function') handler();
-    }, [currentProject, openGenerationHistory]);
-    const isCanvasActionActive = useCallback((action) => {
-        if (action === 'select') return canvasUiState.activeTool === 'select' && !canvasUiState.historyOpen && !canvasUiState.charactersOpen && !canvasUiState.storyboardAssetsOpen;
-        if (action === 'history') return canvasUiState.historyOpen;
-        if (action === 'characters') return canvasUiState.charactersOpen;
-        if (action === 'storyboard') return canvasUiState.storyboardAssetsOpen;
-        if (action === 'chat') return canvasUiState.isChatOpen;
-        return false;
-    }, [canvasUiState]);
 
     // 切换功能 = 只换主区内容，不跳走
     const goMode = (id) => {
@@ -384,12 +350,7 @@ export default function FlowHome() {
             return;
         }
         if (id === 'canvas') {
-            if (activeMode === 'canvas' && currentProject) {
-                setCanvasToolsOpen((open) => !open);
-                return;
-            }
             setCurrentProject(null);
-            setCanvasToolsOpen(true);
         }
         if (id === 'image') {
             setImageTemplateMode(true);
@@ -666,16 +627,6 @@ export default function FlowHome() {
                     : activeMode === 'history'
                 ? '生成历史'
                 : (MODES.find((m) => m.id === activeMode) || {}).label || '';
-    const canvasToolItems = [
-        { id: 'autoArrange', label: '自动整理', icon: Layout },
-        { id: 'select', label: '选择与移动', icon: MousePointer2 },
-        { id: 'history', label: '查看生成历史', icon: History },
-        { id: 'characters', label: '角色库', icon: Users },
-        { id: 'storyboard', label: '分镜素材', icon: LayoutGrid },
-        { id: 'chat', label: 'AI 对话', icon: MessageSquare },
-        { id: 'importWorkflow', label: '导入工作流', icon: UploadCloud },
-    ];
-
     return (
         <div className="flex h-screen w-full overflow-hidden bg-white font-sans text-[#1f2329]">
             {/* ============ 侧边栏 ============ */}
@@ -703,47 +654,21 @@ export default function FlowHome() {
                 {/* 主导航 = 真实功能 */}
                 <nav className="mt-0.5 flex flex-col gap-0.5">
                     {SIDEBAR_MODES.map(({ id, label, icon: Icon }) => {
-                        const isCanvas = id === 'canvas';
                         const isActive = activeMode === id;
                         return (
-                            <React.Fragment key={id}>
-                                <button
-                                    type="button"
-                                    onClick={() => goMode(id)}
-                                    title={sidebarCollapsed ? t(label) : undefined}
-                                    className={`flex w-full items-center rounded-lg py-2 text-[13.5px] transition ${sidebarCollapsed ? 'justify-center px-2' : 'gap-[11px] px-[9px]'} ${isActive
-                                        ? 'bg-[#f4f4f5] text-[#1f2329]'
-                                        : 'text-gray-500 hover:bg-[#f4f4f5] hover:text-[#1f2329]'
-                                        }`}
-                                >
-                                    <Icon size={16} className="flex-shrink-0" />
-                                    {!sidebarCollapsed && <span className="min-w-0 flex-1 truncate text-left">{t(label)}</span>}
-                                    {!sidebarCollapsed && isCanvas && (
-                                        <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${inCanvasEditor && canvasToolsOpen ? '' : '-rotate-90'}`} />
-                                    )}
-                                </button>
-                                {isCanvas && inCanvasEditor && canvasToolsOpen && !sidebarCollapsed && (
-                                    <div className="ml-4 mt-1 space-y-0.5 border-l border-[#e6e3da] pl-2">
-                                        {canvasToolItems.map(({ id: action, label: actionLabel, icon: ActionIcon }) => {
-                                            const active = isCanvasActionActive(action);
-                                            return (
-                                                <button
-                                                    key={action}
-                                                    type="button"
-                                                    onClick={() => runCanvasAction(action)}
-                                                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] transition ${active
-                                                        ? 'bg-[#f7edcf] text-[#4a3910]'
-                                                        : 'text-gray-500 hover:bg-[#f4f4f5] hover:text-[#1f2329]'
-                                                        }`}
-                                                >
-                                                    <ActionIcon size={14} className="flex-shrink-0" />
-                                                    <span className="truncate">{t(actionLabel)}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </React.Fragment>
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => goMode(id)}
+                                title={sidebarCollapsed ? t(label) : undefined}
+                                className={`flex w-full items-center rounded-lg py-2 text-[13.5px] transition ${sidebarCollapsed ? 'justify-center px-2' : 'gap-[11px] px-[9px]'} ${isActive
+                                    ? 'bg-[#f4f4f5] text-[#1f2329]'
+                                    : 'text-gray-500 hover:bg-[#f4f4f5] hover:text-[#1f2329]'
+                                    }`}
+                            >
+                                <Icon size={16} className="flex-shrink-0" />
+                                {!sidebarCollapsed && <span className="min-w-0 flex-1 truncate text-left">{t(label)}</span>}
+                            </button>
                         );
                     })}
                 </nav>
@@ -1224,8 +1149,7 @@ export default function FlowHome() {
                                 embedded
                                 currentProject={currentProject}
                                 onExitToProjects={() => setCurrentProject(null)}
-                                onCanvasActionsReady={registerCanvasActions}
-                                onCanvasStateChange={syncCanvasUiState}
+                                onSwitchProject={setCurrentProject}
                                 onOpenGenerationHistory={openGenerationHistory}
                             />
                         </div>
@@ -1288,7 +1212,7 @@ export default function FlowHome() {
                                     />
                                 )}
                                 {activeMode === 'canvas' && (
-                                    <ProjectList embedded onOpenProject={(p) => { setCurrentProject(p); setCanvasToolsOpen(true); }} />
+                                    <ProjectList embedded onOpenProject={setCurrentProject} />
                                 )}
                             </div>
                         </div>

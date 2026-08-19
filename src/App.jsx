@@ -86,7 +86,7 @@ import {
     runVodComposePipeline
 } from './vodAdapter';
 import VideoEditor from './VideoEditor';
-import { saveCanvas, getCanvas, createProject, deleteHistory } from './api/project';
+import { saveCanvas, getCanvas, createProject, deleteHistory, listProjects } from './api/project';
 import { createGenerationJob, listGenerationImageAssets } from './api/generationHistory';
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
@@ -5219,13 +5219,17 @@ const Lightbox = ({ item, onClose, onNavigate, onShotNavigate, onHistoryNavigate
 function TxStudioApp({
     currentProject,
     onExitToProjects,
+    onSwitchProject,
     embedded = false,
-    onCanvasActionsReady,
-    onCanvasStateChange,
     onOpenGenerationHistory,
 }) {
     const currentProjectId = currentProject?.id || null;
     const [projectSaveError, setProjectSaveError] = useState(null);
+    const [projectOptions, setProjectOptions] = useState([]);
+    const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
+    const [projectSwitcherLoading, setProjectSwitcherLoading] = useState(false);
+    const [projectSwitcherError, setProjectSwitcherError] = useState('');
+    const [canvasMoreOpen, setCanvasMoreOpen] = useState(false);
     // SQLite 画布加载完成前禁止保存，避免空画布覆盖本地数据库。
     const projectLoadedRef = useRef(false);
     const [theme, setTheme] = useState(() => {
@@ -5244,6 +5248,30 @@ function TxStudioApp({
             i18n.changeLanguage(language);
         }
     }, [language]);
+
+    const loadProjectOptions = useCallback(async () => {
+        if (!embedded) return;
+        setProjectSwitcherLoading(true);
+        setProjectSwitcherError('');
+        try {
+            const projects = await listProjects();
+            setProjectOptions(Array.isArray(projects) ? projects : []);
+        } catch (error) {
+            setProjectSwitcherError(error?.message || t('加载项目列表失败'));
+        } finally {
+            setProjectSwitcherLoading(false);
+        }
+    }, [embedded]);
+
+    useEffect(() => {
+        if (!embedded) return;
+        loadProjectOptions();
+    }, [embedded, loadProjectOptions]);
+
+    useEffect(() => {
+        setProjectSwitcherOpen(false);
+        setCanvasMoreOpen(false);
+    }, [currentProjectId]);
 
     // V3.7.27: Toast 通知系统
     const [toasts, setToasts] = useState([]);
@@ -6377,31 +6405,8 @@ function TxStudioApp({
         type: 'import' // 'import' | 'export'
     });
 
-    // V2.6.1 Feature: 历史面板性能模式 (Performance Mode)
-    // off: 关闭 (显示原图)
-    // normal: 普通 (缩略图质量 0.6)
-    // ultra: 极速 (缩略图质量 0.3)
-    const [performanceMode, setPerformanceMode] = useState(() => {
-        try {
-            const savedHistory = localStorage.getItem('txstudio_history_performance_mode');
-            if (savedHistory !== null) {
-                if (savedHistory === 'true') return 'normal';
-                if (savedHistory === 'false') return 'off';
-                return savedHistory || 'off';
-            }
-            return localStorage.getItem('txstudio_performance_mode') || 'off';
-        } catch (e) {
-            return 'off';
-        }
-    });
-    // 全局性能模式（与历史面板独立）
-    const [globalPerformanceMode, setGlobalPerformanceMode] = useState(() => {
-        try {
-            return localStorage.getItem('txstudio_global_performance_mode') || 'off';
-        } catch (e) {
-            return 'off';
-        }
-    });
+    // 历史始终使用原始资源；极速缩略模式已移除。
+    const performanceMode = 'off';
     const [aigcStorageMode, setAigcStorageMode] = useState(() => {
         try {
             const saved = localStorage.getItem('txstudio_aigc_storage_mode');
@@ -6673,11 +6678,7 @@ function TxStudioApp({
         }
     }, [localCacheActive, localServerUrl, normalizeLocalCacheRelPath, showToast]);
 
-    // 持久化性能模式和本地服务器设置
-    useEffect(() => {
-        localStorage.setItem('txstudio_performance_mode', performanceMode);
-        localStorage.setItem('txstudio_history_performance_mode', performanceMode);
-    }, [performanceMode]);
+    // 持久化历史资源与本地服务器设置
     useEffect(() => {
         localStorage.setItem('txstudio_save_history_assets', String(saveHistoryAssets));
     }, [saveHistoryAssets]);
@@ -6730,9 +6731,6 @@ function TxStudioApp({
         };
     }, []);
 
-    useEffect(() => {
-        localStorage.setItem('txstudio_global_performance_mode', globalPerformanceMode);
-    }, [globalPerformanceMode]);
     useEffect(() => {
         localStorage.setItem('txstudio_aigc_storage_mode', aigcStorageMode);
     }, [aigcStorageMode]);
@@ -7142,16 +7140,6 @@ function TxStudioApp({
         setCharactersOpen(false);
         setStoryboardAssetsOpen(false);
     }, []);
-    useEffect(() => {
-        if (!embedded) return;
-        onCanvasStateChange?.({
-            activeTool,
-            historyOpen,
-            charactersOpen,
-            storyboardAssetsOpen,
-            isChatOpen,
-        });
-    }, [activeTool, charactersOpen, embedded, historyOpen, isChatOpen, onCanvasStateChange, storyboardAssetsOpen]);
     useEffect(() => {
         if (!historyOpen && !charactersOpen && !storyboardAssetsOpen && ['history', 'characters', 'storyboard-assets'].includes(activeTool)) {
             setActiveTool('select');
@@ -25787,21 +25775,6 @@ ${inputText.substring(0, 15000)} ... (截断)
         }));
     };
 
-    const externalCanvasActions = useMemo(() => ({
-        autoArrange: autoArrangeNodes,
-        select: selectCanvasTool,
-        history: () => onOpenGenerationHistory?.(currentProject),
-        characters: () => toggleCanvasPanel('characters'),
-        storyboard: () => toggleCanvasPanel('storyboard-assets'),
-        chat: () => setIsChatOpen((open) => !open),
-        importWorkflow: handleImportWorkflow,
-    }), [autoArrangeNodes, currentProject, handleImportWorkflow, onOpenGenerationHistory, selectCanvasTool, toggleCanvasPanel]);
-    useEffect(() => {
-        if (!embedded) return undefined;
-        onCanvasActionsReady?.(externalCanvasActions);
-        return () => onCanvasActionsReady?.(null);
-    }, [embedded, externalCanvasActions, onCanvasActionsReady]);
-
     const insertKeyframesFromUrls = useCallback((nodeId, urls, insertIdx = null) => {
         const existingNode = nodesMap.get(nodeId);
         if (!existingNode) return;
@@ -36079,8 +36052,8 @@ ${inputText.substring(0, 15000)} ... (截断)
         );
     }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, getConnectedNovelInputText, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, handleCanvasDragOver, handleGenNodeDrop, importStoryboardMarkdownTable, importStoryboardTableFromFile, mutateStoryboardTable, normalizeStoryboardTableData, openStoryboardTableCellEditor, runStoryboardLlmSplit, runStoryboardNovelTableGenerate, runStoryboardTablePromptMerge, markInteraction, resolveNodeRenderZIndex, touchNodeSelectionPriority]);
 
-    // 高性能模式：当节点数量超过 50 或手动开启时启用
-    const isPerfMode = nodes.length > 50 || globalPerformanceMode !== 'off';
+    // 大型画布自动启用渲染优化。
+    const isPerfMode = nodes.length > 50;
     // 交互模式：正在拖拽或缩放时启用
     const isInteracting = isDragging || isPanning;
 
@@ -36113,22 +36086,87 @@ ${inputText.substring(0, 15000)} ... (截断)
                     className={`${embedded ? 'h-12 border-[#e8e4db] bg-white/95 px-3 backdrop-blur' : `h-12 px-4 ${theme === 'dark' ? 'bg-[#09090b] border-zinc-800' : theme === 'solarized' ? 'bg-[#eee8d5] border-[#d7cfb2]' : 'bg-white border-zinc-200'}`} flex shrink-0 items-center justify-between border-b z-50 transition-colors duration-300`}
                 >
                     {embedded ? (
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
                             <button
                                 type="button"
                                 onClick={() => onExitToProjects?.()}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-[#666158] transition hover:bg-[#f4f4f2] hover:text-[#24211c]"
+                                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-[#666158] transition hover:bg-[#f4f4f2] hover:text-[#24211c]"
                                 title={t('返回项目列表')}
                             >
                                 <ChevronLeft size={15} />
-                                <span className="hidden sm:inline">{t('项目列表')}</span>
+                                <span className="hidden xl:inline">{t('项目列表')}</span>
                             </button>
-                            <span className="h-4 w-px bg-[#e6e2d9]" />
-                            <div className="flex min-w-0 items-center gap-2">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#f4c74f] text-[#34290c]"><Layers size={14} /></span>
-                                <div className="min-w-0">
-                                    <div className="truncate text-[13px] font-semibold text-[#292720]">{projectName}</div>
-                                    <div className="hidden text-[10px] text-[#aaa397] sm:block">AI 创作画布</div>
+                            <div className="relative min-w-0">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setCanvasMoreOpen(false);
+                                        setProjectSwitcherOpen((open) => !open);
+                                        if (!projectSwitcherOpen) loadProjectOptions();
+                                    }}
+                                    className="flex h-8 max-w-[190px] items-center gap-2 rounded-lg border border-[#e7e2d7] bg-[#fbfaf7] px-2.5 text-left transition hover:border-[#d8d0bf] hover:bg-white"
+                                    aria-haspopup="listbox"
+                                    aria-expanded={projectSwitcherOpen}
+                                    title={t('切换项目')}
+                                >
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#f4c74f] text-[#34290c]"><Layers size={12} /></span>
+                                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#292720]">{projectName}</span>
+                                    <ChevronDown size={13} className={`shrink-0 text-[#8e877a] transition-transform ${projectSwitcherOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {projectSwitcherOpen && (
+                                    <div className="absolute left-0 top-full z-[80] mt-2 w-72 overflow-hidden rounded-xl border border-[#e7e2d7] bg-white p-1.5 shadow-[0_18px_48px_rgba(56,48,28,0.16)]" role="listbox" aria-label={t('切换项目')}>
+                                        <div className="flex items-center justify-between px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a29a8c]">
+                                            <span>{t('切换项目')}</span>
+                                            <button type="button" onClick={loadProjectOptions} className="rounded p-1 hover:bg-[#f4f2ed]" title={t('刷新项目列表')}><RefreshCw size={12} className={projectSwitcherLoading ? 'animate-spin' : ''} /></button>
+                                        </div>
+                                        {projectSwitcherError ? (
+                                            <div className="px-2.5 py-3 text-[11px] text-red-600">{projectSwitcherError}</div>
+                                        ) : projectSwitcherLoading && projectOptions.length === 0 ? (
+                                            <div className="flex items-center gap-2 px-2.5 py-3 text-[11px] text-[#8e877a]"><Loader2 size={13} className="animate-spin" />{t('加载中...')}</div>
+                                        ) : (
+                                            <div className="max-h-64 overflow-y-auto">
+                                                {projectOptions.map((project) => {
+                                                    const active = String(project.id) === String(currentProjectId);
+                                                    return (
+                                                        <button
+                                                            key={project.id}
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={active}
+                                                            onClick={() => {
+                                                                setProjectSwitcherOpen(false);
+                                                                if (!active) onSwitchProject?.(project);
+                                                            }}
+                                                            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition ${active ? 'bg-[#fff4cf] text-[#5e4918]' : 'text-[#4e4a42] hover:bg-[#f5f3ee]'}`}
+                                                        >
+                                                            <Layers size={13} className="shrink-0" />
+                                                            <span className="min-w-0 flex-1 truncate">{project.name || t('未命名项目')}</span>
+                                                            {active && <Check size={13} className="shrink-0" />}
+                                                        </button>
+                                                    );
+                                                })}
+                                                {projectOptions.length === 0 && <div className="px-2.5 py-3 text-[11px] text-[#8e877a]">{t('还没有项目')}</div>}
+                                            </div>
+                                        )}
+                                        <button type="button" onClick={() => onExitToProjects?.()} className="mt-1 flex w-full items-center gap-2 border-t border-[#eeeae2] px-2.5 py-2.5 text-left text-[11px] font-medium text-[#746d61] hover:bg-[#f5f3ee]"><LayoutGrid size={13} />{t('管理全部项目')}</button>
+                                    </div>
+                                )}
+                            </div>
+                            <span className="mx-1 h-5 w-px shrink-0 bg-[#e6e2d9]" />
+                            <div className="flex min-w-0 items-center gap-0.5">
+                                <button type="button" onClick={autoArrangeNodes} className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]" title={t('自动整理')}><Layout size={14} /><span className="hidden 2xl:inline">{t('自动整理')}</span></button>
+                                <button type="button" onClick={selectCanvasTool} className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium transition ${activeTool === 'select' && !charactersOpen && !storyboardAssetsOpen ? 'bg-[#fff1bf] text-[#5e4918]' : 'text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]'}`} title={t('选择与移动')}><MousePointer2 size={14} /><span className="hidden 2xl:inline">{t('选择')}</span></button>
+                                <button type="button" onClick={() => onOpenGenerationHistory?.(currentProject)} className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]" title={t('查看生成历史')}><History size={14} /><span className="hidden 2xl:inline">{t('历史')}</span></button>
+                                <button type="button" onClick={() => toggleCanvasPanel('characters')} className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium transition ${charactersOpen ? 'bg-[#fff1bf] text-[#5e4918]' : 'text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]'}`} title={t('角色库')}><Users size={14} /><span className="hidden 2xl:inline">{t('角色库')}</span></button>
+                                <button type="button" onClick={() => toggleCanvasPanel('storyboard-assets')} className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium transition ${storyboardAssetsOpen ? 'bg-[#fff1bf] text-[#5e4918]' : 'text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]'}`} title={t('分镜素材')}><LayoutGrid size={14} /><span className="hidden 2xl:inline">{t('分镜')}</span></button>
+                                <div className="relative">
+                                    <button type="button" onClick={() => { setProjectSwitcherOpen(false); setCanvasMoreOpen((open) => !open); }} className={`flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-medium transition ${canvasMoreOpen || isChatOpen ? 'bg-[#eeeae2] text-[#3e3931]' : 'text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]'}`} title={t('更多工具')} aria-haspopup="menu" aria-expanded={canvasMoreOpen}><MoreHorizontal size={15} /><span className="hidden 2xl:inline">{t('更多')}</span></button>
+                                    {canvasMoreOpen && (
+                                        <div className="absolute left-0 top-full z-[80] mt-2 w-44 rounded-xl border border-[#e7e2d7] bg-white p-1.5 shadow-[0_18px_48px_rgba(56,48,28,0.16)]" role="menu">
+                                            <button type="button" onClick={() => { setIsChatOpen((open) => !open); setCanvasMoreOpen(false); }} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] ${isChatOpen ? 'bg-[#fff4cf] text-[#5e4918]' : 'text-[#4e4a42] hover:bg-[#f5f3ee]'}`}><MessageSquare size={14} />{t('AI 对话')}</button>
+                                            <button type="button" onClick={() => { handleImportWorkflow(); setCanvasMoreOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] text-[#4e4a42] hover:bg-[#f5f3ee]"><UploadCloud size={14} />{t('导入工作流')}</button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -36171,36 +36209,6 @@ ${inputText.substring(0, 15000)} ... (截断)
                         >
                             <HardDrive size={14} className={aigcStorageMode === 'Permanent' ? 'fill-current' : ''} />
                             <span>{aigcStorageMode === 'Permanent' ? '云端保存' : '临时文件'}</span>
-                        </button>
-                        {/* 性能模式开关 V2.6.1 */}
-                        <button
-                            onClick={() => {
-                                const modes = ['off', 'normal', 'ultra'];
-                                const currentIdx = modes.indexOf(globalPerformanceMode);
-                                const nextIdx = (currentIdx + 1) % modes.length;
-                                const newMode = modes[nextIdx];
-                                setGlobalPerformanceMode(newMode);
-                            }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${globalPerformanceMode !== 'off'
-                                ? theme === 'dark'
-                                    ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-500'
-                                    : theme === 'solarized'
-                                        ? 'bg-blue-600 border-blue-500 text-[#fdf6e3] hover:bg-blue-500'
-                                        : 'bg-blue-500 border-blue-400 text-white hover:bg-blue-600'
-                                : theme === 'dark'
-                                    ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
-                                    : theme === 'solarized'
-                                        ? 'bg-[#616161] border-[#525252] text-[#fdf6e3] hover:bg-[#555555]'
-                                        : 'bg-zinc-100 border-zinc-300 text-zinc-700 hover:bg-zinc-200'
-                                }`}
-                            title={
-                                globalPerformanceMode === 'ultra' ? '极致性能模式（点击关闭）'
-                                    : globalPerformanceMode === 'normal' ? '普通性能模式（点击切换极致）'
-                                        : '性能模式已关闭（点击开启）'
-                            }
-                        >
-                            <Zap size={14} className={globalPerformanceMode !== 'off' ? 'fill-current' : ''} />
-                            <span>{globalPerformanceMode === 'ultra' ? t('极致模式') : t('性能模式')}</span>
                         </button>
                         <button
                             onClick={handleToggleTheme}
@@ -36379,33 +36387,6 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => {
-                                            const modes = ['off', 'normal', 'ultra'];
-                                            const currentIdx = modes.indexOf(performanceMode);
-                                            const nextIdx = (currentIdx + 1) % modes.length;
-                                            setPerformanceMode(modes[nextIdx]);
-                                        }}
-                                        className={`p-1.5 rounded transition-colors flex items-center gap-1 ${performanceMode === 'ultra'
-                                            ? theme === 'dark'
-                                                ? 'text-orange-400 bg-orange-500/20 hover:bg-orange-500/30'
-                                                : 'text-orange-600 bg-orange-100 hover:bg-orange-200'
-                                            : performanceMode === 'normal'
-                                                ? theme === 'dark'
-                                                    ? 'text-green-400 bg-green-500/20 hover:bg-green-500/30'
-                                                    : 'text-green-600 bg-green-100 hover:bg-green-200'
-                                                : theme === 'dark'
-                                                    ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
-                                                    : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200'
-                                            }`}
-                                        title={
-                                            performanceMode === 'ultra' ? '极致性能模式（点击关闭）'
-                                                : performanceMode === 'normal' ? '普通性能模式（点击切换极致）'
-                                                    : '性能模式已关闭（点击开启）'
-                                        }
-                                    >
-                                        <Zap size={14} />
-                                    </button>
                                     <button
                                         onClick={() => setHistoryCachePanelOpen(prev => !prev)}
                                         className={`p-1.5 rounded transition-colors ${historyCachePanelOpen
