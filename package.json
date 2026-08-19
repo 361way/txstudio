@@ -1,7 +1,7 @@
 {
   "name": "txstudio",
   "private": true,
-  "version": "v1.2.1",
+  "version": "v1.2.2",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",

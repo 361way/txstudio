@@ -174,6 +174,37 @@ func upsertGenerationAssets(tx *gorm.DB, jobID uint, items []generationAssetReq)
 	return nil
 }
 
+func (h *GenerationHandler) ListAssets(c *gin.Context) {
+	rawProjectID := strings.TrimSpace(c.Query("project_id"))
+	projectID, err := strconv.ParseUint(rawProjectID, 10, 64)
+	if err != nil || projectID == 0 {
+		BadRequest(c, "项目 ID 无效")
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "60"))
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 120 {
+		limit = 120
+	}
+
+	var assets []model.GenerationAsset
+	err = h.DB.Model(&model.GenerationAsset{}).
+		Joins("JOIN generation_jobs ON generation_jobs.id = generation_assets.job_id").
+		Where("generation_jobs.project_id = ? AND generation_assets.role = ? AND generation_assets.media_type = ? AND generation_jobs.status IN ?", projectID, "output", "image", []string{"completed", "completed_with_errors"}).
+		Where("generation_assets.cloud_url <> '' OR generation_assets.local_path <> ''").
+		Order("generation_assets.created_at DESC").
+		Limit(limit).
+		Find(&assets).Error
+	if err != nil {
+		InternalError(c, "查询项目生成图片失败")
+		return
+	}
+	OK(c, assets)
+}
+
 func (h *GenerationHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultGenerationPageSize)))
@@ -196,6 +227,14 @@ func (h *GenerationHandler) List(c *gin.Context) {
 	}
 	if value := cleanText(c.Query("source"), 32); value != "" {
 		query = query.Where("source = ?", value)
+	}
+	if rawProjectID := strings.TrimSpace(c.Query("project_id")); rawProjectID != "" {
+		projectID, err := strconv.ParseUint(rawProjectID, 10, 64)
+		if err != nil || projectID == 0 {
+			BadRequest(c, "项目 ID 无效")
+			return
+		}
+		query = query.Where("project_id = ?", projectID)
 	}
 	if value := cleanText(c.Query("q"), 200); value != "" {
 		pattern := "%" + strings.ReplaceAll(strings.ReplaceAll(value, "%", "\\%"), "_", "\\_") + "%"

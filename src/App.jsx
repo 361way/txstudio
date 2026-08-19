@@ -86,7 +86,8 @@ import {
     runVodComposePipeline
 } from './vodAdapter';
 import VideoEditor from './VideoEditor';
-import { saveCanvas, getCanvas, createProject, listHistory, replaceHistory, deleteHistory } from './api/project';
+import { saveCanvas, getCanvas, createProject, deleteHistory } from './api/project';
+import { createGenerationJob, listGenerationImageAssets } from './api/generationHistory';
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
@@ -183,6 +184,26 @@ const LocalImageManager = (() => {
     let dbInstance = null;
     let dbInitPromise = null;
     const blobUrlCache = new Map(); // Cache: id -> blobUrl
+    const MAX_BLOB_URL_CACHE = 128;
+
+    const rememberBlobUrl = (id, url) => {
+        const previous = blobUrlCache.get(id);
+        if (previous && previous !== url && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
+        blobUrlCache.delete(id);
+        blobUrlCache.set(id, url);
+        while (blobUrlCache.size > MAX_BLOB_URL_CACHE) {
+            const [oldestId, oldestUrl] = blobUrlCache.entries().next().value;
+            if (oldestUrl?.startsWith('blob:')) URL.revokeObjectURL(oldestUrl);
+            blobUrlCache.delete(oldestId);
+        }
+    };
+
+    const clearRuntimeCache = () => {
+        blobUrlCache.forEach((url) => {
+            if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+        });
+        blobUrlCache.clear();
+    };
 
     const initDB = () => {
         if (dbInitPromise) return dbInitPromise;
@@ -282,7 +303,10 @@ const LocalImageManager = (() => {
     const getImage = async (id) => {
         // Check cache first
         if (blobUrlCache.has(id)) {
-            return blobUrlCache.get(id);
+            const cached = blobUrlCache.get(id);
+            blobUrlCache.delete(id);
+            blobUrlCache.set(id, cached);
+            return cached;
         }
 
         const db = await initDB();
@@ -297,18 +321,9 @@ const LocalImageManager = (() => {
                 request.onsuccess = () => {
                     const record = request.result;
                     if (record && record.blob) {
-                        // V3.7.32 Fix: Use FileReader to return Base64 avoiding blob:null security error in file:// protocol
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            const base64 = reader.result;
-                            blobUrlCache.set(id, base64);
-                            resolve(base64);
-                        };
-                        reader.onerror = () => {
-                            console.error('[LocalImageManager] Failed to convert blob to base64');
-                            resolve(null);
-                        };
-                        reader.readAsDataURL(record.blob);
+                        const url = URL.createObjectURL(record.blob);
+                        rememberBlobUrl(id, url);
+                        resolve(url);
                     } else {
                         resolve(null);
                     }
@@ -371,7 +386,7 @@ const LocalImageManager = (() => {
     // V3.7.19: Removed auto-init on module load - now lazy-loaded on first use
     // initDB();
 
-    return { saveImage, getImage, deleteImage, getStats, isImageId, initDB };
+    return { saveImage, getImage, deleteImage, getStats, isImageId, initDB, clearRuntimeCache };
 })();
 
 // Expose for debugging
@@ -485,7 +500,7 @@ const LazyBase64Image = ({ src, className, alt, onError, onLoad, ...props }) => 
                     const url = await LocalImageManager.getImage(src);
                     if (!active) return;
                     if (url) {
-                        blobUrlRef.current = url;
+                        // IndexedDB 资源由 LocalImageManager 的 LRU 缓存统一管理和释放。
                         setBlobUrl(url);
                     } else {
                         const fallback = getAssetBundleFallbackById(src);
@@ -4541,8 +4556,8 @@ const getVideoMetadata = (src) => {
     });
 };
 
-// --- Helper: Extract Key Frames from video using <video> + <canvas> ---
-const extractKeyFrames = (src, { fps = 2 } = {}) => {
+// --- Helper: Extract memory-bounded key frames from video using <video> + <canvas> ---
+const extractKeyFrames = (src, { fps = 2, maxFrames = 60, maxDimension = 960 } = {}) => {
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');
         const canvas = document.createElement('canvas');
@@ -4553,36 +4568,61 @@ const extractKeyFrames = (src, { fps = 2 } = {}) => {
         video.src = src;
         const frames = [];
 
-        const handleError = () => reject(new Error('视频抽帧失败'));
+        const cleanup = () => {
+            video.onseeked = null;
+            video.onerror = null;
+            video.removeAttribute('src');
+            video.load();
+            canvas.width = 1;
+            canvas.height = 1;
+        };
+        const handleError = () => {
+            cleanup();
+            reject(new Error('视频抽帧失败'));
+        };
         video.onerror = handleError;
 
         video.onloadedmetadata = () => {
             const duration = Number(video.duration) || 0;
             if (!duration || !isFinite(duration)) {
+                cleanup();
                 reject(new Error('无法读取视频时长'));
                 return;
             }
-            canvas.width = video.videoWidth || 1280;
-            canvas.height = video.videoHeight || 720;
-            const interval = 1 / Math.max(0.1, fps);
+            const sourceWidth = video.videoWidth || 1280;
+            const sourceHeight = video.videoHeight || 720;
+            const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+            canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+            canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+            const requestedInterval = 1 / Math.max(0.1, fps);
+            const interval = Math.max(requestedInterval, duration / Math.max(1, maxFrames - 1));
             let current = 0;
 
-            const captureFrame = () => {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                frames.push({
-                    time: Number(current.toFixed(2)),
-                    url: canvas.toDataURL('image/jpeg', 0.82),
-                });
-                current += interval;
-                if (current <= duration) {
-                    video.currentTime = Math.min(current, duration);
-                } else {
-                    resolve(frames);
+            const finish = () => {
+                cleanup();
+                resolve(frames);
+            };
+            const captureFrame = async () => {
+                try {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const blob = await new Promise((resolveBlob) => canvas.toBlob(resolveBlob, 'image/jpeg', 0.72));
+                    if (!blob) throw new Error('无法编码视频帧');
+                    const imageId = await LocalImageManager.saveImage(blob);
+                    if (!imageId) throw new Error('无法保存视频帧');
+                    frames.push({ time: Number(current.toFixed(2)), url: imageId });
+                    current += interval;
+                    if (current <= duration && frames.length < maxFrames) {
+                        video.currentTime = Math.min(current, duration);
+                    } else {
+                        finish();
+                    }
+                } catch (error) {
+                    cleanup();
+                    reject(error);
                 }
             };
 
             video.onseeked = captureFrame;
-            // 启动首次抽帧
             video.currentTime = 0;
         };
     });
@@ -5182,6 +5222,7 @@ function TxStudioApp({
     embedded = false,
     onCanvasActionsReady,
     onCanvasStateChange,
+    onOpenGenerationHistory,
 }) {
     const currentProjectId = currentProject?.id || null;
     const [projectSaveError, setProjectSaveError] = useState(null);
@@ -5450,6 +5491,23 @@ function TxStudioApp({
         return () => { cancelled = true; };
     }, [currentProjectId]);
 
+    const cloneForCanvasHistory = useCallback((value, seen = new WeakMap()) => {
+        if (value === null || typeof value !== 'object') return value;
+        if (value instanceof Blob || value instanceof File || value instanceof Date) return value;
+        if (seen.has(value)) return seen.get(value);
+        const cloned = Array.isArray(value) ? [] : {};
+        seen.set(value, cloned);
+        Object.entries(value).forEach(([key, item]) => {
+            cloned[key] = cloneForCanvasHistory(item, seen);
+        });
+        return cloned;
+    }, []);
+
+    const createCanvasHistorySnapshot = useCallback(() => ({
+        nodes: cloneForCanvasHistory(nodesRef.current || []),
+        connections: cloneForCanvasHistory(connectionsRef.current || []),
+    }), [cloneForCanvasHistory]);
+
     // === V3.4.7: Undo/Redo 功能 (可配置步数) ===
     const [maxUndoSteps, setMaxUndoSteps] = useState(() => {
         const saved = localStorage.getItem('txstudio_max_undo_steps');
@@ -5492,14 +5550,11 @@ function TxStudioApp({
 
     // 保存当前状态到撤销栈
     const saveToUndoStack = useCallback(() => {
-        if (isUndoRedoRef.current) return; // undo/redo 操作不记录
-        setUndoStack(prev => {
-            const newStack = [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), connections: JSON.parse(JSON.stringify(connections)) }];
-            // 限制最多保存 maxUndoSteps 步
-            return newStack.slice(-maxUndoSteps);
-        });
-        setRedoStack([]); // 有新操作时清空 redo 栈
-    }, [nodes, connections]);
+        if (isUndoRedoRef.current) return;
+        const snapshot = createCanvasHistorySnapshot();
+        setUndoStack((previous) => [...previous, snapshot].slice(-maxUndoSteps));
+        setRedoStack([]);
+    }, [createCanvasHistorySnapshot, maxUndoSteps]);
 
     // 使用 ref 来解决 useEffect 闭包问题
     const saveToUndoStackRef = useRef(saveToUndoStack);
@@ -5770,30 +5825,30 @@ function TxStudioApp({
         if (undoStack.length === 0) return;
         isUndoRedoRef.current = true;
         const lastState = undoStack[undoStack.length - 1];
-        // 当前状态入 redo 栈
-        setRedoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), connections: JSON.parse(JSON.stringify(connections)) }]);
+        // 当前状态入 redo 栈，并限制与撤销栈相同的最大步数。
+        setRedoStack((previous) => [...previous, createCanvasHistorySnapshot()].slice(-maxUndoSteps));
         // 恢复上一个状态
         setNodes(lastState.nodes);
         setConnections(lastState.connections);
         // 移除已使用的状态
         setUndoStack(prev => prev.slice(0, -1));
         setTimeout(() => { isUndoRedoRef.current = false; }, 100);
-    }, [undoStack, nodes, connections]);
+    }, [undoStack, createCanvasHistorySnapshot, maxUndoSteps]);
 
     // 重做操作
     const redo = useCallback(() => {
         if (redoStack.length === 0) return;
         isUndoRedoRef.current = true;
         const nextState = redoStack[redoStack.length - 1];
-        // 当前状态入 undo 栈
-        setUndoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), connections: JSON.parse(JSON.stringify(connections)) }]);
+        // 当前状态入 undo 栈，并限制最大步数。
+        setUndoStack((previous) => [...previous, createCanvasHistorySnapshot()].slice(-maxUndoSteps));
         // 恢复下一个状态
         setNodes(nextState.nodes);
         setConnections(nextState.connections);
         // 移除已使用的状态
         setRedoStack(prev => prev.slice(0, -1));
         setTimeout(() => { isUndoRedoRef.current = false; }, 100);
-    }, [redoStack, nodes, connections]);
+    }, [redoStack, createCanvasHistorySnapshot, maxUndoSteps]);
 
     // 快捷键监听
     useEffect(() => {
@@ -6786,7 +6841,7 @@ function TxStudioApp({
     };
 
     const [history, setHistory] = useState([]);
-    const historySQLiteLoadedRef = useRef(false);
+    const unifiedHistorySyncedRef = useRef(new Set());
     const historyDeleteInFlightRef = useRef(false);
 
     // V3.4.12: 会话开始时间，用于追踪"本次生成"
@@ -7033,6 +7088,7 @@ function TxStudioApp({
     const [frameContextMenu, setFrameContextMenu] = useState({ visible: false, x: 0, y: 0, nodeId: null, frame: null });
     const [previewContextMenu, setPreviewContextMenu] = useState({ visible: false, x: 0, y: 0, item: null });
     const [inputImageContextMenu, setInputImageContextMenu] = useState({ visible: false, x: 0, y: 0, nodeId: null });
+    const [historyImagePicker, setHistoryImagePicker] = useState({ open: false, nodeId: null, loading: false, error: '', assets: [] });
     const [settingsOpen, setSettingsOpen] = useState(false);
     useEffect(() => {
         if (!settingsOpen) return;
@@ -7711,10 +7767,10 @@ function TxStudioApp({
                 return dataUrl;
             }
             if (blob && blob.type && blob.type.startsWith('video/')) {
-                if (blob.size <= 8 * 1024 * 1024) {
-                    const dataUrl = await blobToDataURL(blob);
-                    autoSaveUrlCacheRef.current.set(value, dataUrl);
-                    return dataUrl;
+                const mediaId = await LocalImageManager.saveImage(blob);
+                if (mediaId) {
+                    autoSaveUrlCacheRef.current.set(value, mediaId);
+                    return mediaId;
                 }
             }
         } catch (e) { }
@@ -9146,20 +9202,26 @@ function TxStudioApp({
         setNodes((prev) => prev.map((n) => n.id === id ? { ...n, settings: { ...n.settings, ...newSettings } } : n));
     }, []);
 
-    const handleVideoFileUpload = (nodeId, file) => {
+    const handleVideoFileUpload = async (nodeId, file) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            const content = ev.target.result;
-            let videoMeta = { duration: 0, w: 0, h: 0 };
-            try { videoMeta = await getVideoMetadata(content); } catch (e) { console.warn('读取视频元信息失败', e); }
-            setNodes((prev) => prev.map((n) =>
-                n.id === nodeId
-                    ? { ...n, content, videoMeta, frames: [], selectedKeyframes: [], extractingFrames: false, videoFileName: file.name }
-                    : n
-            ));
-        };
-        reader.readAsDataURL(file);
+        let content = '';
+        let previewUrl = '';
+        try {
+            content = await LocalImageManager.saveImage(file);
+            if (!content) throw new Error('无法写入本地媒体库');
+            previewUrl = await LocalImageManager.getImage(content);
+        } catch (error) {
+            console.error('保存视频失败', error);
+            showToast('视频保存失败，请检查浏览器存储空间', 'error');
+            return;
+        }
+        let videoMeta = { duration: 0, w: 0, h: 0 };
+        try { videoMeta = await getVideoMetadata(previewUrl); } catch (error) { console.warn('读取视频元信息失败', error); }
+        setNodes((previous) => previous.map((node) =>
+            node.id === nodeId
+                ? { ...node, content, videoMeta, frames: [], selectedKeyframes: [], extractingFrames: false, videoFileName: file.name }
+                : node
+        ));
     };
     // ---------------------
 
@@ -9564,63 +9626,46 @@ function TxStudioApp({
 
     useEffect(() => { debouncedSaveGlobalKey(globalApiKey); }, [globalApiKey, debouncedSaveGlobalKey]);
 
-    // 当前项目的生成历史以 SQLite 为唯一持久化来源。
+    // 生成历史已统一到 generation_jobs；画布仅保留当前会话任务用于节点状态和结果回填。
     useEffect(() => {
-        let cancelled = false;
-        historySQLiteLoadedRef.current = false;
-        if (!currentProjectId) {
-            setHistory([]);
-            return () => { cancelled = true; };
-        }
-
-        listHistory(currentProjectId)
-            .then((rows) => {
-                if (cancelled) return;
-                const loaded = (Array.isArray(rows) ? rows : []).map((row) => {
-                    try {
-                        const parsed = row.meta ? JSON.parse(row.meta) : null;
-                        if (parsed && typeof parsed === 'object') return sanitizeHistoryItemForLoad(parsed);
-                    } catch { /* 使用结构化字段降级 */ }
-                    return sanitizeHistoryItemForLoad({
-                        id: row.id,
-                        type: row.type,
-                        url: row.url,
-                        prompt: row.prompt,
-                        modelName: row.model_name,
-                        time: row.created_at,
-                    });
-                });
-                setHistory(loaded);
-                historySQLiteLoadedRef.current = true;
-            })
-            .catch((error) => {
-                if (cancelled) return;
-                historySQLiteLoadedRef.current = true;
-                showToast(`读取本地历史失败: ${error?.message || ''}`, 'error');
-            });
-        return () => { cancelled = true; };
+        setHistory([]);
+        unifiedHistorySyncedRef.current.clear();
     }, [currentProjectId]);
 
     useEffect(() => {
-        if (!currentProjectId || !historySQLiteLoadedRef.current) return undefined;
-        const timer = window.setTimeout(() => {
-            if (historyDeleteInFlightRef.current) return;
-            const items = history.map((item) => {
-                const compact = compactHistoryItemForStorage(item);
-                return {
-                    client_id: String(compact.id ?? item.id ?? ''),
-                    type: compact.type || 'image',
-                    url: compact.url || compact.originalUrl || '',
-                    prompt: compact.prompt || '',
-                    model_name: compact.modelName || '',
-                    meta: JSON.stringify(compact),
-                };
+        if (!currentProjectId) return;
+        const terminalItems = history.filter((item) => ['completed', 'success', 'done', 'failed', 'cancelled'].includes(String(item?.status || '').toLowerCase()));
+        terminalItems.forEach((item) => {
+            // VOD 流水线已通过 tracker 实时写入统一历史，避免重复归档。
+            if (item?.provider === TENCENT_VOD_PROVIDER_KEY) return;
+            const syncKey = `${currentProjectId}:${item.id}`;
+            if (!item?.id || unifiedHistorySyncedRef.current.has(syncKey)) return;
+            unifiedHistorySyncedRef.current.add(syncKey);
+            const statusValue = String(item.status || '').toLowerCase();
+            const normalizedStatus = ['completed', 'success', 'done'].includes(statusValue) ? 'completed' : statusValue;
+            const outputUrls = Array.from(new Set([
+                ...(Array.isArray(item.output_images) ? item.output_images : []),
+                ...(Array.isArray(item.mjImages) ? item.mjImages : []),
+                item.url,
+            ].filter((url) => typeof url === 'string' && url && !url.startsWith('blob:') && !url.startsWith('data:'))));
+            createGenerationJob({
+                client_id: `canvas-${currentProjectId}-${item.id}`.slice(0, 191),
+                project_id: currentProjectId,
+                source: 'canvas',
+                type: item.type === 'video' ? 'video' : 'image',
+                provider: item.provider || item.apiConfig?.provider || 'canvas',
+                status: normalizedStatus,
+                prompt: item.prompt || '',
+                model_name: item.modelName || item.apiConfig?.modelId || '',
+                model_version: item.modelVersion || '',
+                storage_mode: item.storageMode || 'Permanent',
+                parameters: { entry: 'canvas', ratio: item.ratio || '', duration_ms: item.durationMs || 0 },
+                assets: outputUrls.map((url, index) => ({ role: 'output', ordinal: index, media_type: item.type === 'video' ? 'video' : 'image', cloud_url: url, storage_mode: item.storageMode || 'Permanent' })),
+            }).catch((error) => {
+                unifiedHistorySyncedRef.current.delete(syncKey);
+                console.warn('[TxStudio] 同步画布生成历史失败:', error?.message || error);
             });
-            replaceHistory(currentProjectId, items).catch((error) => {
-                showToast(`保存本地历史失败: ${error?.message || ''}`, 'error');
-            });
-        }, 1200);
-        return () => window.clearTimeout(timer);
+        });
     }, [currentProjectId, history]);
 
     const debouncedSaveChatSessions = useMemo(() => debounce((sessions) => {
@@ -17395,7 +17440,6 @@ function TxStudioApp({
                     characterLibraryMeta: vodCharacterLibraryMeta,
                     characterLibrarySaved: false
                 }, ...prev]);
-                setHistoryOpen(true);
             }
             // 锁定节点 UI
             if (vodSourceNodeId) {
@@ -17435,6 +17479,7 @@ function TxStudioApp({
                         credentials: vodCreds,
                         useProxy: vodUseProxy,
                         localServerUrl: vodProxyBase || localServerUrl,
+                        history: { source: 'canvas', projectId: currentProjectId, parameters: { entry: 'canvas' } },
                         onStage: (stage, info) => {
                             let progress = 10;
                             if (stage === 'upload_start') progress = 10 + Math.round((info.index / Math.max(1, info.total)) * 20);
@@ -17749,16 +17794,6 @@ function TxStudioApp({
                 storyboardTaskMapRef.current.set(taskId, taskInfo);
                 storyboardHistoryMapRef.current.set(taskId, taskInfo);
             }
-        }
-
-        // V3.5.31: Skip opening history panel on retry
-        if (shouldInsertHistoryItem) {
-            // 优化：延迟打开历史面板，避免与 setHistory 同时触发造成卡顿
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    setHistoryOpen(true);
-                }, 0);
-            });
         }
 
         if (
@@ -20293,68 +20328,6 @@ function TxStudioApp({
         return await blobToDataURL(blob);
     };
 
-    // 功能1：批量下载选中的图片/视频节点
-    const handleBatchDownload = async () => {
-        // 使用ref获取最新的状态，避免闭包问题
-        const currentNodes = nodesRef.current;
-        const currentSelectedId = selectedNodeIdRef.current;
-        const currentSelectedIds = selectedNodeIdsRef.current;
-
-        const selectedNodes = currentNodes.filter(node =>
-            (currentSelectedId === node.id || (currentSelectedIds && currentSelectedIds.has(node.id))) &&
-            (node.type === 'input-image' || node.type === 'video-input' || node.type === 'preview') &&
-            node.content
-        );
-
-        if (selectedNodes.length === 0) {
-            alert(t('请先选择要下载的图片或视频节点'));
-            return;
-        }
-
-        for (const node of selectedNodes) {
-            try {
-                const url = node.content;
-                // 检查URL是否有效
-                if (!url || (typeof url !== 'string' && !url.startsWith('data:'))) {
-                    console.warn(`节点 ${node.id} 的内容URL无效: `, url);
-                    continue;
-                }
-                const useProxy = getProxyPreferenceForUrl(url, false);
-                const blob = await getBlobFromUrl(url, { useProxy });
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = blobUrl;
-
-                // 判断文件扩展名：对于预览窗口，根据previewType判断；对于其他节点，根据URL或节点类型判断
-                let extension = '.png';
-                if (node.type === 'preview') {
-                    // 预览窗口：根据previewType判断
-                    if (node.previewType === 'video') {
-                        extension = '.mp4';
-                    } else {
-                        extension = isVideoUrl(url) ? '.mp4' : '.png';
-                    }
-                } else if (node.type === 'video-input') {
-                    extension = '.mp4';
-                } else {
-                    extension = isVideoUrl(url) ? '.mp4' : '.png';
-                }
-
-                const filename = `${node.id}${extension} `;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(blobUrl);
-                // 添加小延迟避免浏览器阻止多个下载
-                await new Promise(resolve => setTimeout(resolve, 100));
-            } catch (error) {
-                console.error(`下载节点 ${node.id} 失败: `, error);
-                // 不中断其他节点的下载，继续处理下一个
-            }
-        }
-    };
-
     // 获取东八区时间戳（用于项目数据）
     const getCSTTimestamp = () => {
         const now = new Date();
@@ -20571,6 +20544,7 @@ function TxStudioApp({
         setSelectedNodeIds(new Set());
         setUndoStack([]);
         setRedoStack([]);
+        LocalImageManager.clearRuntimeCache();
         setLightboxItem(null);
         setProjectName('未命名项目');
         setView({ ...DEFAULT_VIEW });
@@ -21376,7 +21350,8 @@ function TxStudioApp({
                                     }
                                     const res = await fetch(val);
                                     const blob = await res.blob();
-                                    current[key] = URL.createObjectURL(blob);
+                                    const mediaId = await LocalImageManager.saveImage(blob);
+                                    if (mediaId) current[key] = mediaId;
                                 } catch (err) { }
                             } else if (typeof val === 'object' && val !== null) {
                                 stack.push(val);
@@ -21646,7 +21621,8 @@ function TxStudioApp({
                                 // 立即转换为 Blob URL，释放原字符串内存
                                 const res = await fetch(val);
                                 const blob = await res.blob();
-                                current[key] = URL.createObjectURL(blob);
+                                const mediaId = await LocalImageManager.saveImage(blob);
+                                if (mediaId) current[key] = mediaId;
                             } catch (err) {
                                 // 转换失败则保持原样，防止丢失数据
                             }
@@ -24331,7 +24307,6 @@ function TxStudioApp({
                 startTime: now,
                 durationMs: null
             }, ...prev]);
-            setHistoryOpen(true);
 
             // 3. 提交图片到 Midjourney（使用 imagine 接口，不包含 zoom 参数）
             const mjMode = 'fast';
@@ -24694,21 +24669,48 @@ ${inputText.substring(0, 15000)} ... (截断)
         });
     };
 
-    const handleFileUpload = (nodeId, e) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                const content = ev.target.result;
-                let dimensions = { w: 0, h: 0 };
-                try { dimensions = await getImageDimensions(content); } catch (e) { }
-                // V3.4.7: 保存撤销状态（图片更换是可撤销的操作）
-                saveToUndoStack();
-                setNodes((prev) => prev.map((n) => n.id === nodeId ? { ...n, content: content, dimensions } : n));
-            };
-            reader.readAsDataURL(file);
+    const setInputImageNodeContent = useCallback(async (nodeId, content) => {
+        if (!nodeId || !content) return;
+        let dimensions = { w: 0, h: 0 };
+        try { dimensions = await getImageDimensions(content); } catch { /* 图片仍可使用 */ }
+        saveToUndoStack();
+        setNodes((previous) => previous.map((node) => node.id === nodeId ? { ...node, content, dimensions } : node));
+    }, [saveToUndoStack]);
+
+    const handleFileUpload = async (nodeId, event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+            const imageId = await LocalImageManager.saveImage(file);
+            if (!imageId) throw new Error('无法写入本地媒体库');
+            await setInputImageNodeContent(nodeId, imageId);
+        } catch (error) {
+            showToast(`图片保存失败: ${error?.message || '未知错误'}`, 'error');
         }
     };
+
+    const openHistoryImagePicker = useCallback(async (nodeId) => {
+        if (!currentProjectId) {
+            showToast('请先保存或打开一个画布项目', 'warning');
+            return;
+        }
+        setHistoryImagePicker({ open: true, nodeId, loading: true, error: '', assets: [] });
+        try {
+            const assets = await listGenerationImageAssets(currentProjectId, 60);
+            setHistoryImagePicker({ open: true, nodeId, loading: false, error: '', assets: Array.isArray(assets) ? assets : [] });
+        } catch (error) {
+            setHistoryImagePicker({ open: true, nodeId, loading: false, error: error?.message || '加载历史图片失败', assets: [] });
+        }
+    }, [currentProjectId]);
+
+    const applyHistoryImageAsset = useCallback(async (asset) => {
+        const nodeId = historyImagePicker.nodeId;
+        const content = asset?.cloud_url || asset?.local_path || '';
+        if (!nodeId || !content) return;
+        await setInputImageNodeContent(nodeId, content);
+        setHistoryImagePicker({ open: false, nodeId: null, loading: false, error: '', assets: [] });
+    }, [historyImagePicker.nodeId, setInputImageNodeContent]);
 
     // 按时间段分组关键帧
     const groupKeyframesByTime = (keyframes, segmentDuration) => {
@@ -25619,23 +25621,9 @@ ${inputText.substring(0, 15000)} ... (截断)
 
     // 智能整理节点：DAG 层级布局 + 交叉最小化 (Barycenter Heuristic)
     const autoArrangeNodes = () => {
-        // 1. 获取选中的节点
-        const currentSelectedId = selectedNodeIdRef.current;
-        const currentSelectedIds = selectedNodeIdsRef.current;
-
-        let nodesToArrange = [];
-
-        if (currentSelectedId) {
-            const node = nodesRef.current.find(n => n.id === currentSelectedId);
-            if (node) nodesToArrange = [node];
-        } else if (currentSelectedIds && currentSelectedIds.size > 0) {
-            nodesToArrange = nodesRef.current.filter(n => currentSelectedIds.has(n.id));
-        }
-
-        if (nodesToArrange.length < 2) {
-            alert(t('请至少选中两个节点进行智能整理'));
-            return;
-        }
+        // 自动整理始终作用于当前画布全部节点，不再依赖选区。
+        const nodesToArrange = nodesRef.current || [];
+        if (nodesToArrange.length < 2) return;
 
         const targetNodeIds = new Set(nodesToArrange.map(n => n.id));
 
@@ -25802,13 +25790,12 @@ ${inputText.substring(0, 15000)} ... (截断)
     const externalCanvasActions = useMemo(() => ({
         autoArrange: autoArrangeNodes,
         select: selectCanvasTool,
-        history: () => toggleCanvasPanel('history'),
+        history: () => onOpenGenerationHistory?.(currentProject),
         characters: () => toggleCanvasPanel('characters'),
         storyboard: () => toggleCanvasPanel('storyboard-assets'),
         chat: () => setIsChatOpen((open) => !open),
-        download: handleBatchDownload,
         importWorkflow: handleImportWorkflow,
-    }), [autoArrangeNodes, handleBatchDownload, handleImportWorkflow, selectCanvasTool, toggleCanvasPanel]);
+    }), [autoArrangeNodes, currentProject, handleImportWorkflow, onOpenGenerationHistory, selectCanvasTool, toggleCanvasPanel]);
     useEffect(() => {
         if (!embedded) return undefined;
         onCanvasActionsReady?.(externalCanvasActions);
@@ -30043,7 +30030,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     {/* 悬浮菜单：当 isMasking 为 true 时强制隐藏 */}
                                     {!node.isMasking && (
                                         <div className="absolute inset-0 bg-black/40 transition-opacity gap-2 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap items-center justify-center gap-2">
                                                 <label
                                                     className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs backdrop-blur-sm border transition-colors ${theme === 'dark'
                                                         ? 'bg-white/10 hover:bg-white/20 text-white border-white/10'
@@ -30053,6 +30040,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 >
                                                     {t('更换')} <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(node.id, e)} />
                                                 </label>
+                                                <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); openHistoryImagePicker(node.id); }} className="rounded-lg border border-white/20 bg-black/35 px-3 py-1.5 text-xs text-white backdrop-blur-sm transition hover:bg-black/55">{t('生成历史')}</button>
                                                 {!isVideoUrl(inputImageDisplayContent) && (
                                                     <button
                                                         onClick={(e) => {
@@ -30146,16 +30134,19 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 }`}
                                         />
                                     </div>
-                                    <label
-                                        className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer pointer-events-auto ${theme === 'solarized'
-                                            ? 'bg-[#616161] hover:bg-[#4b4b4b] text-white'
-                                            : 'bg-blue-600 hover:bg-blue-500 text-white'
-                                            }`}
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                        {t('选择图片')}
-                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(node.id, e)} />
-                                    </label>
+                                    <div className="flex flex-wrap items-center justify-center gap-2">
+                                        <label
+                                            className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer pointer-events-auto ${theme === 'solarized'
+                                                ? 'bg-[#616161] hover:bg-[#4b4b4b] text-white'
+                                                : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                                }`}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                            {t('选择图片')}
+                                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(node.id, e)} />
+                                        </label>
+                                        <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); openHistoryImagePicker(node.id); }} className={`rounded-lg border px-4 py-2 text-xs font-medium transition ${theme === 'dark' ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}`}>{t('从生成历史选择')}</button>
+                                    </div>
                                     <div
                                         className={`text-[10px] text-center mt-2 pointer-events-none ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'
                                             }`}
@@ -36211,21 +36202,6 @@ ${inputText.substring(0, 15000)} ... (截断)
                             <Zap size={14} className={globalPerformanceMode !== 'off' ? 'fill-current' : ''} />
                             <span>{globalPerformanceMode === 'ultra' ? t('极致模式') : t('性能模式')}</span>
                         </button>
-                        {!embedded && (
-                            <button
-                                onClick={handleBatchDownload}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${theme === 'dark'
-                                    ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
-                                    : theme === 'solarized'
-                                        ? 'bg-[#616161] border-[#525252] text-[#fdf6e3] hover:bg-[#555555]'
-                                        : 'bg-zinc-100 border-zinc-300 text-zinc-700 hover:bg-zinc-200'
-                                    }`}
-                                title={t('批量下载选中的图片/视频节点')}
-                            >
-                                <Download size={14} />
-                                <span>{t('下载')}</span>
-                            </button>
-                        )}
                         <button
                             onClick={handleToggleTheme}
                             className={`${embedded ? 'hidden' : 'flex'} items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${theme === 'dark'
@@ -36351,7 +36327,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                             <CanvasRailButton icon={MousePointer2} label={t('选择与移动')} active={activeTool === 'select' && !historyOpen && !charactersOpen && !storyboardAssetsOpen} onClick={selectCanvasTool} embedded={false} theme={theme} />
 
                             <div className={`my-1 h-px w-6 ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
-                            <CanvasRailButton icon={History} label={t('生成历史')} active={historyOpen} onClick={() => toggleCanvasPanel('history')} embedded={false} theme={theme} />
+                            <CanvasRailButton icon={History} label={t('查看全部生成历史')} active={false} onClick={() => onOpenGenerationHistory?.(currentProject)} embedded={false} theme={theme} />
                             <CanvasRailButton icon={Users} label={t('角色库')} active={charactersOpen} onClick={() => toggleCanvasPanel('characters')} embedded={false} theme={theme} />
                             <CanvasRailButton icon={LayoutGrid} label={t('分镜素材')} active={storyboardAssetsOpen} onClick={() => toggleCanvasPanel('storyboard-assets')} embedded={false} theme={theme} />
 
@@ -39437,6 +39413,20 @@ ${inputText.substring(0, 15000)} ... (截断)
 
                 </div>
             </div >
+
+            {historyImagePicker.open && (
+                <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onMouseDown={() => setHistoryImagePicker({ open: false, nodeId: null, loading: false, error: '', assets: [] })}>
+                    <section className={`flex max-h-[78vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${theme === 'dark' ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-zinc-200 bg-white text-zinc-800'}`} onMouseDown={(event) => event.stopPropagation()}>
+                        <header className={`flex items-center justify-between border-b px-5 py-4 ${theme === 'dark' ? 'border-zinc-700' : 'border-zinc-200'}`}>
+                            <div><h2 className="text-sm font-semibold">{t('从生成历史选择图片')}</h2><p className={`mt-1 text-[11px] ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>{t('仅显示当前画布项目之前生成的图片')}</p></div>
+                            <button type="button" onClick={() => setHistoryImagePicker({ open: false, nodeId: null, loading: false, error: '', assets: [] })} className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-500/10"><X size={17} /></button>
+                        </header>
+                        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                            {historyImagePicker.loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="animate-spin text-amber-500" /></div> : historyImagePicker.error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-600">{historyImagePicker.error}</div> : historyImagePicker.assets.length === 0 ? <div className={`flex h-56 flex-col items-center justify-center rounded-xl border border-dashed ${theme === 'dark' ? 'border-zinc-700 text-zinc-500' : 'border-zinc-300 text-zinc-400'}`}><History size={25} /><p className="mt-3 text-xs">{t('当前项目暂无可用的历史图片')}</p></div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{historyImagePicker.assets.map((asset) => { const url = asset.cloud_url || asset.local_path; return <button key={asset.id} type="button" onClick={() => applyHistoryImageAsset(asset)} className={`group overflow-hidden rounded-xl border text-left transition hover:-translate-y-0.5 ${theme === 'dark' ? 'border-zinc-700 bg-zinc-800 hover:border-amber-500/60' : 'border-zinc-200 bg-zinc-50 hover:border-amber-400'}`}><div className="aspect-square overflow-hidden bg-black/5"><img src={url} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /></div><div className={`truncate px-3 py-2 text-[10px] ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>{new Date(asset.created_at).toLocaleString('zh-CN')}</div></button>; })}</div>}
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {storyboardTableCellEditor.visible && (
                 <div

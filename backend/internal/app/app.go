@@ -122,6 +122,7 @@ func (a *App) registerRoutes() error {
 
 		generationJobs := api.Group("/generation-jobs")
 		{
+			generationJobs.GET("/assets", generationHandler.ListAssets)
 			generationJobs.GET("", generationHandler.List)
 			generationJobs.POST("", generationHandler.Create)
 			generationJobs.GET("/:id", generationHandler.Get)

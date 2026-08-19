@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"regexp"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +45,16 @@ func configureApplicationLog(cfg LoggingConfig) error {
 	return nil
 }
 
+var canvasSavePathPattern = regexp.MustCompile(`^/api/projects/[1-9][0-9]*/canvas$`)
+
+func shouldLogHTTPRequest(method, path string, status int, duration time.Duration) bool {
+	// 画布自动保存成功且速度正常时不逐条记录；错误与慢请求仍完整保留。
+	if method == http.MethodPut && canvasSavePathPattern.MatchString(path) && status < http.StatusBadRequest && duration < 2*time.Second {
+		return false
+	}
+	return true
+}
+
 // requestLogMiddleware 只记录方法、路由、状态和耗时，不记录查询串、请求体或鉴权信息。
 func requestLogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -51,6 +63,9 @@ func requestLogMiddleware() gin.HandlerFunc {
 		c.Header("X-Request-ID", requestID)
 		c.Set("request_id", requestID)
 		c.Next()
-		log.Printf("[http] request_id=%s method=%s path=%s status=%d duration_ms=%d", requestID, c.Request.Method, c.Request.URL.Path, c.Writer.Status(), time.Since(startedAt).Milliseconds())
+		duration := time.Since(startedAt)
+		if shouldLogHTTPRequest(c.Request.Method, c.Request.URL.Path, c.Writer.Status(), duration) {
+			log.Printf("[http] request_id=%s method=%s path=%s status=%d duration_ms=%d", requestID, c.Request.Method, c.Request.URL.Path, c.Writer.Status(), duration.Milliseconds())
+		}
 	}
 }

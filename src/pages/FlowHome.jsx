@@ -230,6 +230,7 @@ export default function FlowHome() {
     const [text, setText] = useState('');
     // 画布：当前打开的项目（null = 项目列表态）
     const [currentProject, setCurrentProject] = useState(null);
+    const [historyProjectId, setHistoryProjectId] = useState('');
     // 模板：应用到图片/视频工具
     const [appliedTemplate, setAppliedTemplate] = useState(null);
     // 首页输入卡片：当前选中的生图模型（与图片工具的模型列表一致）
@@ -355,10 +356,18 @@ export default function FlowHome() {
             return unchanged ? previous : nextState;
         });
     }, []);
+    const openGenerationHistory = useCallback((project = null) => {
+        setHistoryProjectId(project?.id ? String(project.id) : '');
+        setActiveMode('history');
+    }, []);
     const runCanvasAction = useCallback((action) => {
+        if (action === 'history') {
+            openGenerationHistory(currentProject);
+            return;
+        }
         const handler = canvasActionsRef.current?.[action];
         if (typeof handler === 'function') handler();
-    }, []);
+    }, [currentProject, openGenerationHistory]);
     const isCanvasActionActive = useCallback((action) => {
         if (action === 'select') return canvasUiState.activeTool === 'select' && !canvasUiState.historyOpen && !canvasUiState.charactersOpen && !canvasUiState.storyboardAssetsOpen;
         if (action === 'history') return canvasUiState.historyOpen;
@@ -660,11 +669,10 @@ export default function FlowHome() {
     const canvasToolItems = [
         { id: 'autoArrange', label: '自动整理', icon: Layout },
         { id: 'select', label: '选择与移动', icon: MousePointer2 },
-        { id: 'history', label: '生成历史', icon: History },
+        { id: 'history', label: '查看生成历史', icon: History },
         { id: 'characters', label: '角色库', icon: Users },
         { id: 'storyboard', label: '分镜素材', icon: LayoutGrid },
         { id: 'chat', label: 'AI 对话', icon: MessageSquare },
-        { id: 'download', label: '下载选中内容', icon: Download },
         { id: 'importWorkflow', label: '导入工作流', icon: UploadCloud },
     ];
 
@@ -751,7 +759,7 @@ export default function FlowHome() {
                         </div>
 
                         {/* 统一生成历史 */}
-                        <button type="button" onClick={() => goMode('history')} className="mt-3.5 flex w-full items-center justify-between rounded-lg px-[9px] py-2 text-[12.5px] text-gray-400 hover:bg-[#f4f4f5] hover:text-[#1f2329]">
+                        <button type="button" onClick={() => openGenerationHistory()} className="mt-3.5 flex w-full items-center justify-between rounded-lg px-[9px] py-2 text-[12.5px] text-gray-400 hover:bg-[#f4f4f5] hover:text-[#1f2329]">
                             <span className="flex items-center gap-1.5"><History size={14} />{t('查看全部生成历史')}</span>
                             <ChevronDown size={11} className="-rotate-90" />
                         </button>
@@ -1218,6 +1226,7 @@ export default function FlowHome() {
                                 onExitToProjects={() => setCurrentProject(null)}
                                 onCanvasActionsReady={registerCanvasActions}
                                 onCanvasStateChange={syncCanvasUiState}
+                                onOpenGenerationHistory={openGenerationHistory}
                             />
                         </div>
                     )}
@@ -1241,7 +1250,7 @@ export default function FlowHome() {
                                     <AgentStudio />
                                 )}
                                 {activeMode === 'history' && (
-                                    <GenerationHistory />
+                                    <GenerationHistory initialProjectId={historyProjectId} />
                                 )}
                                 {activeMode === 'image' && imageTemplateMode && (
                                     <ImageTemplateHub

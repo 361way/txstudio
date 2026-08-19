@@ -22,6 +22,11 @@ export const listGenerationJobs = (filters = {}) => {
     return apiGet(`/api/generation-jobs${search.size ? `?${search}` : ''}`);
 };
 
+export const listGenerationImageAssets = (projectId, limit = 60) => {
+    const search = new URLSearchParams({ project_id: String(projectId), limit: String(limit) });
+    return apiGet(`/api/generation-jobs/assets?${search}`);
+};
+
 export const getGenerationJob = (id) => apiGet(`/api/generation-jobs/${id}`);
 export const createGenerationJob = (job) => apiPost('/api/generation-jobs', compact(job));
 export const updateGenerationJob = (id, updates) => apiPut(`/api/generation-jobs/${id}`, compact(updates));
