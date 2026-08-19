@@ -68,6 +68,11 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import i18n from './i18n';
 import {
+    buildVodGenerationRequestSettings,
+    getVodGenerationCapability,
+    reconcileVodGenerationSettings,
+} from './data/vodGenerationCapabilities';
+import {
     TENCENT_VOD_PROVIDER_KEY,
     VOD_IMAGE_MODEL_ID,
     VOD_VIDEO_MODEL_ID,
@@ -1884,21 +1889,6 @@ const getVodDefaultModelVersionByType = (type) => type === 'video'
     ? VOD_DEFAULT_VIDEO_MODEL_VERSION
     : VOD_DEFAULT_IMAGE_MODEL_VERSION;
 
-const VOD_LEGACY_DEFAULT_MODEL_SELECTIONS = {
-    image: { modelName: 'GEM', modelVersion: '2.5' },
-    video: { modelName: 'GV', modelVersion: '3.1-fast' }
-};
-
-const shouldMigrateVodLegacyDefaultSelection = (type, modelName, modelVersion) => {
-    const legacy = VOD_LEGACY_DEFAULT_MODEL_SELECTIONS[type];
-    if (!legacy) return false;
-    const defaultModelName = getVodDefaultModelNameByType(type);
-    const defaultModelVersion = getVodDefaultModelVersionByType(type);
-    return modelName === legacy.modelName
-        && modelVersion === legacy.modelVersion
-        && (modelName !== defaultModelName || modelVersion !== defaultModelVersion);
-};
-
 const getVodConfigType = (config) => {
     if (!config || config.provider !== TENCENT_VOD_PROVIDER_KEY) return null;
     if (config.id === VOD_VIDEO_MODEL_ID || config.type === 'Video') return 'video';
@@ -1963,14 +1953,6 @@ const getVodSelectionFromCustomParams = (type, customParams) => {
     const versions = matrix[modelName] || [];
     if (!modelVersion) modelVersion = getVodDefaultModelVersionByType(type);
     if (!versions.includes(modelVersion)) modelVersion = versions.includes(getVodDefaultModelVersionByType(type)) ? getVodDefaultModelVersionByType(type) : (versions[0] || '');
-    if (shouldMigrateVodLegacyDefaultSelection(type, modelName, modelVersion)) {
-        modelName = getVodDefaultModelNameByType(type);
-        const defaultVersions = matrix[modelName] || [];
-        modelVersion = defaultVersions.includes(getVodDefaultModelVersionByType(type))
-            ? getVodDefaultModelVersionByType(type)
-            : (defaultVersions[0] || '');
-        return { modelName, modelVersion, versions: defaultVersions, isCustom: false };
-    }
     return { modelName, modelVersion, versions, isCustom: false };
 };
 
@@ -2009,15 +1991,20 @@ const getVodKlingReferenceFeature = (modelName, modelVersion) => {
     return '';
 };
 
-// 根据 VOD 视频子模型返回统一能力表中的时长选项。
-const getVodSubModelDurations = (config, customParams) => {
-    if (getVodConfigType(config) !== 'video') return null;
-    const sel = resolveVodSubModel(
-        'video',
+// 首页与画布共用同一份 VOD 子模型能力表。
+const getVodSubModelCapability = (config, customParams) => {
+    const type = getVodConfigType(config);
+    if (!type) return null;
+    const selection = resolveVodSubModel(
+        type,
         customParams,
         Array.isArray(config?.customParams) ? config.customParams : []
     );
-    return getVodVideoModelCapability(sel.modelName, sel.modelVersion).durations;
+    return {
+        type,
+        selection,
+        capability: getVodGenerationCapability(type, selection.modelName, selection.modelVersion),
+    };
 };
 
 const parseVodKlingSubjectInfos = (raw) => {
@@ -5230,8 +5217,12 @@ function TxStudioApp({
     const [projectSwitcherLoading, setProjectSwitcherLoading] = useState(false);
     const [projectSwitcherError, setProjectSwitcherError] = useState('');
     const [canvasMoreOpen, setCanvasMoreOpen] = useState(false);
+    const [projectCreating, setProjectCreating] = useState(false);
+    const projectCreatingRef = useRef(false);
     // SQLite 画布加载完成前禁止保存，避免空画布覆盖本地数据库。
     const projectLoadedRef = useRef(false);
+    const activeProjectIdRef = useRef(currentProjectId);
+    activeProjectIdRef.current = currentProjectId;
     const [theme, setTheme] = useState(() => {
         // 嵌入工作台固定使用浅色主题，避免内部主题污染全局外壳。
         if (embedded) return 'light';
@@ -6839,6 +6830,7 @@ function TxStudioApp({
     };
 
     const [history, setHistory] = useState([]);
+    const historyOwnerProjectIdRef = useRef(currentProjectId);
     const unifiedHistorySyncedRef = useRef(new Set());
     const historyDeleteInFlightRef = useRef(false);
 
@@ -9614,14 +9606,21 @@ function TxStudioApp({
 
     useEffect(() => { debouncedSaveGlobalKey(globalApiKey); }, [globalApiKey, debouncedSaveGlobalKey]);
 
-    // 生成历史已统一到 generation_jobs；画布仅保留当前会话任务用于节点状态和结果回填。
+    // 生成历史已统一到 generation_jobs；切换项目时先解除历史归属，再清空旧会话。
     useEffect(() => {
+        historyOwnerProjectIdRef.current = null;
         setHistory([]);
         unifiedHistorySyncedRef.current.clear();
     }, [currentProjectId]);
 
     useEffect(() => {
-        if (!currentProjectId) return;
+        if (history.length === 0 && historyOwnerProjectIdRef.current === null) {
+            historyOwnerProjectIdRef.current = currentProjectId;
+        }
+    }, [currentProjectId, history.length]);
+
+    useEffect(() => {
+        if (!currentProjectId || String(historyOwnerProjectIdRef.current) !== String(currentProjectId)) return;
         const terminalItems = history.filter((item) => ['completed', 'success', 'done', 'failed', 'cancelled'].includes(String(item?.status || '').toLowerCase()));
         terminalItems.forEach((item) => {
             // VOD 流水线已通过 tracker 实时写入统一历史，避免重复归档。
@@ -10325,9 +10324,11 @@ function TxStudioApp({
         return getFirstEnabledModelKey(normalizedMode);
     }, [apiConfigs, getApiConfigByKey, getFirstEnabledModelKey, resolveApiConfig, resolveModelKey]);
 
-    const getRatiosForModel = useCallback((modelId) => {
+    const getRatiosForModel = useCallback((modelId, customParams = null) => {
         if (!modelId) return RATIOS;
         const config = getApiConfigByKey(modelId);
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod?.capability?.ratios?.length) return vod.capability.ratios;
         if (config?.ratioLimits && Array.isArray(config.ratioLimits) && config.ratioLimits.length > 0) {
             const normalized = config.ratioLimits.map((ratio) => String(ratio));
             return normalized.includes('Auto') ? normalized : ['Auto', ...normalized];
@@ -10336,9 +10337,11 @@ function TxStudioApp({
         return getDefaultRatiosForModel(resolvedId);
     }, [getApiConfigByKey]);
 
-    const getResolutionsForModel = useCallback((modelId) => {
+    const getResolutionsForModel = useCallback((modelId, customParams = null) => {
         if (!modelId) return RESOLUTIONS;
         const config = getApiConfigByKey(modelId);
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod?.type === 'image') return vod.capability.resolutions || [];
         if (config?.resolutionLimits && Array.isArray(config.resolutionLimits) && config.resolutionLimits.length > 0) {
             const normalized = config.resolutionLimits
                 .map((res) => normalizeResolutionOption(res))
@@ -10350,8 +10353,10 @@ function TxStudioApp({
         return getDefaultResolutionsForModel(resolvedId);
     }, [getApiConfigByKey]);
 
-    const getVideoResolutionsForModel = useCallback((modelId) => {
+    const getVideoResolutionsForModel = useCallback((modelId, customParams = null) => {
         const config = modelId ? getApiConfigByKey(modelId) : null;
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod?.type === 'video' && vod.capability?.resolutions?.length) return vod.capability.resolutions;
         const baseOptions = Array.isArray(config?.videoResolutions) && config.videoResolutions.length > 0
             ? config.videoResolutions
             : VIDEO_RES_OPTIONS;
@@ -10362,8 +10367,8 @@ function TxStudioApp({
         return Array.from(new Set(withAuto));
     }, [getApiConfigByKey]);
 
-    const getPreferredModelRatio = useCallback((modelId, mode = 'image') => {
-        const ratioOptions = getRatiosForModel(modelId);
+    const getPreferredModelRatio = useCallback((modelId, mode = 'image', customParams = null) => {
+        const ratioOptions = getRatiosForModel(modelId, customParams);
         const config = getApiConfigByKey(modelId);
         const preferred = String(config?.defaultRatio || '').trim();
         if (preferred && ratioOptions.includes(preferred)) return preferred;
@@ -10373,16 +10378,16 @@ function TxStudioApp({
         return ratioOptions.find((value) => value !== 'Auto') || ratioOptions[0] || '16:9';
     }, [getRatiosForModel, getApiConfigByKey]);
 
-    const getPreferredImageResolutionForModel = useCallback((modelId) => {
-        const resolutionOptions = getResolutionsForModel(modelId);
+    const getPreferredImageResolutionForModel = useCallback((modelId, customParams = null) => {
+        const resolutionOptions = getResolutionsForModel(modelId, customParams);
         const config = getApiConfigByKey(modelId);
         const preferred = normalizeImageResolution(config?.defaultResolution || '');
         if (preferred && resolutionOptions.includes(preferred)) return preferred;
         return resolutionOptions.find((value) => value !== 'Auto') || resolutionOptions[0] || '2K';
     }, [getResolutionsForModel, getApiConfigByKey]);
 
-    const getPreferredVideoResolutionForModel = useCallback((modelId) => {
-        const resolutionOptions = getVideoResolutionsForModel(modelId);
+    const getPreferredVideoResolutionForModel = useCallback((modelId, customParams = null) => {
+        const resolutionOptions = getVideoResolutionsForModel(modelId, customParams);
         const config = getApiConfigByKey(modelId);
         const preferredRaw = normalizeVideoResolution(config?.defaultVideoResolution || '');
         const preferred = preferredRaw === 'Auto' ? '' : preferredRaw;
@@ -10435,13 +10440,18 @@ function TxStudioApp({
         setNodes((prev) => prev.map((node) => {
             if (node.id !== nodeId) return node;
             const nextSettings = { ...(node.settings || {}), model: resolvedModel };
+            nextSettings.customParams = getDefaultCustomParamsForModel(
+                resolvedModel,
+                null,
+                { preserveByName: false }
+            );
             if (nodeType === 'gen-image') {
-                const ratioOptions = getRatiosForModel(resolvedModel);
-                const fallbackRatio = getPreferredModelRatio(resolvedModel, 'image');
+                const ratioOptions = getRatiosForModel(resolvedModel, nextSettings.customParams);
+                const fallbackRatio = getPreferredModelRatio(resolvedModel, 'image', nextSettings.customParams);
                 const currentRatio = nextSettings.ratio || '';
                 nextSettings.ratio = ratioOptions.includes(currentRatio) ? currentRatio : fallbackRatio;
-                const resolutionOptions = getResolutionsForModel(resolvedModel);
-                const fallbackResolution = getPreferredImageResolutionForModel(resolvedModel);
+                const resolutionOptions = getResolutionsForModel(resolvedModel, nextSettings.customParams);
+                const fallbackResolution = getPreferredImageResolutionForModel(resolvedModel, nextSettings.customParams);
                 const currentResolution = normalizeImageResolution(nextSettings.resolution || '');
                 nextSettings.resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
                 const imageConfig = getApiConfigByKey(resolvedModel);
@@ -10449,20 +10459,15 @@ function TxStudioApp({
                 nextSettings.imageConcurrency = fallbackImageConcurrency;
                 nextSettings.concurrentImages = fallbackImageConcurrency;
             } else if (nodeType === 'gen-video') {
-                const ratioOptions = getRatiosForModel(resolvedModel);
-                const fallbackRatio = getPreferredModelRatio(resolvedModel, 'video');
+                const ratioOptions = getRatiosForModel(resolvedModel, nextSettings.customParams);
+                const fallbackRatio = getPreferredModelRatio(resolvedModel, 'video', nextSettings.customParams);
                 const currentRatio = nextSettings.ratio || '';
                 nextSettings.ratio = ratioOptions.includes(currentRatio) ? currentRatio : fallbackRatio;
-                const resolutionOptions = getVideoResolutionsForModel(resolvedModel);
-                const fallbackResolution = getPreferredVideoResolutionForModel(resolvedModel);
+                const resolutionOptions = getVideoResolutionsForModel(resolvedModel, nextSettings.customParams);
+                const fallbackResolution = getPreferredVideoResolutionForModel(resolvedModel, nextSettings.customParams);
                 const currentResolution = normalizeVideoResolution(nextSettings.resolution || '');
                 nextSettings.resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
             }
-            nextSettings.customParams = getDefaultCustomParamsForModel(
-                resolvedModel,
-                null,
-                { preserveByName: false }
-            );
             const recommendedHeight = getNodeRecommendedHeight(nodeType, resolvedModel);
             const currentHeight = Number(node.height) || 0;
             const nextHeight = recommendedHeight > 0 ? Math.max(currentHeight, recommendedHeight) : currentHeight;
@@ -12559,18 +12564,26 @@ function TxStudioApp({
             const shouldSync = (node.type === 'gen-image' || node.type === 'gen-video')
                 && (nodeModel === api.id || nodeModel === api._uid || nodeModel === api.modelName);
             if (!shouldSync) return node;
+            const nextCustomParams = {
+                ...(node.settings?.customParams || {}),
+                'vod-model-name': nextModelName,
+                'vod-model-version': nextModelVersion,
+                ModelName: nextModelName,
+                ModelVersion: nextModelVersion,
+            };
+            const normalized = reconcileModelGenerationSettings(
+                nodeModel,
+                nextCustomParams,
+                node.settings,
+                node.type === 'gen-video' ? 'video' : 'image',
+            );
             return {
                 ...node,
                 settings: {
                     ...node.settings,
-                    customParams: {
-                        ...(node.settings?.customParams || {}),
-                        'vod-model-name': nextModelName,
-                        'vod-model-version': nextModelVersion,
-                        ModelName: nextModelName,
-                        ModelVersion: nextModelVersion
-                    }
-                }
+                    customParams: nextCustomParams,
+                    ...normalized,
+                },
             };
         }));
     };
@@ -17328,9 +17341,12 @@ function TxStudioApp({
                     ? options.vodSubjectInfos
                     : parseVodKlingSubjectInfos(options.vodKlingSubjectInfos || node?.settings?.vodKlingSubjectInfos))
                 : [];
+            const vodModelCapability = getVodGenerationCapability(type, vodSubModel.modelName, vodSubModel.modelVersion);
             const vodKlingReferenceFeature = vodKlingSubjectInfoCandidates.length > 0
                 ? 'subjectReference'
                 : (type === 'video' ? getVodKlingReferenceFeature(vodSubModel.modelName, vodSubModel.modelVersion) : '');
+            const vodReferenceFeature = vodKlingReferenceFeature
+                || (type === 'video' && vodModelCapability.supportsFirstLastFrame ? 'firstLastFrame' : '');
             // 智能分镜视频：使用上层传入的精确角色信息（首帧/参考图/尾帧）构建 FileInfos，
             // 避免角色参考图被误当成首帧或尾帧、以及拖入的首帧被截断丢弃。
             const storyboardImageRoles = (type === 'video' && options.storyboardImageRoles) ? options.storyboardImageRoles : null;
@@ -17340,7 +17356,7 @@ function TxStudioApp({
                 const sbRefs = Array.isArray(storyboardImageRoles.references)
                     ? storyboardImageRoles.references.filter((img) => img && img !== sbFirst && img !== sbLast)
                     : [];
-                if (vodKlingReferenceFeature === 'firstLastFrame') {
+                if (vodReferenceFeature === 'firstLastFrame') {
                     // Kling 3.0 首尾帧：只支持首帧 + 尾帧，不支持角色参考图。
                     const entries = [];
                     if (sbFirst) entries.push({ image: sbFirst, fileInfo: { Usage: 'FirstFrame' }, isLast: false });
@@ -17348,7 +17364,7 @@ function TxStudioApp({
                     vodSourceImages = entries.map((e) => e.image);
                     vodSourceFileInfos = entries.map((e) => e.fileInfo);
                     vodLastFrameSourceIndex = entries.findIndex((e) => e.isLast);
-                } else if (vodKlingReferenceFeature === 'multiReference') {
+                } else if (vodReferenceFeature === 'multiReference') {
                     // Kling 3.0-Omni 多图参考：首帧与角色参考图都以 Usage=Reference 传入。
                     const entries = [];
                     if (sbFirst) entries.push({ image: sbFirst, fileInfo: { Usage: 'Reference', Category: 'Image' } });
@@ -17357,7 +17373,7 @@ function TxStudioApp({
                     vodSourceImages = sliced.map((e) => e.image);
                     vodSourceFileInfos = sliced.map((e) => e.fileInfo);
                     vodLastFrameSourceIndex = -1;
-                } else if (vodKlingReferenceFeature === 'subjectReference') {
+                } else if (vodReferenceFeature === 'subjectReference') {
                     // Kling O1 固定主体：角色走 SubjectInfos，首帧仍以 FirstFrame 传入。
                     if (vodKlingSubjectInfoCandidates.length > 0) {
                         vodExtraTaskParams.subjectInfos = vodKlingSubjectInfoCandidates;
@@ -17381,7 +17397,7 @@ function TxStudioApp({
                     vodSourceFileInfos = null;
                     vodLastFrameSourceIndex = (lastIdx >= 0 && lastIdx < vodSourceImages.length) ? lastIdx : -1;
                 }
-            } else if (vodKlingReferenceFeature === 'firstLastFrame') {
+            } else if (vodReferenceFeature === 'firstLastFrame') {
                 const useFirstLastFrame = !!(node?.settings?.useFirstLastFrame || node?.settings?.veoFramesMode);
                 const startFrame = useFirstLastFrame ? getConnectedImageForInput(vodSourceNodeId, 'veo_start') : null;
                 const endFrame = useFirstLastFrame ? getConnectedImageForInput(vodSourceNodeId, 'veo_end') : null;
@@ -17391,10 +17407,10 @@ function TxStudioApp({
                 vodSourceImages = frameEntries.map((entry) => entry.image).filter(Boolean);
                 vodSourceFileInfos = frameEntries.map((entry) => entry.fileInfo);
                 vodLastFrameSourceIndex = frameEntries.findIndex((entry) => entry.isLastFrame);
-            } else if (vodKlingReferenceFeature === 'multiReference') {
+            } else if (vodReferenceFeature === 'multiReference') {
                 vodSourceImages = vodSourceImages.slice(0, 10);
                 vodSourceFileInfos = vodSourceImages.map(() => ({ Usage: 'Reference', Category: 'Image' }));
-            } else if (vodKlingReferenceFeature === 'subjectReference') {
+            } else if (vodReferenceFeature === 'subjectReference') {
                 if (vodKlingSubjectInfoCandidates.length > 0) {
                     vodExtraTaskParams.subjectInfos = vodKlingSubjectInfoCandidates;
                     vodSourceImages = [];
@@ -17402,9 +17418,18 @@ function TxStudioApp({
                     vodLastFrameSourceIndex = -1;
                 }
             }
-            // 节点选择的比例（Auto 时不传，让后端默认）
-            const vodRatio = (options.ratio || node?.settings?.ratio || '').trim();
-            const aspectRatio = vodRatio && vodRatio !== 'Auto' ? vodRatio : null;
+            // 首页与画布共用同一套比例、分辨率和时长校正与请求映射。
+            const vodRequestSettings = buildVodGenerationRequestSettings(
+                type,
+                vodSubModel.modelName,
+                vodSubModel.modelVersion,
+                {
+                    ratio: options.ratio || node?.settings?.ratio,
+                    resolution: options.resolution || node?.settings?.resolution,
+                    duration: options.duration || node?.settings?.duration,
+                },
+            );
+            const aspectRatio = vodRequestSettings.aspectRatio || null;
             // 写入一条 generating 历史
             if (!options._isRetry && !options._skipHistoryInsert) {
                 setHistory((prev) => [{
@@ -17437,18 +17462,12 @@ function TxStudioApp({
             (async () => {
                 try {
                     const vodAudioGenerationEnabled = type === 'video' && node?.settings?.vodAudioGeneration !== false;
-                    const vodDurationRaw = String(options.duration || node?.settings?.duration || '').trim();
-                    const vodDurationValue = Number(vodDurationRaw.replace(/[^0-9.]/g, ''));
-                    const vodResolutionValue = type === 'video'
-                        ? normalizeVideoResolution(options.resolution || node?.settings?.resolution || lastUsedVideoResolution || '1080P')
-                        : '';
-                    const vodVideoOutputConfig = type === 'video'
-                        ? {
-                            ...(Number.isFinite(vodDurationValue) && vodDurationValue > 0 ? { Duration: vodDurationValue } : {}),
-                            ...(vodResolutionValue && vodResolutionValue !== 'Auto' ? { Resolution: vodResolutionValue } : {}),
-                            AudioGeneration: vodAudioGenerationEnabled ? 'Enabled' : 'Disabled'
-                        }
-                        : {};
+                    const vodOutputConfig = {
+                        ...vodRequestSettings.extraConfig,
+                        ...(type === 'video'
+                            ? { AudioGeneration: vodAudioGenerationEnabled ? 'Enabled' : 'Disabled' }
+                            : {}),
+                    };
                     const { urls } = await runVodAigcPipeline({
                         type,
                         prompt,
@@ -17461,7 +17480,7 @@ function TxStudioApp({
                         extraTaskParams: vodExtraTaskParams,
                         extraConfig: {
                             StorageMode: aigcStorageMode,
-                            ...vodVideoOutputConfig
+                            ...vodOutputConfig
                         }
                     }, {
                         credentials: vodCreds,
@@ -19311,7 +19330,9 @@ function TxStudioApp({
                     // 对于Veo接口，如果图片过大，自动缩放到合理尺寸（1920x1080等）
                     // 首尾帧：当开启“首尾帧”时，优先使用 veo_start / veo_end 两个输入点，顺序为 [首帧, 尾帧]，最多 2 张
                     const currentNodeForVeo = nodesMap.get(nodeId);
-                    const supportsFirstLastFrame = !!config?.supportsFirstLastFrame;
+                    const vodCapability = getVodSubModelCapability(config, currentNodeForVeo?.settings?.customParams);
+                    const supportsFirstLastFrame = !!config?.supportsFirstLastFrame
+                        || !!vodCapability?.capability?.supportsFirstLastFrame;
                     const useFirstLastFrame = supportsFirstLastFrame && !!(currentNodeForVeo?.settings?.useFirstLastFrame || currentNodeForVeo?.settings?.veoFramesMode);
                     const veoStartFrame = useFirstLastFrame ? getConnectedImageForInput(nodeId, 'veo_start') : null;
                     const veoEndFrame = useFirstLastFrame ? getConnectedImageForInput(nodeId, 'veo_end') : null;
@@ -19628,7 +19649,9 @@ function TxStudioApp({
                     const supportsResolution = supportsJimengVideoResolution(modelKey);
                     const jimengResolution = supportsResolution ? normalizeJimengVideoResolution(resolution) : '';
 
-                    const supportsFirstLastFrame = !!config?.supportsFirstLastFrame;
+                    const vodCapability = getVodSubModelCapability(config, node?.settings?.customParams);
+                    const supportsFirstLastFrame = !!config?.supportsFirstLastFrame
+                        || !!vodCapability?.capability?.supportsFirstLastFrame;
                     const useFirstLastFrame = supportsFirstLastFrame && !!(node?.settings?.useFirstLastFrame || node?.settings?.veoFramesMode);
                     const startFrame = useFirstLastFrame ? getConnectedImageForInput(nodeId, 'veo_start') : null;
                     const endFrame = useFirstLastFrame ? getConnectedImageForInput(nodeId, 'veo_end') : null;
@@ -21050,15 +21073,22 @@ function TxStudioApp({
     };
 
     const handleNewProject = useCallback(async () => {
-        // 当前 SQLite 项目中创建新项目后返回项目列表，由用户打开。
+        // SQLite 项目中创建后立即切换到新画布，不再绕回项目列表。
         if (currentProjectId) {
+            if (projectCreatingRef.current) return;
             const name = prompt(t('请输入新项目名称'), t('未命名项目'));
-            if (!name) return;
+            if (!name?.trim()) return;
+            projectCreatingRef.current = true;
+            setProjectCreating(true);
             try {
-                await createProject(name.trim());
-                onExitToProjects?.();
+                const project = await createProject(name.trim());
+                setProjectOptions((projects) => [project, ...projects.filter((item) => item.id !== project.id)]);
+                onSwitchProject?.(project);
             } catch (err) {
                 showToast('创建项目失败: ' + (err.message || ''), 'error', 0);
+            } finally {
+                projectCreatingRef.current = false;
+                setProjectCreating(false);
             }
             return;
         }
@@ -21074,7 +21104,7 @@ function TxStudioApp({
             }
         }
         await resetProjectState();
-    }, [currentProjectId, nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState, onExitToProjects]);
+    }, [currentProjectId, nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState, onSwitchProject, showToast]);
 
     // 保存选中的工作流（框选节点后右键保存）
     const handleSaveSelectedWorkflow = async () => {
@@ -22304,9 +22334,13 @@ function TxStudioApp({
     }, [connections, nodesMap]);
 
     // 获取模型的默认时长
-    const getDefaultDurationForModel = (modelId) => {
+    const getDefaultDurationForModel = (modelId, customParams = null) => {
         if (!modelId) return '5s';
         const config = getApiConfigByKey(modelId);
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod?.type === 'video' && vod.capability?.durations?.length) {
+            return vod.capability.durations[0];
+        }
         const configuredDefaultRaw = String(config?.defaultDuration || '').trim();
         const configuredDefault = configuredDefaultRaw
             ? (configuredDefaultRaw.endsWith('s') ? configuredDefaultRaw : `${configuredDefaultRaw}s`)
@@ -22331,8 +22365,8 @@ function TxStudioApp({
     const getDefaultDurationsForModel = (modelId, customParams = null) => {
         if (!modelId) return ['5s', '10s'];
         const config = getApiConfigByKey(modelId);
-        const vodSubModelDurations = getVodSubModelDurations(config, customParams);
-        if (vodSubModelDurations) return vodSubModelDurations;
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod?.type === 'video' && vod.capability?.durations?.length) return vod.capability.durations;
         if (Array.isArray(config?.durations) && config.durations.length > 0) {
             return config.durations;
         }
@@ -22344,6 +22378,41 @@ function TxStudioApp({
         if (resolvedId.includes('jimeng-video-sora2') || resolvedId.includes('jimeng-sora2')) return ['4s', '8s', '12s'];
         if (resolvedId.includes('jimeng')) return ['5s', '10s'];  // Jimeng 只支持 5s 和 10s
         return ['5s', '10s'];
+    };
+
+    const reconcileModelGenerationSettings = (modelId, customParams, current = {}, mode = 'image') => {
+        const config = getApiConfigByKey(modelId);
+        const vod = getVodSubModelCapability(config, customParams);
+        if (vod) {
+            return reconcileVodGenerationSettings(
+                vod.type,
+                vod.selection.modelName,
+                vod.selection.modelVersion,
+                current,
+            );
+        }
+
+        const ratios = getRatiosForModel(modelId, customParams);
+        const resolutions = mode === 'video'
+            ? getVideoResolutionsForModel(modelId, customParams)
+            : getResolutionsForModel(modelId, customParams);
+        const next = {
+            ratio: ratios.includes(current.ratio)
+                ? current.ratio
+                : getPreferredModelRatio(modelId, mode, customParams),
+            resolution: resolutions.includes(current.resolution)
+                ? current.resolution
+                : (mode === 'video'
+                    ? getPreferredVideoResolutionForModel(modelId, customParams)
+                    : getPreferredImageResolutionForModel(modelId, customParams)),
+        };
+        if (mode === 'video') {
+            const durations = getDefaultDurationsForModel(modelId, customParams);
+            next.duration = durations.includes(current.duration)
+                ? current.duration
+                : getDefaultDurationForModel(modelId, customParams);
+        }
+        return next;
     };
 
     const getStoryboardDefaultPromptByMode = (mode, nodeSettings = {}) => {
@@ -24061,6 +24130,9 @@ function TxStudioApp({
             ? resolveVodSubModel('video', videoCustomParams, Array.isArray(modelConfig?.customParams) ? modelConfig.customParams : [])
             : null;
         const selectedVodKlingVersion = selectedVodSubModel ? normalizeVodKlingVersion(selectedVodSubModel.modelVersion) : '';
+        const selectedVodCapability = selectedVodSubModel
+            ? getVodGenerationCapability('video', selectedVodSubModel.modelName, selectedVodSubModel.modelVersion)
+            : null;
         const selectedCharacterSubjectInfos = selectedVodSubModel
             && String(selectedVodSubModel.modelName || '').trim().toLowerCase() === 'kling'
             && ['o1', '3.0-omni'].includes(selectedVodKlingVersion)
@@ -24087,8 +24159,10 @@ function TxStudioApp({
             ? (shot.output_images[shot.selectedImageIndex >= 0 ? shot.selectedImageIndex : 0] || '')
             : '';
         const firstFrameImage = shot.image_url || autoStoryboardImage || '';
-        // 尾帧：仅在显式开启首尾帧时使用 lastFrame。
-        const lastFrameImage = (shot.useFirstLastFrame && shot.lastFrame) ? shot.lastFrame : '';
+        // 尾帧：仅在当前模型支持且用户显式开启首尾帧时使用。
+        const lastFrameImage = (selectedVodCapability?.supportsFirstLastFrame && shot.useFirstLastFrame && shot.lastFrame)
+            ? shot.lastFrame
+            : '';
         // 扁平 sourceImages：首帧固定排在最前（index 0），其后角色参考图，最后尾帧。
         // 这样即使下游按「第 0 张=首帧」的旧逻辑处理，用户拖入的首帧也一定生效。
         const sourceImages = [];
@@ -24110,9 +24184,9 @@ function TxStudioApp({
         scheduleStoryboardTimeout(nodeId, shot.id, startAt, 'video');
 
         // 5. 构建覆盖选项 - 确保 duration 格式正确
-        let durationValue = videoModelPatch?.duration || shot.duration || getDefaultDurationForModel(selectedModel);
+        let durationValue = videoModelPatch?.duration || shot.duration || getDefaultDurationForModel(selectedModel, videoCustomParams);
         // V3.5.5: 验证 duration 是否在模型支持的范围内
-        const validDurations = getDefaultDurationsForModel(selectedModel);
+        const validDurations = getDefaultDurationsForModel(selectedModel, videoCustomParams);
         if (!validDurations.includes(durationValue)) {
             console.warn(`[V3.5.5] Duration "${durationValue}" not valid for model "${selectedModel}", using "${validDurations[0]}"`);
             durationValue = validDurations[0]; // 使用第一个有效值作为默认
@@ -24122,9 +24196,9 @@ function TxStudioApp({
 
         const overrideOptions = {
             model: selectedModel,
-            ratio: videoModelPatch?.ratio || shot.ratio || getPreferredModelRatio(selectedModel, 'video') || '16:9',
+            ratio: videoModelPatch?.ratio || shot.ratio || getPreferredModelRatio(selectedModel, 'video', videoCustomParams) || '16:9',
             duration: normalizedDuration,
-            resolution: normalizeVideoResolutionLower(videoModelPatch?.resolution || shot.resolution || getPreferredVideoResolutionForModel(selectedModel) || '720p'),
+            resolution: videoModelPatch?.resolution || shot.resolution || getPreferredVideoResolutionForModel(selectedModel, videoCustomParams) || '720P',
             isHD: !!shot.isHD,
             customParams: videoCustomParams,
             storyboardImageRoles,
@@ -29026,7 +29100,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                         updateNodeSettings(node.id, { duration: durationOptions[0] || '5s' });
                                     }, 0);
                                 }
-                                const resolutionOptions = getVideoResolutionsForModel(modelId);
+                                const resolutionOptions = getVideoResolutionsForModel(modelId, node.settings?.customParams);
                                 const resolutionConfig = getApiConfigByKey(modelId);
                                 const currentResolution = normalizeVideoResolution(node.settings?.resolution || lastUsedVideoResolution || '720P');
                                 const fallbackResolution = resolutionOptions.find((res) => res !== 'Auto') || '720P';
@@ -29159,7 +29233,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         }`}
                                                     onMouseDown={(e) => e.stopPropagation()}
                                                 >
-                                                    {getRatiosForModel(modelId).map((ratio) => (
+                                                    {getRatiosForModel(modelId, node.settings?.customParams).map((ratio) => (
                                                         <option key={ratio} value={ratio}>
                                                             {ratio === 'Auto'
                                                                 ? 'Auto'
@@ -31282,33 +31356,18 @@ ${inputText.substring(0, 15000)} ... (截断)
                             };
                             const nextShots = currentShots.map((shot) => {
                                 const tags = buildStyleTags(shot.tags);
-                                if (storyboardMode === 'video') {
-                                    const resolutionOptions = getVideoResolutionsForModel(modelKey);
-                                    const fallbackResolution = getPreferredVideoResolutionForModel(modelKey);
-                                    const currentResolution = normalizeVideoResolution(shot.resolution || '');
-                                    const resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
-                                    return {
-                                        ...shot,
-                                        model: modelKey,
-                                        ratio: storyboardGlobalRatio,
-                                        resolution,
-                                        duration: shot.duration || getDefaultDurationForModel(modelKey),
-                                        customParams: { ...customParams },
-                                        tags
-                                    };
-                                }
-                                const resolutionOptions = getResolutionsForModel(modelKey);
-                                const fallbackResolution = getPreferredImageResolutionForModel(modelKey);
-                                const currentResolution = normalizeImageResolution(shot.resolution || '');
-                                const resolution = resolutionOptions.includes(currentResolution) ? currentResolution : fallbackResolution;
+                                const normalized = reconcileModelGenerationSettings(
+                                    modelKey,
+                                    customParams,
+                                    { ...shot, ratio: storyboardGlobalRatio },
+                                    storyboardMode,
+                                );
                                 return {
                                     ...shot,
                                     model: modelKey,
-                                    ratio: storyboardGlobalRatio,
-                                    resolution,
-                                    duration: undefined,
                                     customParams: { ...customParams },
-                                    tags
+                                    ...normalized,
+                                    tags,
                                 };
                             });
                             try {
@@ -33054,11 +33113,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 const newShots = [...(node.settings.shots || [])];
                                                                 const mode = normalizeStoryboardMode(node.settings?.mode);
                                                                 const defaultModel = getStoryboardDefaultModelKey(mode);
-                                                                const defaultRatio = getPreferredModelRatio(defaultModel, mode);
-                                                                const defaultResolution = mode === 'image'
-                                                                    ? getPreferredImageResolutionForModel(defaultModel)
-                                                                    : getPreferredVideoResolutionForModel(defaultModel);
-                                                                const defaultDuration = mode === 'video' ? getDefaultDurationForModel(defaultModel) : undefined;
+                                                                const customParams = getDefaultCustomParamsForModel(defaultModel, null, { preserveByName: false });
+                                                                const normalized = reconcileModelGenerationSettings(defaultModel, customParams, {}, mode);
                                                                 newShots.splice(idx, 0, {
                                                                     id: Date.now() + Math.random(),
                                                                     prompt: '',
@@ -33067,10 +33123,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     selectedCharacterIds: [],
                                                                     description: '',
                                                                     model: defaultModel,
-                                                                    ratio: defaultRatio,
-                                                                    resolution: defaultResolution,
-                                                                    duration: defaultDuration,
-                                                                    customParams: getDefaultCustomParamsForModel(defaultModel, null, { preserveByName: false }),
+                                                                    customParams,
+                                                                    ...normalized,
                                                                     status: 'draft',
                                                                     outputEnabled: false,
                                                                     selectedImageIndex: -1
@@ -33147,7 +33201,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     {(() => {
                                                                         const mode = normalizeStoryboardMode(node.settings?.mode);
                                                                         const isVideo = mode === 'video';
-                                                                        const supportsFirstLastFrame = !!getApiConfigByKey(shot.model)?.supportsFirstLastFrame;
+                                                                        const shotModelConfig = getApiConfigByKey(shot.model);
+                                                                        const shotVodCapability = getVodSubModelCapability(shotModelConfig, shot.customParams);
+                                                                        const supportsFirstLastFrame = !!shotModelConfig?.supportsFirstLastFrame
+                                                                            || !!shotVodCapability?.capability?.supportsFirstLastFrame;
                                                                         const showLastFrame = supportsFirstLastFrame && shot.useFirstLastFrame;
                                                                         const activeInput = shot.activeInput || 'first';
                                                                         const showMultiRef = shot.useMultiRef; // Toggle State
@@ -33473,17 +33530,17 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                             key={modelKey}
                                                                                                             onClick={() => {
                                                                                                                 const mode = normalizeStoryboardMode(node.settings?.mode);
-                                                                                                                const defaultDuration = getDefaultDurationForModel(modelKey);
-                                                                                                                const defaultRatio = getPreferredModelRatio(modelKey, mode);
-                                                                                                                const defaultResolution = mode === 'image'
-                                                                                                                    ? getPreferredImageResolutionForModel(modelKey)
-                                                                                                                    : getPreferredVideoResolutionForModel(modelKey);
+                                                                                                                const customParams = getDefaultCustomParamsForModel(modelKey, null, { preserveByName: false });
+                                                                                                                const normalized = reconcileModelGenerationSettings(
+                                                                                                                    modelKey,
+                                                                                                                    customParams,
+                                                                                                                    shot,
+                                                                                                                    mode,
+                                                                                                                );
                                                                                                                 updateShot(node.id, shot.id, {
                                                                                                                     model: modelKey,
-                                                                                                                    ratio: defaultRatio,
-                                                                                                                    resolution: defaultResolution,
-                                                                                                                    duration: mode === 'video' ? (shot.duration || defaultDuration) : undefined,
-                                                                                                                    customParams: getDefaultCustomParamsForModel(modelKey, null, { preserveByName: false })
+                                                                                                                    customParams,
+                                                                                                                    ...normalized,
                                                                                                                 });
                                                                                                                 // V3.6.0.fuckedup: 根据模式保存最后使用的模型
                                                                                                                 const lastModelKey = mode === 'image' ? 'txstudio_last_image_model' : 'txstudio_last_video_model';
@@ -33521,12 +33578,17 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         {/* Ratio Select - V3.6.1 动态适配模式 */}
                                                                         {(() => {
                                                                             const mode = normalizeStoryboardMode(node.settings?.mode);
-                                                                            const ratioOptions = getRatiosForModel(shot.model);
+                                                                            const ratioOptions = getRatiosForModel(shot.model, shot.customParams);
                                                                             const ratioConfig = getApiConfigByKey(shot.model);
-                                                                            const fallbackRatio = getPreferredModelRatio(shot.model, mode);
+                                                                            const fallbackRatio = getPreferredModelRatio(shot.model, mode, shot.customParams);
+                                                                            const currentRatio = shot.ratio || '';
+                                                                            const resolvedRatio = ratioOptions.includes(currentRatio) ? currentRatio : fallbackRatio;
+                                                                            if (resolvedRatio !== currentRatio) {
+                                                                                setTimeout(() => updateShot(node.id, shot.id, { ratio: resolvedRatio }), 0);
+                                                                            }
                                                                             return (
                                                                                 <select
-                                                                                    value={shot.ratio || fallbackRatio}
+                                                                                    value={resolvedRatio}
                                                                                     onChange={(e) => updateShot(node.id, shot.id, { ratio: e.target.value })}
                                                                                     onClick={(e) => e.stopPropagation()}
                                                                                     onMouseDown={(e) => e.stopPropagation()}
@@ -33550,11 +33612,11 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         {(() => {
                                                                             const mode = normalizeStoryboardMode(node.settings?.mode);
                                                                             if (mode === 'video') {
-                                                                                const resOptions = getVideoResolutionsForModel(shot.model);
+                                                                                const resOptions = getVideoResolutionsForModel(shot.model, shot.customParams);
                                                                                 if (!resOptions.length) return null;
                                                                                 const resConfig = getApiConfigByKey(shot.model);
                                                                                 const currentRes = normalizeVideoResolution(shot.resolution || resOptions[0] || '720P');
-                                                                                const fallbackRes = getPreferredVideoResolutionForModel(shot.model);
+                                                                                const fallbackRes = getPreferredVideoResolutionForModel(shot.model, shot.customParams);
                                                                                 const resolvedRes = resOptions.includes(currentRes) ? currentRes : fallbackRes;
                                                                                 if (resolvedRes !== currentRes) {
                                                                                     setTimeout(() => updateShot(node.id, shot.id, { resolution: resolvedRes }), 0);
@@ -33580,10 +33642,11 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                 );
                                                                             } else {
                                                                                 // 图片模式：显示Auto/1K/2K/4K
-                                                                                const resOptions = getResolutionsForModel(shot.model);
+                                                                                const resOptions = getResolutionsForModel(shot.model, shot.customParams);
+                                                                                if (!resOptions.length) return null;
                                                                                 const resConfig = getApiConfigByKey(shot.model);
                                                                                 const currentRes = normalizeImageResolution(shot.resolution || '2K');
-                                                                                const fallbackRes = getPreferredImageResolutionForModel(shot.model);
+                                                                                const fallbackRes = getPreferredImageResolutionForModel(shot.model, shot.customParams);
                                                                                 const resolvedRes = resOptions.includes(currentRes) ? currentRes : fallbackRes;
                                                                                 if (resolvedRes !== currentRes) {
                                                                                     setTimeout(() => updateShot(node.id, shot.id, { resolution: resolvedRes }), 0);
@@ -33615,10 +33678,15 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                             const currentModel = shot.model || (apiConfigs.find(c => c.type === 'Video' && c.id === 'sora-2')?.id || apiConfigs.find(c => c.type === 'Video')?.id || '');
                                                                             const config = getApiConfigByKey(currentModel);
                                                                             const availableDurations = getDefaultDurationsForModel(currentModel, shot.customParams);
-                                                                            const defaultDuration = getDefaultDurationForModel(currentModel);
+                                                                            const defaultDuration = getDefaultDurationForModel(currentModel, shot.customParams);
+                                                                            const currentDuration = shot.duration || '';
+                                                                            const resolvedDuration = availableDurations.includes(currentDuration) ? currentDuration : defaultDuration;
+                                                                            if (resolvedDuration !== currentDuration) {
+                                                                                setTimeout(() => updateShot(node.id, shot.id, { duration: resolvedDuration }), 0);
+                                                                            }
                                                                             return (
                                                                                 <select
-                                                                                    value={shot.duration || defaultDuration}
+                                                                                    value={resolvedDuration}
                                                                                     onChange={(e) => updateShot(node.id, shot.id, { duration: e.target.value })}
                                                                                     onClick={(e) => e.stopPropagation()}
                                                                                     onMouseDown={(e) => e.stopPropagation()}
@@ -33638,7 +33706,9 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         {(normalizeStoryboardMode(node.settings?.mode)) === 'video' && (() => {
                                                                             const modelId = shot.model || '';
                                                                             const config = getApiConfigByKey(modelId);
-                                                                            const supportsFirstLastFrame = !!config?.supportsFirstLastFrame;
+                                                                            const vodCapability = getVodSubModelCapability(config, shot.customParams);
+                                                                            const supportsFirstLastFrame = !!config?.supportsFirstLastFrame
+                                                                                || !!vodCapability?.capability?.supportsFirstLastFrame;
                                                                             const supportsHD = !!config?.supportsHD;
                                                                             if (!supportsFirstLastFrame && !supportsHD) return null;
                                                                             return (
@@ -33694,7 +33764,16 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         const customParamsView = renderCustomParamInputs(
                                                                             shot.model,
                                                                             shot.customParams,
-                                                                            (nextParams) => updateShot(node.id, shot.id, { customParams: nextParams }),
+                                                                            (nextParams) => {
+                                                                                const mode = normalizeStoryboardMode(node.settings?.mode);
+                                                                                const normalized = reconcileModelGenerationSettings(
+                                                                                    shot.model,
+                                                                                    nextParams,
+                                                                                    shot,
+                                                                                    mode,
+                                                                                );
+                                                                                updateShot(node.id, shot.id, { customParams: nextParams, ...normalized });
+                                                                            },
                                                                             `${node.id}-${shot.id}`
                                                                         );
                                                                         if (!customParamsView) return null;
@@ -35175,7 +35254,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                         const vodKlingFeature = vodSelection
                                             ? getVodKlingReferenceFeature(vodSelection.modelName, vodSelection.modelVersion)
                                             : '';
-                                        const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame || vodKlingFeature === 'firstLastFrame';
+                                        const vodCapability = getVodSubModelCapability(currentModel, node.settings?.customParams);
+                                        const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame
+                                            || !!vodCapability?.capability?.supportsFirstLastFrame
+                                            || vodKlingFeature === 'firstLastFrame';
                                         const useFirstLastFrame = !!(node.settings?.useFirstLastFrame || node.settings?.veoFramesMode);
                                         if (!supportsFirstLastFrame || !useFirstLastFrame) return null;
 
@@ -35454,7 +35536,16 @@ ${inputText.substring(0, 15000)} ... (截断)
                                         const customParamsView = renderCustomParamInputs(
                                             node.settings?.model,
                                             node.settings?.customParams,
-                                            (nextParams) => updateNodeSettings(node.id, { customParams: nextParams }),
+                                            (nextParams) => {
+                                                const mode = node.type === 'gen-video' ? 'video' : 'image';
+                                                const normalized = reconcileModelGenerationSettings(
+                                                    node.settings?.model,
+                                                    nextParams,
+                                                    node.settings,
+                                                    mode,
+                                                );
+                                                updateNodeSettings(node.id, { customParams: nextParams, ...normalized });
+                                            },
                                             node.id
                                         );
                                         if (!customParamsView) return null;
@@ -35677,8 +35768,15 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         }`}
                                                 >
                                                     {(() => {
-                                                        const ratioValue = node.settings?.ratio || 'Auto';
                                                         const ratioConfig = getApiConfigByKey(node.settings?.model);
+                                                        const ratioOptions = getRatiosForModel(node.settings?.model, node.settings?.customParams);
+                                                        const storedRatio = node.settings?.ratio || '';
+                                                        const ratioValue = ratioOptions.includes(storedRatio)
+                                                            ? storedRatio
+                                                            : (ratioOptions[0] || 'Auto');
+                                                        if (ratioValue !== storedRatio) {
+                                                            setTimeout(() => updateNodeSettings(node.id, { ratio: ratioValue }), 0);
+                                                        }
                                                         return ratioValue === 'Auto'
                                                             ? 'Auto'
                                                             : getValueLabelWithNotes(ratioValue, !!ratioConfig?.ratioNotesEnabled, ratioConfig?.ratioNotes || {});
@@ -35692,7 +35790,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             }`}
                                                         onMouseDown={e => e.stopPropagation()}
                                                     >
-                                                        {getRatiosForModel(node.settings?.model).map(r => {
+                                                        {getRatiosForModel(node.settings?.model, node.settings?.customParams).map(r => {
                                                             const ratioConfig = getApiConfigByKey(node.settings?.model);
                                                             const label = r === 'Auto'
                                                                 ? 'Auto'
@@ -35722,7 +35820,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             {node.type === 'gen-video' && (() => {
                                                 const currentModel = getApiConfigByKey(node.settings?.model);
                                                 const modelId = currentModel?.id || currentModel?.modelName || '';
-                                                const resolutionOptions = getVideoResolutionsForModel(modelId);
+                                                const resolutionOptions = getVideoResolutionsForModel(modelId, node.settings?.customParams);
                                                 if (!resolutionOptions.length) return null;
                                                 const currentResolution = normalizeVideoResolution(node.settings?.resolution || lastUsedVideoResolution || '720P');
                                                 const fallbackResolution = resolutionOptions.find((res) => res !== 'Auto') || '720P';
@@ -35793,7 +35891,9 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             {node.type === 'gen-image' && (() => {
                                                 const currentModel = getApiConfigByKey(node.settings?.model);
                                                 const isMidjourney = currentModel && (currentModel.id.includes('mj') || currentModel.provider.toLowerCase().includes('midjourney'));
-                                                return !isMidjourney;
+                                                const modelId = currentModel?.id || currentModel?.modelName || '';
+                                                const hasResolutionOptions = getResolutionsForModel(modelId, node.settings?.customParams).length > 0;
+                                                return !isMidjourney && hasResolutionOptions;
                                             })() ? (
                                                 <div className="relative">
                                                     <button
@@ -35808,7 +35908,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         {(() => {
                                                             const currentModel = getApiConfigByKey(node.settings?.model);
                                                             const modelId = currentModel?.id || currentModel?.modelName || '';
-                                                            const availableResolutions = getResolutionsForModel(modelId);
+                                                            const availableResolutions = getResolutionsForModel(modelId, node.settings?.customParams);
                                                             const currentResolution = node.settings?.resolution || '2K';
                                                             const normalizedResolution = normalizeImageResolution(currentResolution);
                                                             // 如果当前分辨率不在可用选项中，使用第一个可用选项作为显示值
@@ -35836,7 +35936,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                     {activeDropdown?.nodeId === node.id && activeDropdown.type === 'res' && (() => {
                                                         const currentModel = getApiConfigByKey(node.settings?.model);
                                                         const modelId = currentModel?.id || currentModel?.modelName || '';
-                                                        const availableResolutions = getResolutionsForModel(modelId);
+                                                        const availableResolutions = getResolutionsForModel(modelId, node.settings?.customParams);
                                                         return (
                                                             <div
                                                                 className={`absolute bottom-full right-0 mb-1 w-24 rounded-lg shadow-xl p-1 z-[60] border ${theme === 'dark'
@@ -35948,7 +36048,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 const vodKlingFeature = vodSelection
                                                                     ? getVodKlingReferenceFeature(vodSelection.modelName, vodSelection.modelVersion)
                                                                     : '';
-                                                                const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame || vodKlingFeature === 'firstLastFrame';
+                                                                const vodCapability = getVodSubModelCapability(currentModel, node.settings?.customParams);
+                                                                const supportsFirstLastFrame = !!currentModel?.supportsFirstLastFrame
+                                                                    || !!vodCapability?.capability?.supportsFirstLastFrame
+                                                                    || vodKlingFeature === 'firstLastFrame';
                                                                 const useFirstLastFrame = !!(node.settings?.useFirstLastFrame || node.settings?.veoFramesMode);
                                                                 if (!supportsFirstLastFrame) return null;
                                                                 return (
@@ -36152,6 +36255,16 @@ ${inputText.substring(0, 15000)} ... (截断)
                                     </div>
                                 )}
                             </div>
+                            <button
+                                type="button"
+                                onClick={handleNewProject}
+                                disabled={projectCreating}
+                                className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-[#e7e2d7] bg-white px-2.5 text-[11px] font-semibold text-[#5f584c] transition hover:border-[#d8d0bf] hover:bg-[#fff8df] hover:text-[#4d3b12] disabled:cursor-wait disabled:opacity-60"
+                                title={t('新建项目')}
+                            >
+                                {projectCreating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                                <span className="hidden xl:inline">{projectCreating ? t('创建中...') : t('新建项目')}</span>
+                            </button>
                             <span className="mx-1 h-5 w-px shrink-0 bg-[#e6e2d9]" />
                             <div className="flex min-w-0 items-center gap-0.5">
                                 <button type="button" onClick={autoArrangeNodes} className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[#625d54] hover:bg-[#f4f2ed] hover:text-[#292720]" title={t('自动整理')}><Layout size={14} /><span className="hidden 2xl:inline">{t('自动整理')}</span></button>
@@ -39483,15 +39596,27 @@ ${inputText.substring(0, 15000)} ... (截断)
                             setProjectSaveError(null);
                             // 重新从本地 SQLite 读取画布。
                             if (currentProjectId) {
-                                getCanvas(currentProjectId)
+                                const targetProjectId = currentProjectId;
+                                getCanvas(targetProjectId)
                                     .then(data => {
-                                        if (data && Array.isArray(data.nodes)) {
-                                            setNodes(data.nodes);
+                                        if (String(activeProjectIdRef.current) !== String(targetProjectId)) return;
+                                        if (data && typeof data === 'object') {
+                                            setNodes(Array.isArray(data.nodes) ? data.nodes : []);
                                             setConnections(Array.isArray(data.connections) ? data.connections : []);
-                                            projectLoadedRef.current = true;
+                                            setView(normalizeViewState(data.view));
+                                            setProjectName(data.projectName || currentProject?.name || '未命名项目');
+                                            setChatSessions(Array.isArray(data.chatSessions) && data.chatSessions.length
+                                                ? data.chatSessions
+                                                : [{ id: 'default', title: t('新对话'), messages: [] }]);
+                                            setCurrentChatId(data.currentChatId || data.chatSessions?.[0]?.id || 'default');
+                                            setCharacterLibrary(Array.isArray(data.characterLibrary) ? data.characterLibrary : []);
+                                            setBatchQueue(Array.isArray(data.batchQueue) ? data.batchQueue : []);
+                                            setBatchGroups(Array.isArray(data.batchGroups) ? data.batchGroups : []);
                                         }
+                                        projectLoadedRef.current = true;
                                     })
                                     .catch(err => {
+                                        if (String(activeProjectIdRef.current) !== String(targetProjectId)) return;
                                         setProjectSaveError(err.message || '加载画布失败');
                                     });
                             }

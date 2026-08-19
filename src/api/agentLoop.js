@@ -1,5 +1,9 @@
 import { runVodAigcPipeline } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
+import {
+    buildVodGenerationRequestSettings,
+    getVodGenerationCapability,
+} from '../data/vodGenerationCapabilities';
 
 const MODELS_KEY = 'txstudio_api_configs';
 
@@ -212,6 +216,10 @@ export async function runScriptAgentLoop({
         if (!run.characters.length) throw new Error('未从剧本中提取到可生成人物');
         emit({ currentStage: 'generating_characters', progress: 12 });
 
+        const characterImageSettings = buildVodGenerationRequestSettings('image', imageModel, imageModelVersion, {
+            ratio: '3:4',
+            resolution: '1K',
+        });
         for (let index = 0; index < run.characters.length; index += 1) {
             ensureActive(shouldContinue);
             const character = run.characters[index];
@@ -223,9 +231,9 @@ export async function runScriptAgentLoop({
                     modelName: imageModel,
                     modelVersion: imageModelVersion,
                     prompt: `${character.visualPrompt}。角色名：${character.name}。角色设定图，单一人物，外貌与服装设计清晰稳定，无文字无水印。`,
-                    aspectRatio: '3:4',
+                    aspectRatio: characterImageSettings.aspectRatio,
                     enhancePrompt: 'Enabled',
-                    extraConfig: { Resolution: '1K', StorageMode: storageMode },
+                    extraConfig: { ...characterImageSettings.extraConfig, StorageMode: storageMode },
                 }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'character' } } });
                 character.imageUrl = result.urls[0] || '';
                 character.status = 'completed';
@@ -254,6 +262,10 @@ export async function runScriptAgentLoop({
         emit({ currentStage: 'generating_storyboards', progress: 42 });
 
         const imageCapability = getVodImageModelCapability(imageModel, imageModelVersion);
+        const storyboardImageSettings = buildVodGenerationRequestSettings('image', imageModel, imageModelVersion, {
+            ratio: aspectRatio,
+            resolution: '1K',
+        });
         for (let index = 0; index < run.shots.length; index += 1) {
             ensureActive(shouldContinue);
             const shot = run.shots[index];
@@ -271,9 +283,9 @@ export async function runScriptAgentLoop({
                     prompt: `${shot.visualPrompt}。${shot.camera}。电影分镜帧，统一角色造型与场景美术，无字幕无水印。`,
                     sourceImages: relatedCharacters.map((item) => item.imageUrl),
                     sourceFileInfos: relatedCharacters.map(() => ({})),
-                    aspectRatio,
+                    aspectRatio: storyboardImageSettings.aspectRatio,
                     enhancePrompt: 'Enabled',
-                    extraConfig: { Resolution: '1K', StorageMode: storageMode },
+                    extraConfig: { ...storyboardImageSettings.extraConfig, StorageMode: storageMode },
                 }, { ...PIPELINE_CONTEXT, history: { source: 'agent', parentJobId: historyParentJobId, parameters: { agent_stage: 'storyboard', shot_index: shot.index } } });
                 shot.imageUrl = result.urls[0] || '';
                 shot.status = 'storyboard_completed';
@@ -284,6 +296,12 @@ export async function runScriptAgentLoop({
         }
 
         emit({ currentStage: 'generating_videos', progress: 68 });
+        const videoCapability = getVodGenerationCapability('video', videoModel, videoModelVersion);
+        const videoSettings = buildVodGenerationRequestSettings('video', videoModel, videoModelVersion, {
+            ratio: aspectRatio,
+            resolution,
+            duration,
+        });
         for (let index = 0; index < run.shots.length; index += 1) {
             ensureActive(shouldContinue);
             const shot = run.shots[index];
@@ -297,12 +315,11 @@ export async function runScriptAgentLoop({
                     modelVersion: videoModelVersion,
                     prompt: `${shot.videoPrompt}。保持参考分镜中的人物身份、服装、场景和构图连续。${shot.dialogue ? `对白或旁白内容：${shot.dialogue}` : ''}`,
                     sourceImages: [shot.imageUrl],
-                    sourceFileInfos: [{}],
-                    aspectRatio,
+                    sourceFileInfos: [videoCapability.supportsFirstLastFrame ? { Usage: 'FirstFrame' } : {}],
+                    aspectRatio: videoSettings.aspectRatio,
                     enhancePrompt: 'Enabled',
                     extraConfig: {
-                        Duration: Number.parseInt(duration, 10) || 5,
-                        Resolution: resolution,
+                        ...videoSettings.extraConfig,
                         AudioGeneration: audioGeneration ? 'Enabled' : 'Disabled',
                         StorageMode: storageMode,
                     },

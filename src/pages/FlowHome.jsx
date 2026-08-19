@@ -9,7 +9,8 @@
  *   home       → Hero + 输入卡片 + 功能标签（落地态）
  *   image      → 内联 ImageTool（浅色）
  *   video      → 内联 VideoTool（浅色）
- *   canvas     → 内联 ProjectList（浅色）/ CanvasApp 编辑器（浅色，默认 light 主题，可在画布内切换）
+ *   projects   → 内联 ProjectList（浅色）
+ *   canvas     → CanvasApp 编辑器（浅色，默认 light 主题，可在画布内切换）
  *
  * 本地单用户工作台：无登录门禁，API 设置由右上角全局入口统一提供。
  */
@@ -19,7 +20,7 @@ import {
     Paperclip, Star, ArrowUp, ArrowLeft, Settings,
     Image as ImageIcon, Video, Layout, Sparkles,
     History, Download, Home, Search,
-    X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot, Globe,
+    X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot, Globe, Plus,
 } from 'lucide-react';
 import GlobalAPISettings from '../components/GlobalAPISettings';
 import {
@@ -33,6 +34,10 @@ import {
     runVodAigcPipeline,
 } from '../vodAdapter';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
+import {
+    buildVodGenerationRequestSettings,
+    reconcileVodGenerationSettings,
+} from '../data/vodGenerationCapabilities';
 import i18n, { LANGUAGE_STORAGE_KEY } from '../i18n';
 import ImageTool from './ImageTool';
 import ImageTemplateHub from './ImageTemplateHub';
@@ -46,6 +51,7 @@ import AgentStudio from './AgentStudio';
 import GenerationHistory from './GenerationHistory';
 import ProjectList from './ProjectList';
 import CanvasApp from '../App.jsx';
+import { createProject, listProjects } from '../api/project';
 import { HOME_QUICK_INSPIRATIONS } from '../data/imageInspiration';
 
 const t = (s) => (i18n.t ? i18n.t(s) : s);
@@ -228,8 +234,9 @@ function ScenarioCapabilityHub({ activeCategory, onCategoryChange, capabilities,
 export default function FlowHome() {
     const [activeMode, setActiveMode] = useState('home');
     const [text, setText] = useState('');
-    // 画布：当前打开的项目（null = 项目列表态）
+    // 画布与项目管理分为两个入口；画布始终绑定一个实际项目。
     const [currentProject, setCurrentProject] = useState(null);
+    const [projectNavLoading, setProjectNavLoading] = useState(false);
     const [historyProjectId, setHistoryProjectId] = useState('');
     // 模板：应用到图片/视频工具
     const [appliedTemplate, setAppliedTemplate] = useState(null);
@@ -257,14 +264,7 @@ export default function FlowHome() {
     const [homeAspectRatio, setHomeAspectRatio] = useState('16:9');
     const [homeResolution, setHomeResolution] = useState('1K');
     const [homeEnhancePrompt, setHomeEnhancePrompt] = useState(true);
-    const [homeStorageMode, setHomeStorageMode] = useState(() => {
-        try {
-            const saved = localStorage.getItem('txstudio_aigc_storage_mode');
-            return saved === 'Temporary' || saved === 'Permanent' ? saved : 'Permanent';
-        } catch {
-            return 'Permanent';
-        }
-    });
+    const [homeStorageMode, setHomeStorageMode] = useState('Permanent');
     const [homeParameterOpen, setHomeParameterOpen] = useState(null);
     const [homeParameterError, setHomeParameterError] = useState('');
     const homeReferenceInputRef = useRef(null);
@@ -343,6 +343,53 @@ export default function FlowHome() {
         setActiveMode('history');
     }, []);
 
+    const openProject = useCallback((project) => {
+        if (!project?.id) return;
+        setCurrentProject(project);
+        setActiveMode('canvas');
+    }, []);
+
+    const openProjectList = useCallback(() => {
+        setActiveMode('projects');
+    }, []);
+
+    const createAndOpenProject = useCallback(async () => {
+        if (projectNavLoading) return;
+        const input = window.prompt(t('请输入新项目名称'), t('未命名项目'));
+        const name = input?.trim();
+        if (!name) return;
+        setProjectNavLoading(true);
+        try {
+            const project = await createProject(name);
+            openProject(project);
+        } catch (error) {
+            window.alert(`${t('创建项目失败')}: ${error?.message || t('未知错误')}`);
+        } finally {
+            setProjectNavLoading(false);
+        }
+    }, [openProject, projectNavLoading]);
+
+    const openCanvas = useCallback(async () => {
+        if (projectNavLoading) return;
+        setProjectNavLoading(true);
+        try {
+            const projects = await listProjects();
+            const currentId = currentProject?.id == null ? '' : String(currentProject.id);
+            const current = Array.isArray(projects)
+                ? projects.find((project) => String(project.id) === currentId)
+                : null;
+            const project = current
+                || (Array.isArray(projects) && projects.length > 0 ? projects[0] : null)
+                || await createProject(t('未命名项目'));
+            openProject(project);
+        } catch (error) {
+            window.alert(`${t('打开画布失败')}: ${error?.message || t('未知错误')}`);
+            openProjectList();
+        } finally {
+            setProjectNavLoading(false);
+        }
+    }, [currentProject, openProject, openProjectList, projectNavLoading]);
+
     // 切换功能 = 只换主区内容，不跳走
     const goMode = (id) => {
         if (id === 'home') {
@@ -350,14 +397,15 @@ export default function FlowHome() {
             return;
         }
         if (id === 'canvas') {
-            setCurrentProject(null);
+            void openCanvas();
+            return;
         }
         if (id === 'image') {
             setImageTemplateMode(true);
         }
         setActiveMode(id);
     };
-    const goHome = () => { setActiveMode('home'); setCurrentProject(null); };
+    const goHome = () => { setActiveMode('home'); };
 
     const openImageTemplate = (style) => {
         // 内置案例也可以携带指定模型；仅在模型不存在时回退到当前首页选择。
@@ -390,11 +438,15 @@ export default function FlowHome() {
     };
 
     const syncHomeVideoCapability = (modelName, modelVersion) => {
-        const capability = getVodVideoModelCapability(modelName, modelVersion);
-        setHomeAspectRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]);
-        setHomeResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]);
-        setHomeVideoResolution((current) => capability.resolutions.includes(current) ? current : capability.resolutions[0]);
-        setHomeVideoDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]);
+        const next = reconcileVodGenerationSettings('video', modelName, modelVersion, {
+            ratio: homeAspectRatio,
+            resolution: homeVideoResolution,
+            duration: homeVideoDuration,
+        });
+        setHomeAspectRatio(next.ratio);
+        setHomeResolution(next.resolution);
+        setHomeVideoResolution(next.resolution);
+        setHomeVideoDuration(next.duration);
     };
 
     const switchHomeGenerationType = (type) => {
@@ -413,11 +465,14 @@ export default function FlowHome() {
 
     const selectHomeModel = (modelName) => {
         const nextVersion = defaultImageModelVersion(modelName);
-        const nextCapability = getVodImageModelCapability(modelName, nextVersion);
+        const next = reconcileVodGenerationSettings('image', modelName, nextVersion, {
+            ratio: homeAspectRatio,
+            resolution: homeResolution,
+        });
         setImageModel(modelName);
         setImageModelVersion(nextVersion);
-        setHomeAspectRatio((current) => nextCapability.ratios.includes(current) ? current : nextCapability.defaultRatio);
-        setHomeResolution((current) => nextCapability.resolutions.includes(current) ? current : nextCapability.defaultResolution);
+        setHomeAspectRatio(next.ratio);
+        setHomeResolution(next.resolution);
         setHomeParameterError('');
     };
 
@@ -433,10 +488,13 @@ export default function FlowHome() {
     };
 
     const selectHomeModelVersion = (modelVersion) => {
-        const nextCapability = getVodImageModelCapability(imageModel, modelVersion);
+        const next = reconcileVodGenerationSettings('image', imageModel, modelVersion, {
+            ratio: homeAspectRatio,
+            resolution: homeResolution,
+        });
         setImageModelVersion(modelVersion);
-        setHomeAspectRatio((current) => nextCapability.ratios.includes(current) ? current : nextCapability.defaultRatio);
-        setHomeResolution((current) => nextCapability.resolutions.includes(current) ? current : nextCapability.defaultResolution);
+        setHomeAspectRatio(next.ratio);
+        setHomeResolution(next.resolution);
         setHomeParameterError('');
     };
 
@@ -492,6 +550,10 @@ export default function FlowHome() {
             setHomeImageResults([]);
             setHomeImageStage('正在创建图片任务');
             try {
+                const requestSettings = buildVodGenerationRequestSettings('image', imageModel, imageModelVersion, {
+                    ratio: homeAspectRatio,
+                    resolution: homeResolution,
+                });
                 const { urls } = await runVodAigcPipeline({
                     type: 'image',
                     modelName: imageModel,
@@ -499,9 +561,9 @@ export default function FlowHome() {
                     prompt: value,
                     enhancePrompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
                     sourceImages: homeReferenceImages.map((item) => item.file),
-                    aspectRatio: homeAspectRatio || undefined,
+                    aspectRatio: requestSettings.aspectRatio,
                     extraConfig: {
-                        ...(homeResolution ? { Resolution: homeResolution } : {}),
+                        ...requestSettings.extraConfig,
                         StorageMode: homeStorageMode,
                     },
                 }, {
@@ -525,6 +587,11 @@ export default function FlowHome() {
         setHomeVideoResults([]);
         setHomeVideoStage('正在创建视频任务');
         try {
+            const requestSettings = buildVodGenerationRequestSettings('video', videoModel, videoModelVersion, {
+                ratio: homeAspectRatio,
+                resolution: homeVideoResolution,
+                duration: homeVideoDuration,
+            });
             const referenceFiles = homeReferenceImages.map((item) => item.file);
             const subjectOnly = homeVideoReferenceFeature === 'subjectReference' && homeVideoSubjectInfos.length > 0;
             const sourceImages = subjectOnly ? [] : referenceFiles;
@@ -542,13 +609,12 @@ export default function FlowHome() {
                 sourceImages,
                 sourceFileInfos,
                 lastFrameSourceIndex: homeVideoReferenceFeature === 'firstLastFrame' && referenceFiles.length > 1 ? 1 : undefined,
-                aspectRatio: homeAspectRatio,
+                aspectRatio: requestSettings.aspectRatio,
                 extraTaskParams: supportsHomeVideoSubjects && homeVideoSubjectInfos.length
                     ? { subjectInfos: homeVideoSubjectInfos }
                     : undefined,
                 extraConfig: {
-                    Duration: Number.parseInt(homeVideoDuration, 10),
-                    Resolution: homeVideoResolution,
+                    ...requestSettings.extraConfig,
                     AudioGeneration: homeVideoAudio ? 'Enabled' : 'Disabled',
                     StorageMode: homeStorageMode,
                 },
@@ -626,7 +692,9 @@ export default function FlowHome() {
                     ? 'AI 换模特'
                     : activeMode === 'history'
                 ? '生成历史'
-                : (MODES.find((m) => m.id === activeMode) || {}).label || '';
+                : activeMode === 'projects'
+                    ? '项目列表'
+                    : (MODES.find((m) => m.id === activeMode) || {}).label || '';
     return (
         <div className="flex h-screen w-full overflow-hidden bg-white font-sans text-[#1f2329]">
             {/* ============ 侧边栏 ============ */}
@@ -660,13 +728,16 @@ export default function FlowHome() {
                                 key={id}
                                 type="button"
                                 onClick={() => goMode(id)}
+                                disabled={id === 'canvas' && projectNavLoading}
                                 title={sidebarCollapsed ? t(label) : undefined}
-                                className={`flex w-full items-center rounded-lg py-2 text-[13.5px] transition ${sidebarCollapsed ? 'justify-center px-2' : 'gap-[11px] px-[9px]'} ${isActive
+                                className={`flex w-full items-center rounded-lg py-2 text-[13.5px] transition disabled:cursor-wait disabled:opacity-60 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-[11px] px-[9px]'} ${isActive
                                     ? 'bg-[#f4f4f5] text-[#1f2329]'
                                     : 'text-gray-500 hover:bg-[#f4f4f5] hover:text-[#1f2329]'
                                     }`}
                             >
-                                <Icon size={16} className="flex-shrink-0" />
+                                {id === 'canvas' && projectNavLoading
+                                    ? <Loader2 size={16} className="flex-shrink-0 animate-spin" />
+                                    : <Icon size={16} className="flex-shrink-0" />}
                                 {!sidebarCollapsed && <span className="min-w-0 flex-1 truncate text-left">{t(label)}</span>}
                             </button>
                         );
@@ -675,11 +746,27 @@ export default function FlowHome() {
 
                 {!sidebarCollapsed && (
                     <>
-                        {/* 项目 */}
-                        <div className="mt-3.5 flex items-center justify-between px-[9px] py-1.5 text-[12.5px] text-gray-400">
+                        {/* 项目管理 */}
+                        <div className="mt-3.5 flex items-center px-[9px] py-1.5 text-[12.5px] font-medium text-gray-400">
                             <span className="flex items-center gap-1.5">{t('项目')} <ChevronDown size={11} /></span>
-                            <button type="button" onClick={() => goMode('canvas')} className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#f4f4f5]" title={t('项目列表')}>
-                                <LayoutGrid size={14} />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <button
+                                type="button"
+                                onClick={openProjectList}
+                                className={`flex w-full items-center gap-[11px] rounded-lg px-[9px] py-2 text-[13px] transition ${activeMode === 'projects' ? 'bg-[#f4f4f5] text-[#1f2329]' : 'text-gray-500 hover:bg-[#f4f4f5] hover:text-[#1f2329]'}`}
+                            >
+                                <LayoutGrid size={15} className="flex-shrink-0" />
+                                <span className="min-w-0 flex-1 truncate text-left">{t('项目列表')}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void createAndOpenProject()}
+                                disabled={projectNavLoading}
+                                className="flex w-full items-center gap-[11px] rounded-lg px-[9px] py-2 text-[13px] text-gray-500 transition hover:bg-[#f4f4f5] hover:text-[#1f2329] disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {projectNavLoading ? <Loader2 size={15} className="flex-shrink-0 animate-spin" /> : <Plus size={15} className="flex-shrink-0" />}
+                                <span className="min-w-0 flex-1 truncate text-left">{t('新建项目')}</span>
                             </button>
                         </div>
 
@@ -1146,10 +1233,11 @@ export default function FlowHome() {
                     {inCanvasEditor && (
                         <div className="absolute inset-0 overflow-hidden bg-[#f6f5ef]">
                             <CanvasApp
+                                key={currentProject.id}
                                 embedded
                                 currentProject={currentProject}
-                                onExitToProjects={() => setCurrentProject(null)}
-                                onSwitchProject={setCurrentProject}
+                                onExitToProjects={openProjectList}
+                                onSwitchProject={openProject}
                                 onOpenGenerationHistory={openGenerationHistory}
                             />
                         </div>
@@ -1211,8 +1299,8 @@ export default function FlowHome() {
                                         onOpenCapability={openCapability}
                                     />
                                 )}
-                                {activeMode === 'canvas' && (
-                                    <ProjectList embedded onOpenProject={setCurrentProject} />
+                                {activeMode === 'projects' && (
+                                    <ProjectList embedded onOpenProject={openProject} />
                                 )}
                             </div>
                         </div>
