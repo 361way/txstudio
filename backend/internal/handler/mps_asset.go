@@ -25,6 +25,7 @@ import (
 
 const (
 	mpsInputPrefix  = "mps-saas/input/"
+	mpsOutputPrefix = "mps-saas/output/"
 	maxMPSImageSize = 20 << 20
 )
 
@@ -68,13 +69,19 @@ func (h *MPSAssetHandler) Output(c *gin.Context) {
 		return
 	}
 	defer response.Body.Close()
-	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+	contentType := response.Header.Get("Content-Type")
+	isImage := strings.HasPrefix(strings.ToLower(contentType), "image/")
+	if isImage {
 		c.Header("Content-Type", contentType)
+	} else {
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", "attachment")
 	}
 	if contentLength := response.Header.Get("Content-Length"); contentLength != "" {
 		c.Header("Content-Length", contentLength)
 	}
 	c.Header("Cache-Control", "private, max-age=600")
+	c.Header("X-Content-Type-Options", "nosniff")
 	c.Status(http.StatusOK)
 	if _, err := io.Copy(c.Writer, response.Body); err != nil {
 		log.Printf("[mps] 输出结果传输失败: %v", err)
@@ -135,13 +142,7 @@ func (h *MPSAssetHandler) UploadFromURL(c *gin.Context) {
 		return
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(next *http.Request, _ []*http.Request) error {
-			_, err := validateExternalImageURL(next.URL.String())
-			return err
-		},
-	}
+	client := newSafeExternalMediaClient(30 * time.Second)
 	response, err := client.Get(parsed.String())
 	if err != nil {
 		BadRequest(c, "获取图片 URL 失败")
@@ -219,6 +220,9 @@ func mpsOutputObjectKey(rawPath string) (string, error) {
 			return "", fmt.Errorf("MPS 输出路径无效")
 		}
 	}
+	if !strings.HasPrefix(objectKey, mpsOutputPrefix) {
+		return "", fmt.Errorf("仅允许读取 MPS 输出目录中的结果")
+	}
 	return objectKey, nil
 }
 
@@ -282,16 +286,50 @@ func validateExternalImageURL(rawURL string) (*url.URL, error) {
 }
 
 func isPrivateAddress(address net.IP) bool {
-	if address.IsLoopback() || address.IsPrivate() || address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() || address.IsUnspecified() || address.IsMulticast() {
+	if address == nil || address.IsLoopback() || address.IsPrivate() || address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() || address.IsUnspecified() || address.IsMulticast() {
 		return true
 	}
 	if ipv4 := address.To4(); ipv4 != nil {
 		switch ipv4[0] {
-		case 9, 10, 11, 21, 30:
+		case 0, 9, 10, 11, 21, 30, 127:
 			return true
 		}
 	}
 	return false
+}
+
+func newSafeExternalMediaClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		host = strings.Trim(strings.ToLower(host), "[]")
+		if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+			return nil, fmt.Errorf("图片 URL 不允许指向本地或私有网络")
+		}
+		addresses, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+		if err != nil || len(addresses) == 0 {
+			return nil, fmt.Errorf("无法解析图片 URL 域名")
+		}
+		for _, ip := range addresses {
+			if isPrivateAddress(ip) {
+				return nil, fmt.Errorf("图片 URL 不允许指向本地或私有网络")
+			}
+		}
+		return dialer.DialContext(ctx, network, net.JoinHostPort(addresses[0].String(), port))
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(next *http.Request, _ []*http.Request) error {
+			_, err := validateExternalImageURL(next.URL.String())
+			return err
+		},
+	}
 }
 
 func stringValue(value interface{}) string {

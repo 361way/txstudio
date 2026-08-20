@@ -11,6 +11,8 @@ import (
 	"cnb.cool/txcloud/txstudio/backend/internal/model"
 	"cnb.cool/txcloud/txstudio/backend/internal/seed"
 	"cnb.cool/txcloud/txstudio/backend/internal/service"
+	"cnb.cool/txcloud/txstudio/backend/internal/translate"
+	"cnb.cool/txcloud/txstudio/backend/internal/viral"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -146,6 +148,10 @@ func (a *App) registerRoutes() error {
 		api.POST("/mps/assets", mpsAssetHandler.Upload)
 		api.POST("/mps/assets/from-url", mpsAssetHandler.UploadFromURL)
 		api.GET("/mps/assets/output", mpsAssetHandler.Output)
+
+		// 独立功能模块：不影响既有画布与项目路由。
+		viral.Register(api, viral.NewViralApp(a.DB, a.Crypto))
+		translate.Register(api, translate.NewTranslateApp(a.DB, a.Crypto))
 	}
 
 	router.NoRoute(func(c *gin.Context) {

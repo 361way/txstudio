@@ -46,13 +46,33 @@ import AIOutfitTool from './AIOutfitTool';
 import WatermarkEraseTool from './WatermarkEraseTool';
 import OldPhotoRestoreTool from './OldPhotoRestoreTool';
 import ForegroundExtractionTool from './ForegroundExtractionTool';
+import CutoutTool from './CutoutTool';
+import BgfusionTool from './BgfusionTool';
 import ChangeModelTool from './ChangeModelTool';
+import ViralReplicationTool from './ViralReplicationTool';
+import VideoTranslateTool from './VideoTranslateTool';
+import SuperResolutionTool from './SuperResolutionTool';
+import EnhanceTool from './EnhanceTool';
+import BeautyTool from './BeautyTool';
+import CompressTool from './CompressTool';
+import WatermarkAddTool from './WatermarkAddTool';
+import WatermarkExtractTool from './WatermarkExtractTool';
+import ImageSuiteTool from './ImageSuiteTool';
+import MultiviewSuiteTool from './MultiviewSuiteTool';
+import SceneImageTool from './SceneImageTool';
+import DetectionTool from './DetectionTool';
+import RepaintTool from './RepaintTool';
+import OutpaintTool from './OutpaintTool';
+import SplitTool from './SplitTool';
+import UnderstandTool from './UnderstandTool';
 import AgentStudio from './AgentStudio';
 import GenerationHistory from './GenerationHistory';
 import ProjectList from './ProjectList';
 import CanvasApp from '../App.jsx';
 import { createProject, listProjects } from '../api/project';
 import { HOME_QUICK_INSPIRATIONS } from '../data/imageInspiration';
+import viralReplicationImg from '../assets/viral-replication.png';
+import videoDubbingImg from '../assets/video-dubbing.png';
 
 const t = (s) => (i18n.t ? i18n.t(s) : s);
 
@@ -139,8 +159,11 @@ const IMAGE_CAPABILITIES = [
     { id: 'cutout', category: 'commerce', name: '智能抠图', description: '透明背景 · 精准分割', image: 'cutout.png', refCount: 1, prompt: '精准识别并提取图片主体，完整保留发丝、毛发和半透明边缘，移除原背景，输出干净的商品主体图。' },
     { id: 'foreground', category: 'commerce', name: '前景提取', description: '提取主体 · 前景分离', image: 'foreground.png', refCount: 1, prompt: '提取画面中的主要前景对象，保持主体边缘与原始细节完整，并将前景与背景清晰分离。' },
     { id: 'background-fusion', category: 'commerce', name: '背景融合', description: 'AI 换背景 · 商品图背景', image: 'bg_fusion.png', refCount: 2, prompt: '将商品自然融合到参考背景中，统一透视、比例、光线方向、色温、接触阴影与环境反射，生成真实电商场景图。' },
-    { id: 'multi-view', category: 'commerce', name: '多视角生图', description: '旋转视角 · 多角度展示', image: 'multi_vision.png', refCount: 1, prompt: '根据商品参考图生成正面、侧面、背面和四分之三视角，保持商品结构、材质、颜色与标识一致。' },
+    { id: 'multi-view', category: 'commerce', name: '多视角生图', description: '商品多视角 · 一键 4 角度', image: 'multi_vision.png', refCount: 1, prompt: '根据商品参考图生成正面、侧面、背面和四分之三视角，保持商品结构、材质、颜色与标识一致。' },
+    { id: 'scene-image', category: 'commerce', name: '场景图生成', description: '棚拍 · 生活 · 叙事 · 特写', image: 'scene_image.png', refCount: 1, prompt: '为参考商品生成棚拍台面、生活使用场景、环境叙事场景和细节特写四类场景图，保持商品一致并自然融入环境光影。' },
     { id: 'image-suite', category: 'commerce', name: '套图生成', description: '批量海报 · 多主题广告图', image: 'suite.png', refCount: 1, prompt: '围绕参考商品生成一组视觉统一的电商套图，包含主图、细节图、场景图和促销海报，保持商品一致性。' },
+    { id: 'viral-replication', category: 'commerce', name: '爆款复刻', description: 'AI 拆解爆款结构 · 一键生成同款视频', localImage: viralReplicationImg, type: 'video', refCount: 0, prompt: '' },
+    { id: 'video-translate', category: 'commerce', name: '视频译制', description: '全球投放', localImage: videoDubbingImg, type: 'video', refCount: 0, prompt: '' },
 
     { id: 'erase', category: 'edit', name: '智能擦除', description: '去除文字 / 水印 / Logo', image: 'erase.png', refCount: 1, prompt: '自然移除图片中不需要的文字、水印、标识或对象，并根据周围纹理、光影和透视智能补全背景。' },
     { id: 'outpaint', category: 'edit', name: '图片扩图', description: '画布扩展 · 智能填充', image: 'padding.png', refCount: 1, prompt: '向画面四周自然扩展内容，延续原图构图、透视、光线、纹理和风格，不改变中心主体。' },
@@ -173,7 +196,7 @@ function ScenarioCapabilityHub({ activeCategory, onCategoryChange, capabilities,
                             {t('场景化能力')}
                         </h1>
                         <p className="mt-2 text-[13px] text-gray-400">
-                            {t('按业务场景选择能力，进入图片工具并自动载入对应预设')}
+                            {t('按业务场景选择能力，进入工具并自动载入对应预设')}
                         </p>
                     </div>
 
@@ -209,7 +232,7 @@ function ScenarioCapabilityHub({ activeCategory, onCategoryChange, capabilities,
                         >
                             <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_10%,rgba(255,255,255,0.9),transparent_38%)]" />
                             <img
-                                src={`${CAPABILITY_IMAGE_BASE}/${capability.image}?v=20260526-4`}
+                                src={capability.localImage ?? `${CAPABILITY_IMAGE_BASE}/${capability.image}?v=20260526-4`}
                                 alt=""
                                 loading="lazy"
                                 onError={(event) => { event.currentTarget.style.display = 'none'; }}
@@ -654,12 +677,84 @@ export default function FlowHome() {
             setActiveMode('old-photo-restore');
             return;
         }
+        if (capability.id === 'cutout') {
+            setActiveMode('cutout-tool');
+            return;
+        }
+        if (capability.id === 'background-fusion') {
+            setActiveMode('bgfusion-tool');
+            return;
+        }
         if (capability.id === 'foreground') {
             setActiveMode('foreground-extraction');
             return;
         }
         if (capability.id === 'change-model') {
             setActiveMode('change-model');
+            return;
+        }
+        if (capability.id === 'viral-replication') {
+            setActiveMode('viral-replication');
+            return;
+        }
+        if (capability.id === 'video-translate') {
+            setActiveMode('video-translate');
+            return;
+        }
+        if (capability.id === 'super-resolution') {
+            setActiveMode('super-resolution-tool');
+            return;
+        }
+        if (capability.id === 'enhance') {
+            setActiveMode('enhance-tool');
+            return;
+        }
+        if (capability.id === 'beauty') {
+            setActiveMode('beauty-tool');
+            return;
+        }
+        if (capability.id === 'compress') {
+            setActiveMode('compress-tool');
+            return;
+        }
+        if (capability.id === 'watermark-add') {
+            setActiveMode('watermark-add-tool');
+            return;
+        }
+        if (capability.id === 'watermark-extract') {
+            setActiveMode('watermark-extract-tool');
+            return;
+        }
+        if (capability.id === 'image-suite') {
+            setActiveMode('image-suite-tool');
+            return;
+        }
+        if (capability.id === 'multi-view') {
+            setActiveMode('multiview-suite-tool');
+            return;
+        }
+        if (capability.id === 'scene-image') {
+            setActiveMode('scene-image-tool');
+            return;
+        }
+        if (capability.id === 'detection') {
+            setActiveMode('detection-tool');
+            return;
+        }
+        if (capability.id === 'repaint') {
+            setActiveMode('repaint-tool');
+            return;
+        }
+        if (capability.id === 'outpaint') {
+            setActiveMode('outpaint-tool');
+            return;
+        }
+        if (capability.id === 'split') {
+            setActiveMode('split-tool');
+            return;
+        }
+        if (capability.id === 'understand') {
+            setActiveMode('understand-tool');
             return;
         }
         handleApplyTemplate({
@@ -690,6 +785,38 @@ export default function FlowHome() {
                 ? '前景提取'
                 : activeMode === 'change-model'
                     ? 'AI 换模特'
+                    : activeMode === 'viral-replication'
+                        ? '爆款复刻'
+                    : activeMode === 'video-translate'
+                        ? '视频译制'
+                        : activeMode === 'super-resolution-tool'
+                            ? '超分辨率'
+                            : activeMode === 'enhance-tool'
+                                ? '综合增强'
+                                : activeMode === 'beauty-tool'
+                                    ? '美颜美化'
+                                    : activeMode === 'compress-tool'
+                                        ? '图片压缩'
+                                        : activeMode === 'watermark-add-tool'
+                                            ? '添加盲水印'
+                                            : activeMode === 'watermark-extract-tool'
+                                                ? '提取盲水印'
+                                                : activeMode === 'image-suite-tool'
+                                                    ? '套图生成'
+                                                    : activeMode === 'multiview-suite-tool'
+                                                        ? '多视角生图'
+                                                        : activeMode === 'scene-image-tool'
+                                                            ? '场景图生成'
+                                                            : activeMode === 'detection-tool'
+                                                                ? '目标检测'
+                                                                : activeMode === 'repaint-tool'
+                                                                    ? '局部重绘'
+                                                                    : activeMode === 'outpaint-tool'
+                                                                        ? '图片扩图'
+                                                                        : activeMode === 'split-tool'
+                                                                            ? '分镜拆图'
+                                                                            : activeMode === 'understand-tool'
+                                                                                ? '图片理解'
                     : activeMode === 'history'
                 ? '生成历史'
                 : activeMode === 'projects'
@@ -1270,6 +1397,18 @@ export default function FlowHome() {
                                         onApply={openImageTemplate}
                                     />
                                 )}
+                                {activeMode === 'image' && !imageTemplateMode && appliedTemplate?.capability_id && (
+                                    <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#ececef] bg-[rgba(255,255,255,0.92)] px-5 py-2.5 backdrop-blur">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setAppliedTemplate(null); setActiveMode('scenario'); }}
+                                            className="flex items-center gap-1.5 text-[13px] text-[#8a7440] transition hover:text-[#5c4510]"
+                                        >
+                                            <span aria-hidden="true">←</span> 返回能力列表
+                                        </button>
+                                        <span className="text-[12px] text-gray-400">场景化能力 · {appliedTemplate.capability_name}</span>
+                                    </div>
+                                )}
                                 {activeMode === 'image' && !imageTemplateMode && (
                                     <ImageTool embedded template={appliedTemplate} />
                                 )}
@@ -1277,19 +1416,73 @@ export default function FlowHome() {
                                     <VideoTool embedded template={appliedTemplate} />
                                 )}
                                 {activeMode === 'ai-outfit' && (
-                                    <AIOutfitTool />
+                                    <AIOutfitTool onBack={() => setActiveMode('scenario')} />
                                 )}
                                 {activeMode === 'watermark-erase' && (
-                                    <WatermarkEraseTool />
+                                    <WatermarkEraseTool onBack={() => setActiveMode('scenario')} />
                                 )}
                                 {activeMode === 'old-photo-restore' && (
-                                    <OldPhotoRestoreTool />
+                                    <OldPhotoRestoreTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'cutout-tool' && (
+                                    <CutoutTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'bgfusion-tool' && (
+                                    <BgfusionTool onBack={() => setActiveMode('scenario')} />
                                 )}
                                 {activeMode === 'foreground-extraction' && (
-                                    <ForegroundExtractionTool />
+                                    <ForegroundExtractionTool onBack={() => setActiveMode('scenario')} />
                                 )}
                                 {activeMode === 'change-model' && (
-                                    <ChangeModelTool />
+                                    <ChangeModelTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'viral-replication' && (
+                                    <ViralReplicationTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'video-translate' && (
+                                    <VideoTranslateTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'super-resolution-tool' && (
+                                    <SuperResolutionTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'enhance-tool' && (
+                                    <EnhanceTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'beauty-tool' && (
+                                    <BeautyTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'compress-tool' && (
+                                    <CompressTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'watermark-add-tool' && (
+                                    <WatermarkAddTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'watermark-extract-tool' && (
+                                    <WatermarkExtractTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'image-suite-tool' && (
+                                    <ImageSuiteTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'multiview-suite-tool' && (
+                                    <MultiviewSuiteTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'scene-image-tool' && (
+                                    <SceneImageTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'detection-tool' && (
+                                    <DetectionTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'repaint-tool' && (
+                                    <RepaintTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'outpaint-tool' && (
+                                    <OutpaintTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'split-tool' && (
+                                    <SplitTool onBack={() => setActiveMode('scenario')} />
+                                )}
+                                {activeMode === 'understand-tool' && (
+                                    <UnderstandTool onBack={() => setActiveMode('scenario')} />
                                 )}
                                 {activeMode === 'scenario' && (
                                     <ScenarioCapabilityHub

@@ -26,6 +26,7 @@ const STATUS = {
 const SOURCE_LABEL = {
     home: '首页', image_tool: '图片工具', video_tool: '视频工具',
     agent: '智能 Agent', canvas: '画布', pipeline: '生成管线', mps_tool: '场景工具',
+    viral_replication: '爆款复刻', video_translate: '视频译制',
 };
 
 function formatTime(value) {
