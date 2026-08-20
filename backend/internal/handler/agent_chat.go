@@ -2,7 +2,10 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,7 +19,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const maxAgentChatBody = 2 << 20
+const (
+	maxAgentChatRequestBody  = 128 << 20
+	maxAgentChatResponseBody = 2 << 20
+)
 
 type AgentChatHandler struct {
 	db              *gorm.DB
@@ -32,7 +38,7 @@ func NewAgentChatHandler(db *gorm.DB, crypto *service.CryptoService, fallbackAPI
 		crypto:          crypto,
 		fallbackAPIKey:  strings.TrimSpace(fallbackAPIKey),
 		fallbackBaseURL: strings.TrimRight(strings.TrimSpace(fallbackBaseURL), "/"),
-		client:          &http.Client{Timeout: 90 * time.Second},
+		client:          newAgentChatHTTPClient(),
 	}
 }
 
@@ -74,25 +80,55 @@ func writeAgentChatError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"message": message}})
 }
 
-func isPublicHTTPS(raw string) bool {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
-		return false
+func isDeniedAgentChatIP(address net.IP) bool {
+	if address == nil || address.IsLoopback() || address.IsPrivate() || address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() || address.IsUnspecified() || address.IsMulticast() {
+		return true
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return false
-	}
-	addresses, err := net.LookupIP(host)
-	if err != nil || len(addresses) == 0 {
-		return false
-	}
-	for _, address := range addresses {
-		if address.IsLoopback() || address.IsPrivate() || address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() || address.IsUnspecified() {
-			return false
+	if ipv4 := address.To4(); ipv4 != nil {
+		switch ipv4[0] {
+		case 0, 9, 11, 21, 30, 127:
+			return true
 		}
 	}
-	return true
+	return false
+}
+
+func isPublicHTTPS(raw string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil
+}
+
+func newAgentChatHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		host = strings.Trim(strings.ToLower(host), "[]")
+		if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+			return nil, fmt.Errorf("blocked upstream host")
+		}
+		addresses, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+		if err != nil || len(addresses) == 0 {
+			return nil, fmt.Errorf("upstream DNS lookup failed")
+		}
+		for _, ip := range addresses {
+			if isDeniedAgentChatIP(ip) {
+				return nil, fmt.Errorf("blocked upstream address")
+			}
+		}
+		return dialer.DialContext(ctx, network, net.JoinHostPort(addresses[0].String(), port))
+	}
+	return &http.Client{
+		Timeout:   180 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(request *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func (h *AgentChatHandler) Chat(c *gin.Context) {
@@ -107,9 +143,14 @@ func (h *AgentChatHandler) Chat(c *gin.Context) {
 		return
 	}
 
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentChatBody)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentChatRequestBody)
 	var payload agentChatRequest
 	if err := json.NewDecoder(c.Request.Body).Decode(&payload); err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			writeAgentChatError(c, http.StatusRequestEntityTooLarge, "媒体请求过大，请缩短视频、降低分辨率或使用手动关键帧模式")
+			return
+		}
 		writeAgentChatError(c, http.StatusBadRequest, "请求格式错误")
 		return
 	}
@@ -139,7 +180,7 @@ func (h *AgentChatHandler) Chat(c *gin.Context) {
 		return
 	}
 	defer response.Body.Close()
-	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxAgentChatBody))
+	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, maxAgentChatResponseBody))
 	logUpstreamResult(c, "tokenhub", "chat-completions", payload.Model, response.StatusCode, upstreamStartedAt, response.Header, responseBody)
 
 	c.Header("Content-Type", "application/json")

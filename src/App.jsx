@@ -87,12 +87,22 @@ import {
     parseVodCredentials,
     resolveVodSubModel,
     getVodVideoModelCapability,
+    uploadImageToVod,
     runVodAigcPipeline,
     runVodComposePipeline
 } from './vodAdapter';
 import VideoEditor from './VideoEditor';
 import { saveCanvas, getCanvas, createProject, deleteHistory, listProjects } from './api/project';
 import { createGenerationJob, listGenerationImageAssets } from './api/generationHistory';
+import { requestAgentChat } from './api/agentChat';
+import {
+    TOKENHUB_TEXT_DEFAULT_MODEL_ID,
+    TOKENHUB_MEDIA_DEFAULT_MODEL_ID,
+    buildTokenHubApiConfigs,
+    getTokenHubCapabilityLabel,
+    getTokenHubTaskHint,
+    supportsTokenHubCapability,
+} from './data/tokenHubModels';
 
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 1 };
 const t = i18n.t.bind(i18n);
@@ -1864,7 +1874,8 @@ const VIDEO_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 const TOKENHUB_BASE_URL = 'https://tokenhub.tencentmaas.com';
 const LOCAL_PROXY_DEFAULT_URL = 'http://127.0.0.1:8080';
 const DEFAULT_BASE_URL = TOKENHUB_BASE_URL;
-const DEFAULT_TOKENHUB_MODEL_ID = 'hy3';
+const DEFAULT_TOKENHUB_MODEL_ID = TOKENHUB_TEXT_DEFAULT_MODEL_ID;
+const DEFAULT_VIDEO_ANALYSIS_MODEL_ID = TOKENHUB_MEDIA_DEFAULT_MODEL_ID;
 const TOKENHUB_PROVIDER_KEY = 'openai';
 const TENCENT_VOD_BASE_URL = `https://${VOD_API_HOST}`;
 
@@ -2023,8 +2034,8 @@ const parseVodKlingSubjectInfos = (raw) => {
 
 // V3.6.0: 模型配置（简化版 - id 即 modelName，无 displayName）
 const DEFAULT_API_CONFIGS = [
-    // TokenHub Chat Model
-    { id: DEFAULT_TOKENHUB_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai' },
+    // TokenHub 文本与多模态理解模型（来源：官方模型列表）
+    ...buildTokenHubApiConfigs(),
 
     // Image Models
     { id: 'gpt-4o-image', provider: 'openai', type: 'Image' },
@@ -7197,10 +7208,15 @@ function TxStudioApp({
         try { return localStorage.getItem('txstudio_last_segment_duration') || '3'; } catch { return '3'; }
     });
     const [lastUsedAnalyzeModel, setLastUsedAnalyzeModel] = useState(() => {
-        try { return localStorage.getItem('txstudio_last_analyze_model') || 'gemini-3-pro'; } catch { return 'gemini-3-pro'; }
+        try {
+            const saved = localStorage.getItem('txstudio_last_analyze_model');
+            return !saved || ['hy3', 'gemini-3-pro'].includes(saved) ? DEFAULT_VIDEO_ANALYSIS_MODEL_ID : saved;
+        } catch {
+            return DEFAULT_VIDEO_ANALYSIS_MODEL_ID;
+        }
     });
     const [lastUsedExtractModel, setLastUsedExtractModel] = useState(() => {
-        try { return localStorage.getItem('txstudio_last_extract_model') || ''; } catch { return ''; }
+        try { return localStorage.getItem('txstudio_last_extract_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
     });
 
     // V2.6.1 Feature: 本地缓存服务器连接检查
@@ -7567,6 +7583,39 @@ function TxStudioApp({
             reader.onerror = reject;
             reader.readAsDataURL(blob);
         });
+    };
+
+    const materializeMediaDataUrl = async (source, { maxBytes = 90 * 1024 * 1024 } = {}) => {
+        const resolved = await resolveSpecialUrl(source);
+        if (!resolved) throw new Error('媒体文件不存在或已失效');
+        const blob = await getBlobFromUrl(resolved, { useProxy: /^https?:/i.test(resolved) });
+        if (blob.size > maxBytes) {
+            throw new Error('媒体文件过大，建议缩短视频、降低分辨率，或改用“手动关键帧”模式。');
+        }
+        return await blobToDataURL(blob);
+    };
+
+    const prepareVideoAnalysisUrl = async (source) => {
+        const resolved = await resolveSpecialUrl(source);
+        if (!resolved) throw new Error('视频文件不存在或已失效');
+        const blob = await getBlobFromUrl(resolved, { useProxy: /^https?:/i.test(resolved) });
+        if (blob.size > 100 * 1024 * 1024) {
+            throw new Error('YT-VITA 默认仅支持 100MB 以内的视频，请压缩或截短后重试。');
+        }
+        const vodProvider = normalizeProviderConfig(TENCENT_VOD_PROVIDER_KEY, providers[TENCENT_VOD_PROVIDER_KEY] || {});
+        let credentials;
+        try {
+            credentials = parseVodCredentials(vodProvider);
+        } catch {
+            throw new Error('本地视频需要先上传到腾讯云 VOD。请在“全局 API 设置”中配置腾讯云媒体服务凭证。');
+        }
+        const uploaded = await uploadImageToVod(blob, {
+            credentials,
+            useProxy: true,
+            localServerUrl: localServerUrl || LOCAL_PROXY_DEFAULT_URL,
+        });
+        if (!uploaded?.mediaUrl) throw new Error('视频上传成功但未取得可分析地址，请稍后重试。');
+        return uploaded.mediaUrl;
     };
 
     const normalizePersistLookupKey = useCallback((value) => {
@@ -9842,6 +9891,7 @@ function TxStudioApp({
 
     const resolveModelKey = useCallback((modelKey) => {
         if (!modelKey) return '';
+        if (modelKey === 'hy3-preview') modelKey = DEFAULT_TOKENHUB_MODEL_ID;
         if (apiConfigsMap.has(modelKey)) return modelKey;
         const byId = apiConfigsById.get(modelKey);
         if (!byId || byId.length === 0) return modelKey;
@@ -9849,6 +9899,19 @@ function TxStudioApp({
         const noLibrary = byId.find(c => !c.libraryId);
         return noLibrary?._uid || byId[0]?._uid || modelKey;
     }, [apiConfigsMap, apiConfigsById]);
+
+    const supportsAnalysisCapability = useCallback((config, capability) => {
+        if (!config?.id) return false;
+        if (Array.isArray(config.capabilities)) return config.capabilities.includes(capability);
+        return supportsTokenHubCapability(config.id, capability);
+    }, []);
+
+    const getMediaAnalysisConfig = useCallback((modelKey, capability = 'video') => {
+        const requested = getApiConfigByKey(resolveModelKey(modelKey || DEFAULT_VIDEO_ANALYSIS_MODEL_ID));
+        if (supportsAnalysisCapability(requested, capability)) return requested;
+        return getApiConfigByKey(resolveModelKey(DEFAULT_VIDEO_ANALYSIS_MODEL_ID))
+            || { id: DEFAULT_VIDEO_ANALYSIS_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai', capabilities: ['text', 'image', 'video'] };
+    }, [getApiConfigByKey, resolveModelKey, supportsAnalysisCapability]);
 
     useEffect(() => {
         if (!apiConfigs.length) return;
@@ -9872,6 +9935,17 @@ function TxStudioApp({
                 normalizeSettingModel('model');
                 normalizeSettingModel('chatModel');
                 normalizeSettingModel('imageModel');
+
+                if (node.type === 'video-analyze') {
+                    const requiredCapability = settings?.analysisMode === 'auto' ? 'video' : 'image';
+                    const analysisConfig = getMediaAnalysisConfig(settings?.model, requiredCapability);
+                    const analysisModelKey = resolveModelKey(analysisConfig?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
+                    if (analysisModelKey && analysisModelKey !== settings?.model) {
+                        if (!settingsChanged) settings = { ...settings };
+                        settings.model = analysisModelKey;
+                        settingsChanged = true;
+                    }
+                }
 
                 if ((node.type === 'gen-image' || node.type === 'gen-video') && settings?.model) {
                     const resolvedModel = resolveModelKey(settings.model);
@@ -9920,7 +9994,7 @@ function TxStudioApp({
             });
             return changed ? nextNodes : prev;
         });
-    }, [apiConfigs.length, resolveModelKey, getApiConfigByKey, setNodes]);
+    }, [apiConfigs.length, resolveModelKey, getApiConfigByKey, getMediaAnalysisConfig, setNodes]);
 
     // V3.4.19: 统一获取 API 凭据 - 只从 Provider 获取，不再从 Model 获取
     const getApiCredentials = useCallback((modelId) => {
@@ -13363,25 +13437,25 @@ function TxStudioApp({
         if (newUserMsg.content) currentContent.push({ type: "text", text: newUserMsg.content });
 
         newUserMsg.files.forEach(f => {
-            const isGeminiLike = (config?.modelName ?? '').toLowerCase().includes('gemini');
-
             if (f.isImage) {
-                currentContent.push({
-                    type: "image_url",
-                    image_url: { url: f.content }
-                });
-            } else if (f.isVideo) {
-                if (isGeminiLike) {
-                    // Gemini 视频分析：按官方规范也走 image_url，url 直接指向 mp4
+                if (supportsAnalysisCapability(config, 'image')) {
                     currentContent.push({
-                        type: "image_url",
-                        image_url: { url: f.content }
+                        type: 'image_url',
+                        image_url: { url: f.content },
                     });
                 } else {
+                    showToast(getTokenHubTaskHint(config?.id || '', 'image'), 'warning', 5000);
+                    currentContent.push({ type: 'text', text: `\n[未发送图片：当前模型不支持图片理解，文件名 ${f.name}]\n` });
+                }
+            } else if (f.isVideo) {
+                if (supportsAnalysisCapability(config, 'video')) {
                     currentContent.push({
-                        type: "text",
-                        text: `\n[User attached video: ${f.name}]\n`
+                        type: 'video_url',
+                        video_url: { url: f.content },
                     });
+                } else {
+                    showToast(getTokenHubTaskHint(config?.id || '', 'video'), 'warning', 5000);
+                    currentContent.push({ type: 'text', text: `\n[未发送视频：当前模型不支持视频理解，文件名 ${f.name}]\n` });
                 }
             } else if (f.isAudio) {
                 currentContent.push({
@@ -22063,7 +22137,6 @@ function TxStudioApp({
         }
 
         const config = getApiConfigByKey(modelId);
-        const baseUrl = (credentials.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
         const modelName = config?.modelName || modelId;
         const isCharacter = node.type === 'character-description';
         const characterFilterPrompt = '你是一个提示词优化专家。请分析以下提示词，只保留关于人物外貌、服装、姿态等角色特征的描述，去除所有剧情、动作、对话和背景信息。输出应简洁，只包含角色特征描述，格式为"全身视角，[人物特征描述]，站在纯白色背景前"。必须确保背景始终是纯白色，不能有任何场景描述。';
@@ -22087,32 +22160,14 @@ function TxStudioApp({
 
         updateNodeSettings(nodeId, { isEnhancing: true });
         try {
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${credentials.key}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: modelName,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    temperature
-                })
+            const data = await requestAgentChat({
+                model: modelName,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                ],
+                temperature,
             });
-
-            if (!response.ok) {
-                let detail = '';
-                try {
-                    const err = await response.json();
-                    detail = err?.error?.message || err?.message || '';
-                } catch { }
-                throw new Error(`API Error: ${response.status}${detail ? ` - ${detail}` : ''}`);
-            }
-
-            const data = await response.json();
             const content = data.choices?.[0]?.message?.content || data.content || '';
             const cleaned = content.replace(/```[\s\S]*?```/g, '').trim();
             if (cleaned) {
@@ -23634,8 +23689,8 @@ function TxStudioApp({
         // 转换为 shots 格式
         const newShots = analysisResults.map((result, idx) => {
             const keyframe = result.keyframes?.find(k => k.type === 'current') || result.keyframes?.[0];
-            const mjPrompt = keyframe?.mj_prompt || '';
-            const jimengPrompt = keyframe?.jimeng_prompt || '';
+            const englishPrompt = keyframe?.english_prompt || '';
+            const chinesePrompt = keyframe?.chinese_prompt || '';
             const description = keyframe?.description || result.keyframes?.[0]?.description || '';
 
             // 提取标签
@@ -23651,7 +23706,7 @@ function TxStudioApp({
                 });
             }
 
-            const prompt = mjPrompt || jimengPrompt;
+            const prompt = englishPrompt || chinesePrompt;
             return {
                 id: `shot - ${Date.now()} -${idx} `,
                 scene_index: idx + 1,
@@ -23680,8 +23735,8 @@ function TxStudioApp({
         // 1. 数据转换 (复用现有逻辑)
         const newShots = analysisResults.map((result, idx) => {
             const keyframe = result.keyframes?.find(k => k.type === 'current') || result.keyframes?.[0];
-            const mjPrompt = keyframe?.mj_prompt || '';
-            const jimengPrompt = keyframe?.jimeng_prompt || '';
+            const englishPrompt = keyframe?.english_prompt || '';
+            const chinesePrompt = keyframe?.chinese_prompt || '';
             const description = keyframe?.description || result.keyframes?.[0]?.description || '';
 
             // 提取标签
@@ -23703,7 +23758,7 @@ function TxStudioApp({
                 tags.find(t => ['推', '拉', '摇', '移', '跟', 'Dolly', 'Pan', 'Tilt', 'Zoom'].some(k => t.includes(k))) ||
                 '';
 
-            const prompt = mjPrompt || jimengPrompt;
+            const prompt = englishPrompt || chinesePrompt;
             return {
                 id: `shot - ${Date.now()} -${idx} `,
                 scene_index: idx + 1,
@@ -24816,11 +24871,13 @@ ${inputText.substring(0, 15000)} ... (截断)
             return;
         }
 
-        const modelId = resolveModelKey(node.settings?.model || 'gemini-3-pro');
-        // V3.4.8: 使用 getApiCredentials 获取 Provider 配置
-        const { key: apiKey, url: baseUrl } = getApiCredentials(modelId);
-        // V3.4.13: 获取完整config用于历史记录显示
-        const config = getApiConfigByKey(modelId);
+        const selectedConfig = getApiConfigByKey(resolveModelKey(node.settings?.model));
+        const config = getMediaAnalysisConfig(node.settings?.model, 'image');
+        if (selectedConfig && selectedConfig.id !== config.id) {
+            showToast(getTokenHubTaskHint(selectedConfig.id, 'image'), 'warning', 5000);
+        }
+        const modelId = resolveModelKey(config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
+        const { key: apiKey } = getApiCredentials(modelId);
 
         if (!apiKey) {
             alert(t('请先在 API 设置中配置 Key'));
@@ -24862,22 +24919,22 @@ ${inputText.substring(0, 15000)} ... (截断)
       "type": "prev",
       "time": 5.2,
       "description": "上一画面内容简介",
-      "mj_prompt": "Midjourney 英文提示词",
-      "jimeng_prompt": "即梦中文提示词"
+      "english_prompt": "英文提示词",
+      "chinese_prompt": "中文提示词"
     },
     {
       "type": "current",
       "time": 6.8,
       "description": "当前画面内容简介",
-      "mj_prompt": "Midjourney 英文提示词",
-      "jimeng_prompt": "即梦中文提示词"
+      "english_prompt": "英文提示词",
+      "chinese_prompt": "中文提示词"
     },
     {
       "type": "next",
       "time": 8.7,
       "description": "下一画面内容简介",
-      "mj_prompt": "Midjourney 英文提示词",
-      "jimeng_prompt": "即梦中文提示词"
+      "english_prompt": "英文提示词",
+      "chinese_prompt": "中文提示词"
     }
   ],
   "global_tags": {
@@ -24889,8 +24946,8 @@ ${inputText.substring(0, 15000)} ... (截断)
 
 要求：
 1. 为每个关键帧生成 prev/current/next 三种类型的描述和提示词
-2. mj_prompt 使用英文，适合 Midjourney
-3. jimeng_prompt 使用中文，适合即梦AI
+2. english_prompt 使用英文，包含运镜、主体、环境和风格描述
+3. chinese_prompt 使用中文，包含运镜、主体、环境和风格描述
 4. global_tags 提取整个场景的风格、镜头、色彩特征`;
 
                 const userContent = [
@@ -24900,13 +24957,17 @@ ${inputText.substring(0, 15000)} ... (截断)
                 // 添加关键帧图片（限制最多15张，因为API限制是16张，需要留一些余量）
                 const maxFrames = 15;
                 const framesToSend = group.length > maxFrames ? group.slice(0, maxFrames) : group;
-                framesToSend.forEach((frame, idx) => {
+                const materializedFrames = await Promise.all(framesToSend.map(async (frame) => ({
+                    ...frame,
+                    dataUrl: await materializeMediaDataUrl(frame.url, { maxBytes: 8 * 1024 * 1024 }),
+                })));
+                materializedFrames.forEach((frame, idx) => {
                     userContent.push({
-                        type: "image_url",
-                        image_url: { url: frame.url }
+                        type: 'image_url',
+                        image_url: { url: frame.dataUrl },
                     });
-                    if (idx < framesToSend.length - 1) {
-                        userContent.push({ type: "text", text: `关键帧 ${idx + 1}（时间：${frame.time.toFixed(2)}s）` });
+                    if (idx < materializedFrames.length - 1) {
+                        userContent.push({ type: 'text', text: `关键帧 ${idx + 1}（时间：${frame.time.toFixed(2)}s）` });
                     }
                 });
                 if (group.length > maxFrames) {
@@ -24922,46 +24983,21 @@ ${inputText.substring(0, 15000)} ... (截断)
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-                let response;
+                let data;
                 try {
-                    response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: config?.id || 'gemini-3-pro', // V3.7.24: 使用 config.id
-                            messages: apiMessages,
-                            stream: false
-                        }),
-                        signal: controller.signal
+                    data = await requestAgentChat({
+                        model: config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID,
+                        messages: apiMessages,
+                        signal: controller.signal,
                     });
                 } catch (fetchError) {
-                    clearTimeout(timeoutId);
-                    // 处理网络错误
                     if (fetchError.name === 'AbortError') {
                         throw new Error('请求超时，请检查网络连接或稍后重试');
-                    } else if (fetchError.message && fetchError.message.includes('Failed to fetch')) {
-                        throw new Error(`无法连接到 API 服务器 (${baseUrl})。请检查：\n1. API 地址是否正确\n2. 网络连接是否正常\n3. API 服务是否可用`);
-                    } else {
-                        throw new Error(`网络请求失败: ${fetchError.message}`);
                     }
+                    throw fetchError;
                 } finally {
                     clearTimeout(timeoutId);
                 }
-
-                if (!response.ok) {
-                    let errText = '';
-                    try {
-                        errText = await response.text();
-                    } catch (e) {
-                        errText = `HTTP ${response.status}: ${response.statusText}`;
-                    }
-                    throw new Error(errText || `API Error: ${response.status}`);
-                }
-
-                const data = await response.json();
                 console.log('[视频拆解] API 响应数据:', {
                     hasData: !!data,
                     hasChoices: !!data.choices,
@@ -25039,8 +25075,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                                 type: fIdx === 0 ? 'prev' : fIdx === 1 ? 'current' : 'next',
                                 time: frame.time,
                                 description: `视频帧 ${frame.time.toFixed(1)}s`,
-                                mj_prompt: 'A detailed scene from the video',
-                                jimeng_prompt: '视频场景描述'
+                                english_prompt: 'A detailed scene from the video',
+                                chinese_prompt: '视频场景描述'
                             })),
                             global_tags: { style: [], camera: [], color: [] }
                         };
@@ -25115,42 +25151,22 @@ ${inputText.substring(0, 15000)} ... (截断)
             return;
         }
 
-        // 预处理视频内容：如果是 blob: URL，需要转换为 base64 以便远程可访问
-        let videoDataUrl = videoInputNode.content;
-        if (videoDataUrl.startsWith('blob:')) {
-            try {
-                const blob = await fetch(videoDataUrl).then(r => r.blob());
-                videoDataUrl = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onerror = () => reject(new Error('FileReader failed'));
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                });
-            } catch (e) {
-                console.error('Blob conversion failed', e);
-                alert(t('视频转换失败，无法发送给 AI'));
-                return;
-            }
+        let videoAnalysisUrl = '';
+        try {
+            showToast('正在准备视频分析素材…', 'info', 2500);
+            videoAnalysisUrl = await prepareVideoAnalysisUrl(videoInputNode.content);
+        } catch (error) {
+            console.error('视频分析素材准备失败', error);
+            showToast(error?.message || '视频准备失败，无法发送给 YT-VITA', 'error', 6000);
+            return;
         }
 
-        // 强制使用 gemini-3-pro 模型（支持视频输入）
-        let config = apiConfigs.find((c) => c.id === 'gemini-3-pro' && isChatModelType(c.type));
-
-        // 如果没有找到 gemini-3-pro，尝试其他 gemini 模型
-        if (!config) {
-            config = apiConfigs.find((c) => {
-                const modelId = c.id?.toLowerCase() || '';
-                return modelId.includes('gemini') && isChatModelType(c.type);
-            });
+        const selectedConfig = getApiConfigByKey(resolveModelKey(node.settings?.model));
+        const config = getMediaAnalysisConfig(node.settings?.model, 'video');
+        if (selectedConfig && selectedConfig.id !== config.id) {
+            showToast(getTokenHubTaskHint(selectedConfig.id, 'video'), 'warning', 5000);
         }
-
-        // 如果还是没有，使用默认配置
-        if (!config) {
-            config = apiConfigs.find((c) => isChatModelType(c.type));
-        }
-
-        // V3.4.8: 使用 getApiCredentials 获取 Provider 配置
-        const { key: apiKey, url: baseUrl } = getApiCredentials(config?.id || 'gemini-3-pro');
+        const { key: apiKey } = getApiCredentials(config?._uid || config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
 
         if (!apiKey) {
             alert(t('请先在 API 设置中配置 Key'));
@@ -25187,8 +25203,8 @@ ${inputText.substring(0, 15000)} ... (截断)
         "atmosphere": "赛博朋克，冷峻，高科技感"
       },
       "prompts": {
-        "jimeng_prompt": "即梦提示词：一定要包含运镜描述。格式：(运镜描述)+画面主体+环境+风格。例如：(镜头急速拉远)，一名黑发年轻男子坐在虚拟王座上，身穿黑色长风衣...",
-        "mj_prompt": "Midjourney Prompt: English description, include camera directives like 'dynamic angle', 'fast zoom out', 'cinematic lighting'..."
+        "chinese_prompt": "中文提示词：使用中文描述，一定要包含运镜描述。格式：(运镜描述)+画面主体+环境+风格。例如：(镜头急速拉远)，一名黑发年轻男子坐在虚拟王座上，身穿黑色长风衣...",
+        "english_prompt": "英文提示词：使用英文描述，并包含 'dynamic angle'、'fast zoom out'、'cinematic lighting' 等运镜和光影描述..."
       }
     }
   ]
@@ -25196,13 +25212,14 @@ ${inputText.substring(0, 15000)} ... (截断)
 
 **重要要求：**
 - **运镜分析**要非常精准。
-- **即梦提示词**必须将"运镜描述"放在最前面，用括号括起来。
+- **中文提示词**必须使用中文，并将"运镜描述"放在最前面，用括号括起来。
+- **英文提示词**必须使用英文，并包含运镜、主体、环境和风格描述。
 - **口播提取**要依靠视频中的音频内容，如果视频没有声音则留空。`;
 
-            // 直接使用视频 URL（gemini-3-pro 支持视频输入）
+            // 使用当前节点选中的多模态 Chat 模型分析视频内容
             const userContent = [
-                { type: "text", text: t('请分析这段视频。请严格按JSON格式输出拆解报告。') },
-                { type: "image_url", image_url: { url: videoDataUrl } }
+                { type: 'video_url', video_url: { url: videoAnalysisUrl } },
+                { type: 'text', text: t('请分析这段视频。请严格按JSON格式输出拆解报告。') },
             ];
 
             const apiMessages = [
@@ -25210,50 +25227,25 @@ ${inputText.substring(0, 15000)} ... (截断)
                 { role: 'user', content: userContent }
             ];
 
-            // 添加超时控制（120秒，因为视频分析需要更长时间）
+            // youtu-vita 视频理解可能需要更长时间，与后端超时保持一致。
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
 
-            let response;
+            let data;
             try {
-                response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: config?.id || 'gemini-3-pro', // V3.7.24: 使用 config.id 而非 modelName
-                        messages: apiMessages,
-                        stream: false
-                    }),
-                    signal: controller.signal
+                data = await requestAgentChat({
+                    model: config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID,
+                    messages: apiMessages,
+                    signal: controller.signal,
                 });
             } catch (fetchError) {
-                clearTimeout(timeoutId);
-                // 处理网络错误
                 if (fetchError.name === 'AbortError') {
                     throw new Error('请求超时（120秒），视频分析可能需要更长时间，请稍后重试');
-                } else if (fetchError.message && fetchError.message.includes('Failed to fetch')) {
-                    throw new Error(`无法连接到 API 服务器 (${baseUrl})。请检查：\n1. API 地址是否正确\n2. 网络连接是否正常\n3. API 服务是否可用\n4. 是否配置了正确的 API Key`);
-                } else {
-                    throw new Error(`网络请求失败: ${fetchError.message}`);
                 }
+                throw fetchError;
             } finally {
                 clearTimeout(timeoutId);
             }
-
-            if (!response.ok) {
-                let errText = '';
-                try {
-                    errText = await response.text();
-                } catch (e) {
-                    errText = `HTTP ${response.status}: ${response.statusText}`;
-                }
-                throw new Error(errText || `API Error: ${response.status}`);
-            }
-
-            const data = await response.json();
             console.log('[AI导演拆解] API 响应数据:', {
                 hasData: !!data,
                 hasChoices: !!data.choices,
@@ -25338,8 +25330,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                     type: 'current',
                     time: 0,
                     description: `${scene.visual_analysis?.camera_movement || ''} ${scene.visual_analysis?.subject_dynamics || ''}`.trim(),
-                    mj_prompt: scene.prompts?.mj_prompt || '',
-                    jimeng_prompt: scene.prompts?.jimeng_prompt || ''
+                    english_prompt: scene.prompts?.english_prompt || '',
+                    chinese_prompt: scene.prompts?.chinese_prompt || ''
                 }],
                 global_tags: {
                     style: scene.visual_analysis?.atmosphere ? [scene.visual_analysis.atmosphere] : [],
@@ -26257,7 +26249,8 @@ ${inputText.substring(0, 15000)} ... (截断)
         if (!node?.content) return;
         setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, extractingFrames: true } : n));
         try {
-            const frames = await extractKeyFrames(node.content, { fps });
+            const videoUrl = await resolveSpecialUrl(node.content);
+            const frames = await extractKeyFrames(videoUrl, { fps });
             setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, frames, selectedKeyframes: [], extractingFrames: false } : n));
         } catch (error) {
             console.error('视频抽帧失败', error);
@@ -26270,7 +26263,8 @@ ${inputText.substring(0, 15000)} ... (截断)
         if (!node?.content) return;
         setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, extractingFrames: true } : n));
         try {
-            const frames = await detectScenesAndCapture(node.content, threshold);
+            const videoUrl = await resolveSpecialUrl(node.content);
+            const frames = await detectScenesAndCapture(videoUrl, threshold);
             setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, frames, selectedKeyframes: [], extractingFrames: false } : n));
         } catch (error) {
             console.error('智能抽帧失败', error);
@@ -26290,9 +26284,13 @@ ${inputText.substring(0, 15000)} ... (截断)
             return;
         }
 
-        const modelId = node.settings?.model || 'gemini-3-pro';
-        // V3.4.8: 使用 getApiCredentials 获取 Provider 配置
-        const { key: apiKey, url: baseUrl } = getApiCredentials(modelId);
+        const selectedConfig = getApiConfigByKey(resolveModelKey(node.settings?.model));
+        const config = getMediaAnalysisConfig(node.settings?.model, 'image');
+        if (selectedConfig && selectedConfig.id !== config.id) {
+            showToast(getTokenHubTaskHint(selectedConfig.id, 'image'), 'warning', 5000);
+        }
+        const modelId = resolveModelKey(config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
+        const { key: apiKey } = getApiCredentials(modelId);
 
         if (!apiKey) {
             alert(t('请先在 API 设置中配置 Key'));
@@ -26397,25 +26395,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                 { role: 'user', content: userContent }
             ];
 
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: config?.id || 'gemini-3-pro', // V3.7.24: 使用 config.id
-                    messages: apiMessages,
-                    stream: false
-                })
+            const data = await requestAgentChat({
+                model: config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID,
+                messages: apiMessages,
             });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(errText || `API Error: ${response.status}`);
-            }
-
-            const data = await response.json();
             const aiContent = data.choices?.[0]?.message?.content || "{}";
 
             // 解析 JSON
@@ -30732,7 +30715,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                         }`}
                                                                     onMouseDown={(e) => e.stopPropagation()}
                                                                 >
-                                                                    <span className="truncate font-mono">{getApiConfigByKey(node.settings?.model)?.id || node.settings?.model || 'gemini-3-pro'}</span>
+                                                                    <span className="truncate font-mono">{getApiConfigByKey(node.settings?.model)?.id || node.settings?.model || DEFAULT_VIDEO_ANALYSIS_MODEL_ID}</span>
                                                                     <ChevronDown size={10} className="opacity-50 shrink-0 ml-1" />
                                                                 </button>
                                                                 {activeDropdown?.nodeId === node.id && activeDropdown.type === 'analyze-model' && (
@@ -30772,6 +30755,10 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                         <button
                                                                                             key={modelKey}
                                                                                             onClick={() => {
+                                                                                                const requiredCapability = node.settings?.analysisMode === 'auto' ? 'video' : 'image';
+                                                                                                if (!supportsAnalysisCapability(m, requiredCapability)) {
+                                                                                                    showToast(getTokenHubTaskHint(m.id, requiredCapability), 'warning', 5000);
+                                                                                                }
                                                                                                 updateNodeSettings(node.id, { model: modelKey });
                                                                                                 setLastUsedAnalyzeModel(modelKey);
                                                                                                 try { localStorage.setItem('txstudio_last_analyze_model', modelKey); } catch { }
@@ -30783,7 +30770,12 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                 : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : theme === 'solarized' ? 'hover:bg-[#fdf6e3] text-zinc-700' : 'hover:bg-zinc-100 text-zinc-700'
                                                                                                 }`}
                                                                                         >
-                                                                                            <span className="text-[10px] font-medium truncate font-mono">{m.id}</span>
+                                                                                            <div className="min-w-0">
+                                                                                                <div className="truncate font-mono text-[10px] font-medium">{m.id}</div>
+                                                                                                <div className={`truncate text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                                                                                    {getTokenHubCapabilityLabel(m.id)}
+                                                                                                </div>
+                                                                                            </div>
                                                                                             <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusColor(modelKey)}`}></div>
                                                                                         </button>
                                                                                     );
@@ -30798,6 +30790,21 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                 )}
                                                             </div>
                                                         </div>
+                                                        {(() => {
+                                                            const selected = getApiConfigByKey(resolveModelKey(node.settings?.model));
+                                                            const capability = node.settings?.analysisMode === 'auto' ? 'video' : 'image';
+                                                            const supported = supportsAnalysisCapability(selected, capability);
+                                                            return (
+                                                                <div className={`rounded-md px-2 py-1.5 text-[10px] leading-4 ${supported
+                                                                    ? theme === 'dark' ? 'bg-emerald-950/30 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                                                                    : theme === 'dark' ? 'bg-amber-950/30 text-amber-400' : 'bg-amber-50 text-amber-700'
+                                                                    }`}>
+                                                                    {supported
+                                                                        ? `${getTokenHubCapabilityLabel(selected?.id)} · ${selected?.id === DEFAULT_VIDEO_ANALYSIS_MODEL_ID ? '推荐模型' : '可用于当前任务'}`
+                                                                        : getTokenHubTaskHint(selected?.id || '', capability)}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </>
                                                 )}
 
@@ -30890,29 +30897,29 @@ ${inputText.substring(0, 15000)} ... (截断)
 
                                                                 {/* 提示词输出 */}
                                                                 <div className="space-y-2">
-                                                                    {/* 即梦 Prompt */}
-                                                                    {scene.keyframes?.[0]?.jimeng_prompt && (
+                                                                    {/* 中文提示词 */}
+                                                                    {scene.keyframes?.[0]?.chinese_prompt && (
                                                                         <div className={`p-2 rounded ${theme === 'dark' ? 'bg-zinc-700 border border-zinc-600' : 'bg-zinc-50 border border-gray-300'}`}>
-                                                                            <h6 className={`text-[10px] font-semibold mb-1 flex items-center gap-1 ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-700'}`}><Code size={10} /> 即梦 Prompt</h6>
+                                                                            <h6 className={`text-[10px] font-semibold mb-1 flex items-center gap-1 ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-700'}`}><Code size={10} /> 中文提示词</h6>
                                                                             <p
                                                                                 className={`text-[10px] whitespace-pre-wrap select-text cursor-text ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}
                                                                                 onMouseDown={(e) => e.stopPropagation()}
-                                                                            >{scene.keyframes[0].jimeng_prompt}</p>
-                                                                            <button onClick={() => navigator.clipboard.writeText(scene.keyframes[0].jimeng_prompt)} className="mt-1 flex items-center text-[9px] text-blue-400 hover:text-blue-300" onMouseDown={(e) => e.stopPropagation()}>
+                                                                            >{scene.keyframes[0].chinese_prompt}</p>
+                                                                            <button onClick={() => navigator.clipboard.writeText(scene.keyframes[0].chinese_prompt)} className="mt-1 flex items-center text-[9px] text-blue-400 hover:text-blue-300" onMouseDown={(e) => e.stopPropagation()}>
                                                                                 <ClipboardCopy size={10} className="mr-1" /> {t('复制')}
                                                                             </button>
                                                                         </div>
                                                                     )}
 
-                                                                    {/* MJ Prompt */}
-                                                                    {scene.keyframes?.[0]?.mj_prompt && (
+                                                                    {/* 英文提示词 */}
+                                                                    {scene.keyframes?.[0]?.english_prompt && (
                                                                         <div className={`p-2 rounded ${theme === 'dark' ? 'bg-zinc-700 border border-zinc-600' : 'bg-zinc-50 border border-gray-300'}`}>
-                                                                            <h6 className={`text-[10px] font-semibold mb-1 flex items-center gap-1 ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}><Code size={10} /> MJ Prompt</h6>
+                                                                            <h6 className={`text-[10px] font-semibold mb-1 flex items-center gap-1 ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}><Code size={10} /> 英文提示词</h6>
                                                                             <p
                                                                                 className={`text-[10px] whitespace-pre-wrap select-text cursor-text ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}
                                                                                 onMouseDown={(e) => e.stopPropagation()}
-                                                                            >{scene.keyframes[0].mj_prompt}</p>
-                                                                            <button onClick={() => navigator.clipboard.writeText(scene.keyframes[0].mj_prompt)} className="mt-1 flex items-center text-[9px] text-blue-400 hover:text-blue-300" onMouseDown={(e) => e.stopPropagation()}>
+                                                                            >{scene.keyframes[0].english_prompt}</p>
+                                                                            <button onClick={() => navigator.clipboard.writeText(scene.keyframes[0].english_prompt)} className="mt-1 flex items-center text-[9px] text-blue-400 hover:text-blue-300" onMouseDown={(e) => e.stopPropagation()}>
                                                                                 <ClipboardCopy size={10} className="mr-1" /> {t('复制')}
                                                                             </button>
                                                                         </div>
@@ -31001,22 +31008,22 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                     {kf.type === 'prev' ? '上一帧' : kf.type === 'current' ? '当前帧' : '下一帧'} ({kf.time.toFixed(1)}s)
                                                                                 </div>
 
-                                                                                {/* MJ 提示词 */}
-                                                                                {kf.mj_prompt && (
+                                                                                {/* 英文提示词 */}
+                                                                                {kf.english_prompt && (
                                                                                     <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-zinc-900 border-zinc-600' : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5]' : 'bg-zinc-50 border-zinc-200'}`}>
                                                                                         <div className="flex items-start justify-between gap-2">
                                                                                             <div className="flex-1">
-                                                                                                <div className="text-[9px] text-zinc-500 mb-1">Midjourney 提示词</div>
+                                                                                                <div className="text-[9px] text-zinc-500 mb-1">英文提示词</div>
                                                                                                 <div
                                                                                                     className="text-[10px] text-zinc-700 dark:text-zinc-300 break-words select-text cursor-text"
                                                                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                                                                >{kf.mj_prompt}</div>
+                                                                                                >{kf.english_prompt}</div>
                                                                                             </div>
                                                                                             <div className="flex items-center gap-1 shrink-0">
                                                                                                 <button
                                                                                                     onClick={async () => {
                                                                                                         try {
-                                                                                                            await navigator.clipboard.writeText(kf.mj_prompt);
+                                                                                                            await navigator.clipboard.writeText(kf.english_prompt);
                                                                                                             alert(t('已复制到剪贴板'));
                                                                                                         } catch (e) {
                                                                                                             alert(t('复制失败'));
@@ -31043,7 +31050,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                                             height: 340,
                                                                                                              settings: {
                                                                                                                  model: 'mj-v6',
-                                                                                                                 prompt: kf.mj_prompt,
+                                                                                                                 prompt: kf.english_prompt,
                                                                                                                  ratio: 'Auto',
                                                                                                                 resolution: '2K'
                                                                                                              }
@@ -31085,21 +31092,21 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                                     </div>
                                                                                 )}
 
-                                                                                {/* 即梦提示词 */}
-                                                                                {kf.jimeng_prompt && (
+                                                                                {/* 中文提示词 */}
+                                                                                {kf.chinese_prompt && (
                                                                                     <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-zinc-900 border-zinc-600' : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5]' : 'bg-zinc-50 border-zinc-200'}`}>
                                                                                         <div className="flex items-start justify-between gap-2">
                                                                                             <div className="flex-1">
-                                                                                                <div className="text-[9px] text-zinc-500 mb-1">即梦提示词</div>
+                                                                                                <div className="text-[9px] text-zinc-500 mb-1">中文提示词</div>
                                                                                                 <div
                                                                                                     className="text-[10px] text-zinc-700 dark:text-zinc-300 break-words select-text cursor-text"
                                                                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                                                                >{kf.jimeng_prompt}</div>
+                                                                                                >{kf.chinese_prompt}</div>
                                                                                             </div>
                                                                                             <button
                                                                                                 onClick={async () => {
                                                                                                     try {
-                                                                                                        await navigator.clipboard.writeText(kf.jimeng_prompt);
+                                                                                                        await navigator.clipboard.writeText(kf.chinese_prompt);
                                                                                                         alert(t('已复制到剪贴板'));
                                                                                                     } catch (e) {
                                                                                                         alert(t('复制失败'));

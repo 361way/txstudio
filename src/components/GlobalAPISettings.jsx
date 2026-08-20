@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Eye, EyeOff, KeyRound, LibraryBig, Loader2, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { listCredentials, saveCredential } from '../api/credential';
+import { buildTokenHubApiConfigs, getTokenHubCapabilityLabel } from '../data/tokenHubModels';
 
 const PROVIDERS_KEY = 'txstudio_providers';
 const API_CONFIGS_KEY = 'txstudio_api_configs';
@@ -20,9 +21,12 @@ const readJSON = (key, fallback) => {
 };
 
 const defaultModels = () => [
-    { id: 'hy3', modelName: 'hy3', displayName: 'hy3', provider: 'openai', type: 'Chat', apiType: 'openai', _uid: crypto.randomUUID?.() || `model-${Date.now()}-1` },
-    { id: 'vod-aigc-image', modelName: 'vod-aigc-image', displayName: 'vod-aigc-image', provider: 'tencent-vod', type: 'Image', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-2` },
-    { id: 'vod-aigc-video', modelName: 'vod-aigc-video', displayName: 'vod-aigc-video', provider: 'tencent-vod', type: 'Video', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-3` },
+    ...buildTokenHubApiConfigs().map((model, index) => ({
+        ...model,
+        _uid: crypto.randomUUID?.() || `tokenhub-model-${Date.now()}-${index}`,
+    })),
+    { id: 'vod-aigc-image', modelName: 'vod-aigc-image', displayName: 'vod-aigc-image', provider: 'tencent-vod', type: 'Image', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-image` },
+    { id: 'vod-aigc-video', modelName: 'vod-aigc-video', displayName: 'vod-aigc-video', provider: 'tencent-vod', type: 'Video', apiType: 'tencent-vod', _uid: crypto.randomUUID?.() || `model-${Date.now()}-video` },
 ];
 
 const normalizePreset = (item) => {
@@ -34,7 +38,12 @@ const normalizePreset = (item) => {
 
 const getVisibleModels = (items) => {
     const visible = (Array.isArray(items) ? items : []).map(normalizePreset).filter(Boolean);
-    return visible.length ? visible : defaultModels();
+    const merged = visible.length ? [...visible] : [];
+    const existingIds = new Set(merged.map((item) => item.id));
+    defaultModels().forEach((item) => {
+        if (!existingIds.has(item.id)) merged.push(item);
+    });
+    return merged;
 };
 
 const parseVodKey = (value = '') => {
@@ -239,9 +248,12 @@ export default function GlobalAPISettings({ open, onClose }) {
                         </div>
                     ) : (
                         <div className="space-y-3">
+                            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+                                默认文本生成使用 <strong>hy3</strong>；图片理解和视频理解使用 <strong>youtu-vita</strong>。其他 TokenHub 模型也可选择，请根据下方能力标签匹配任务。<a href="https://cloud.tencent.com/document/product/1823/130051" target="_blank" rel="noreferrer" className="ml-1 underline">查看官方模型列表</a>
+                            </div>
                             {models.map((model, index) => (
                                 <div key={model._uid || index} className="grid items-end gap-3 rounded-xl border border-[#ececef] p-4 sm:grid-cols-[1fr_150px_120px_auto]">
-                                    <label className="text-xs text-gray-500">模型 ID<input value={model.id || ''} onChange={(e) => setModels((items) => items.map((item, i) => i === index ? { ...item, id: e.target.value } : item))} className="mt-1.5 w-full rounded-lg border border-[#dedee2] px-3 py-2 text-sm outline-none" /></label>
+                                    <label className="text-xs text-gray-500">模型 ID<input value={model.id || ''} onChange={(e) => setModels((items) => items.map((item, i) => i === index ? { ...item, id: e.target.value } : item))} className="mt-1.5 w-full rounded-lg border border-[#dedee2] px-3 py-2 text-sm outline-none" /><span className="mt-1 block text-[10px] text-gray-400">{model.provider === 'openai' ? getTokenHubCapabilityLabel(model.id) : '生成模型'}</span></label>
                                     <label className="text-xs text-gray-500">Provider<input value={model.provider || ''} onChange={(e) => setModels((items) => items.map((item, i) => i === index ? { ...item, provider: e.target.value } : item))} className="mt-1.5 w-full rounded-lg border border-[#dedee2] px-3 py-2 text-sm outline-none" /></label>
                                     <label className="text-xs text-gray-500">类型<select value={model.type || 'Chat'} onChange={(e) => setModels((items) => items.map((item, i) => i === index ? { ...item, type: e.target.value } : item))} className="mt-1.5 w-full rounded-lg border border-[#dedee2] bg-white px-3 py-2 text-sm outline-none"><option>Chat</option><option>Image</option><option>Video</option></select></label>
                                     <button onClick={() => setModels((items) => items.filter((_, i) => i !== index))} className="rounded-lg p-2.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 size={16} /></button>

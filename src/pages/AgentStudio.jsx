@@ -62,7 +62,7 @@ function EmptyRun() {
 export default function AgentStudio() {
     const textModels = useMemo(() => getAgentTextModels(), []);
     const [script, setScript] = useState('');
-    const [textModel, setTextModel] = useState(textModels[0]?.id || 'hy3');
+    const [textModel, setTextModel] = useState(textModels.find((model) => model.id === 'hy3')?.id || textModels[0]?.id || 'hy3');
     const [imageModel, setImageModel] = useState(VOD_DEFAULT_IMAGE_MODEL_NAME);
     const [imageVersion, setImageVersion] = useState(modelDefault(VOD_IMAGE_MODEL_MATRIX, VOD_DEFAULT_IMAGE_MODEL_NAME, VOD_DEFAULT_IMAGE_MODEL_VERSION));
     const [videoModel, setVideoModel] = useState(VOD_DEFAULT_VIDEO_MODEL_NAME);
