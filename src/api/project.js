@@ -12,7 +12,7 @@ export const deleteProject = (id) => apiDelete(`/api/projects/${id}`);
 export const saveCanvas = (projectId, canvasData) =>
     apiPut(`/api/projects/${projectId}/canvas`, {
         data: typeof canvasData === 'string' ? canvasData : JSON.stringify(canvasData),
-    });
+    }, { timeoutMs: 30000 });
 
 export async function getCanvas(projectId) {
     const data = await apiGet(`/api/projects/${projectId}/canvas`);

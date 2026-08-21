@@ -93,6 +93,15 @@ import {
 } from './vodAdapter';
 import VideoEditor from './VideoEditor';
 import { saveCanvas, getCanvas, createProject, deleteHistory, listProjects } from './api/project';
+import {
+    clearCanvasDeletionTombstones,
+    clearPendingCanvasSnapshot,
+    getCanvasDeletionTombstones,
+    getPendingCanvasSnapshot,
+    putCanvasDeletionTombstones,
+    putPendingCanvasSnapshot,
+    reconcileCanvasDeletionTombstones,
+} from './api/canvasJournal';
 import { createGenerationJob, listGenerationImageAssets } from './api/generationHistory';
 import { requestAgentChat } from './api/agentChat';
 import {
@@ -5223,6 +5232,19 @@ function TxStudioApp({
 }) {
     const currentProjectId = currentProject?.id || null;
     const [projectSaveError, setProjectSaveError] = useState(null);
+    const [projectSaveErrorKind, setProjectSaveErrorKind] = useState(null);
+    const [projectSaveStatus, setProjectSaveStatus] = useState(currentProjectId ? 'loading' : 'idle');
+    const [projectSavedAt, setProjectSavedAt] = useState(null);
+    const projectSaveTimerRef = useRef(null);
+    const projectSaveVisualTimerRef = useRef(null);
+    const projectSaveQueueRef = useRef({ running: false, pending: null, promise: Promise.resolve(true), lastFailed: null, waiters: [] });
+    const projectSaveRevisionRef = useRef(Date.now() * 1000);
+    const projectSavedRevisionRef = useRef(0);
+    const projectDirtyRef = useRef(false);
+    const projectSaveActiveRef = useRef(true);
+    const skipNextProjectAutoSaveRef = useRef(false);
+    const enqueueProjectSaveRef = useRef(null);
+    const projectHydrationBaselineRef = useRef('');
     const [projectOptions, setProjectOptions] = useState([]);
     const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
     const [projectSwitcherLoading, setProjectSwitcherLoading] = useState(false);
@@ -5412,20 +5434,23 @@ function TxStudioApp({
         return () => clearInterval(saveInterval);
     }, [currentProjectId]);
 
-    // V3.5.12-a: beforeunload warning to prevent accidental data loss
+    // 仅在确有未保存修改或保存请求进行中时提示离开。
     useEffect(() => {
         const handleBeforeUnload = (e) => {
-            // Only warn if there are nodes on the canvas
-            if (nodesRef.current && nodesRef.current.length > 0) {
+            const queue = projectSaveQueueRef.current;
+            const hasUnsavedChanges = currentProjectId
+                ? (projectDirtyRef.current || queue.running || !!queue.pending)
+                : !!(nodesRef.current && nodesRef.current.length > 0);
+            if (hasUnsavedChanges) {
                 e.preventDefault();
-                e.returnValue = '您有未保存的更改，确定要离开吗？';
+                e.returnValue = '您有尚未保存完成的更改，确定要离开吗？';
                 return e.returnValue;
             }
         };
 
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, []);
+    }, [currentProjectId]);
 
     const [nodes, setNodes] = useState(() => {
         // 云端项目：画布以云端为准，本地加载器跳过（由 cloud load effect 注入）
@@ -5481,41 +5506,112 @@ function TxStudioApp({
 
     // SQLite 项目：从本地数据库加载画布（数据库为唯一真相源）。
     useEffect(() => {
-        if (!currentProjectId) { projectLoadedRef.current = false; return; }
+        if (!currentProjectId) {
+            projectLoadedRef.current = false;
+            projectDirtyRef.current = false;
+            setProjectSaveStatus('idle');
+            return;
+        }
         let cancelled = false;
         projectLoadedRef.current = false;
+        projectDirtyRef.current = false;
+        projectSaveRevisionRef.current = Date.now() * 1000;
+        projectSavedRevisionRef.current = 0;
+        skipNextProjectAutoSaveRef.current = false;
+        const queue = projectSaveQueueRef.current;
+        queue.pending = null;
+        queue.lastFailed = null;
+        queue.waiters.splice(0).forEach((waiter) => waiter.resolve(false));
+        if (projectSaveTimerRef.current) {
+            clearTimeout(projectSaveTimerRef.current);
+            projectSaveTimerRef.current = null;
+        }
+        if (projectSaveVisualTimerRef.current) {
+            clearTimeout(projectSaveVisualTimerRef.current);
+            projectSaveVisualTimerRef.current = null;
+        }
+        setProjectSaveStatus('loading');
         setProjectSaveError(null);
-        getCanvas(currentProjectId)
-            .then(data => {
+        setProjectSaveErrorKind(null);
+        Promise.all([getCanvas(currentProjectId), getPendingCanvasSnapshot(currentProjectId).catch(() => null)])
+            .then(([savedData, pendingEntry]) => {
                 if (cancelled) return;
-                if (data && typeof data === 'object') {
-                    setNodes(Array.isArray(data.nodes) ? data.nodes : []);
-                    setConnections(Array.isArray(data.connections) ? data.connections : []);
-                    setView(normalizeViewState(data.view));
-                    setProjectName(data.projectName || currentProject?.name || '未命名项目');
-                    setChatSessions(Array.isArray(data.chatSessions) && data.chatSessions.length
-                        ? data.chatSessions
-                        : [{ id: 'default', title: t('新对话'), messages: [] }]);
-                    setCurrentChatId(data.currentChatId || data.chatSessions?.[0]?.id || 'default');
-                    setCharacterLibrary(Array.isArray(data.characterLibrary) ? data.characterLibrary : []);
-                    setBatchQueue(Array.isArray(data.batchQueue) ? data.batchQueue : []);
-                    setBatchGroups(Array.isArray(data.batchGroups) ? data.batchGroups : []);
-                } else {
-                    setNodes([]);
-                    setConnections([]);
-                    setView({ ...DEFAULT_VIEW });
-                    setProjectName(currentProject?.name || '未命名项目');
-                    setChatSessions([{ id: 'default', title: t('新对话'), messages: [] }]);
-                    setCurrentChatId('default');
-                    setCharacterLibrary([]);
-                    setBatchQueue([]);
-                    setBatchGroups([]);
-                }
+                const pendingData = pendingEntry?.snapshot;
+                const sourceData = pendingData && typeof pendingData === 'object' ? pendingData : savedData;
+                const deletionEntry = getCanvasDeletionTombstones(currentProjectId);
+                const deletedNodeIds = new Set(deletionEntry?.nodeIds || []);
+                const data = sourceData && typeof sourceData === 'object'
+                    ? {
+                        ...sourceData,
+                        nodes: (Array.isArray(sourceData.nodes) ? sourceData.nodes : []).filter((node) => !deletedNodeIds.has(node.id)),
+                        connections: (Array.isArray(sourceData.connections) ? sourceData.connections : []).filter(
+                            (connection) => !deletedNodeIds.has(connection.from) && !deletedNodeIds.has(connection.to),
+                        ),
+                    }
+                    : sourceData;
+                const hydrated = data && typeof data === 'object'
+                    ? {
+                        nodes: Array.isArray(data.nodes) ? data.nodes : [],
+                        connections: Array.isArray(data.connections) ? data.connections : [],
+                        view: normalizeViewState(data.view),
+                        projectName: data.projectName || currentProject?.name || '未命名项目',
+                        chatSessions: Array.isArray(data.chatSessions) && data.chatSessions.length
+                            ? data.chatSessions
+                            : [{ id: 'default', title: t('新对话'), messages: [] }],
+                        currentChatId: data.currentChatId || data.chatSessions?.[0]?.id || 'default',
+                        characterLibrary: Array.isArray(data.characterLibrary) ? data.characterLibrary : [],
+                        batchQueue: Array.isArray(data.batchQueue) ? data.batchQueue : [],
+                        batchGroups: Array.isArray(data.batchGroups) ? data.batchGroups : [],
+                    }
+                    : {
+                        nodes: [],
+                        connections: [],
+                        view: { ...DEFAULT_VIEW },
+                        projectName: currentProject?.name || '未命名项目',
+                        chatSessions: [{ id: 'default', title: t('新对话'), messages: [] }],
+                        currentChatId: 'default',
+                        characterLibrary: [],
+                        batchQueue: [],
+                        batchGroups: [],
+                    };
+                setNodes(hydrated.nodes);
+                setConnections(hydrated.connections);
+                setView(hydrated.view);
+                setProjectName(hydrated.projectName);
+                setChatSessions(hydrated.chatSessions);
+                setCurrentChatId(hydrated.currentChatId);
+                setCharacterLibrary(hydrated.characterLibrary);
+                setBatchQueue(hydrated.batchQueue);
+                setBatchGroups(hydrated.batchGroups);
+                const hasRecoveredChanges = !!pendingEntry || deletedNodeIds.size > 0;
+                projectHydrationBaselineRef.current = JSON.stringify(hydrated);
                 projectLoadedRef.current = true;
+                projectDirtyRef.current = hasRecoveredChanges;
+                // 无论普通加载还是日志恢复，都跳过一次 state 驱动 autosave；恢复数据由下方显式提交。
+                skipNextProjectAutoSaveRef.current = true;
+                if (pendingEntry?.revision || deletionEntry?.revision) {
+                    projectSaveRevisionRef.current = Math.max(
+                        projectSaveRevisionRef.current,
+                        Number(pendingEntry?.revision || 0),
+                        Number(deletionEntry?.revision || 0),
+                    );
+                }
+                setProjectSaveErrorKind(null);
+                setProjectSavedAt(hasRecoveredChanges ? null : new Date());
+                setProjectSaveStatus('saved');
+                if (hasRecoveredChanges) {
+                    setTimeout(() => {
+                        if (!cancelled && String(activeProjectIdRef.current) === String(currentProjectId)) {
+                            void enqueueProjectSaveRef.current?.(hydrated, { immediate: true });
+                        }
+                    }, 0);
+                }
             })
             .catch(err => {
                 if (cancelled) return;
                 setProjectSaveError(err.message || '加载画布失败');
+                setProjectSaveErrorKind('load');
+                setProjectSaveStatus('error');
                 showToast(err.message || '加载画布失败', 'error', 0);
             });
         return () => { cancelled = true; };
@@ -7878,47 +7974,230 @@ function TxStudioApp({
         batchGroups,
     };
 
-    // SQLite 项目防抖保存（1.2s），加载完成前不写入。
-    const debouncedProjectSave = useMemo(() => debounce(async (nodesToSave, connectionsToSave, processToSave) => {
-        if (!currentProjectId || !projectLoadedRef.current) return;
-        try {
-            const safeSnapshot = await sanitizeObjectForAutoSave({
-                nodes: nodesToSave,
-                connections: connectionsToSave,
-                ...processToSave,
-            });
-            await saveCanvas(currentProjectId, safeSnapshot);
-            setProjectSaveError(null);
-        } catch (err) {
-            setProjectSaveError(err.message || '本地项目保存失败');
-            showToast('本地项目保存失败: ' + (err.message || ''), 'error', 0);
-        }
-    }, 1200), [currentProjectId, sanitizeObjectForAutoSave]);
+    const runProjectSaveQueue = useCallback(() => {
+        const queue = projectSaveQueueRef.current;
+        if (queue.running) return queue.promise;
+        queue.running = true;
+        queue.promise = (async () => {
+            while (queue.pending) {
+                const job = queue.pending;
+                queue.pending = null;
+                if (!job?.projectId || String(activeProjectIdRef.current) !== String(job.projectId)) {
+                    queue.waiters.splice(0).forEach((waiter) => waiter.resolve(false));
+                    continue;
+                }
+                if (!projectSaveVisualTimerRef.current) {
+                    projectSaveVisualTimerRef.current = setTimeout(() => {
+                        projectSaveVisualTimerRef.current = null;
+                        if (projectSaveActiveRef.current && projectDirtyRef.current) setProjectSaveStatus('saving');
+                    }, 700);
+                }
+                try {
+                    await job.journalPromise;
+                    const safeSnapshot = await sanitizeObjectForAutoSave(job.snapshot);
+                    // 序列化期间若已有更新快照，跳过旧网络写入，直接处理最新版本。
+                    if (queue.pending?.revision > job.revision) continue;
+                    await saveCanvas(job.projectId, safeSnapshot);
+                    await clearPendingCanvasSnapshot(job.projectId, job.revision).catch(() => false);
+                    clearCanvasDeletionTombstones(job.projectId, job.revision);
+                    projectSavedRevisionRef.current = Math.max(projectSavedRevisionRef.current, job.revision);
+                    queue.lastFailed = null;
+                    queue.waiters = queue.waiters.filter((waiter) => {
+                        if (waiter.revision <= projectSavedRevisionRef.current) {
+                            waiter.resolve(true);
+                            return false;
+                        }
+                        return true;
+                    });
+                    const isLatest = job.revision === projectSaveRevisionRef.current && !queue.pending;
+                    if (isLatest) {
+                        projectDirtyRef.current = false;
+                        if (projectSaveVisualTimerRef.current) {
+                            clearTimeout(projectSaveVisualTimerRef.current);
+                            projectSaveVisualTimerRef.current = null;
+                        }
+                        if (projectSaveActiveRef.current) {
+                            setProjectSaveError(null);
+                            setProjectSaveErrorKind(null);
+                            setProjectSavedAt(new Date());
+                            setProjectSaveStatus('saved');
+                        }
+                    }
+                } catch (err) {
+                    queue.lastFailed = job;
+                    if (!queue.pending) {
+                        queue.waiters.splice(0).forEach((waiter) => waiter.resolve(false));
+                        if (projectSaveVisualTimerRef.current) {
+                            clearTimeout(projectSaveVisualTimerRef.current);
+                            projectSaveVisualTimerRef.current = null;
+                        }
+                        if (projectSaveActiveRef.current) {
+                            const message = err?.message || '本地项目保存失败';
+                            projectDirtyRef.current = true;
+                            setProjectSaveError(message);
+                            setProjectSaveErrorKind('save');
+                            setProjectSaveStatus('error');
+                            showToast('本地项目保存失败: ' + message, 'error', 0);
+                        }
+                    }
+                }
+            }
+        })().finally(() => {
+            queue.running = false;
+            if (queue.pending) void runProjectSaveQueue();
+        });
+        return queue.promise;
+    }, [sanitizeObjectForAutoSave, showToast]);
 
-    // 任一可恢复过程状态变化时，统一保存完整 SQLite 快照。
+    const enqueueProjectSave = useCallback((snapshot, options = {}) => {
+        if (!currentProjectId || !projectLoadedRef.current) return Promise.resolve(true);
+        const revision = Math.max(projectSaveRevisionRef.current + 1, Date.now() * 1000);
+        projectSaveRevisionRef.current = revision;
+        reconcileCanvasDeletionTombstones(currentProjectId, (snapshot.nodes || []).map((node) => node.id));
+        if (Array.isArray(options.deletedNodeIds) && options.deletedNodeIds.length > 0) {
+            putCanvasDeletionTombstones(currentProjectId, revision, options.deletedNodeIds);
+        }
+        projectDirtyRef.current = true;
+        if (projectSaveActiveRef.current) {
+            setProjectSaveError(null);
+            setProjectSaveErrorKind(null);
+        }
+        const queue = projectSaveQueueRef.current;
+        const journalPromise = putPendingCanvasSnapshot(currentProjectId, revision, snapshot).catch(() => false);
+        queue.pending = { projectId: currentProjectId, revision, snapshot, journalPromise };
+        queue.lastFailed = null;
+        const savedPromise = options.immediate
+            ? new Promise((resolve) => queue.waiters.push({ revision, resolve }))
+            : Promise.resolve(true);
+        if (projectSaveTimerRef.current) {
+            clearTimeout(projectSaveTimerRef.current);
+            projectSaveTimerRef.current = null;
+        }
+        if (options.immediate) {
+            void runProjectSaveQueue();
+            return savedPromise;
+        }
+        projectSaveTimerRef.current = setTimeout(() => {
+            projectSaveTimerRef.current = null;
+            void runProjectSaveQueue();
+        }, 1500);
+        return savedPromise;
+    }, [currentProjectId, runProjectSaveQueue]);
+    enqueueProjectSaveRef.current = enqueueProjectSave;
+
+    const flushProjectSave = useCallback((snapshot) => {
+        if (!currentProjectId || !projectLoadedRef.current) return Promise.resolve(true);
+        if (projectSaveTimerRef.current) {
+            clearTimeout(projectSaveTimerRef.current);
+            projectSaveTimerRef.current = null;
+        }
+        if (snapshot) return enqueueProjectSave(snapshot, { immediate: true });
+        const queue = projectSaveQueueRef.current;
+        if (!queue.pending && projectDirtyRef.current && !queue.running) {
+            const failedSnapshot = queue.lastFailed?.snapshot;
+            return enqueueProjectSave(failedSnapshot || {
+                nodes: nodesRef.current || [],
+                connections: connectionsRef.current || [],
+                ...projectProcessRef.current,
+            }, { immediate: true });
+        }
+        const targetRevision = projectSaveRevisionRef.current;
+        if (projectSavedRevisionRef.current >= targetRevision) return Promise.resolve(true);
+        const savedPromise = new Promise((resolve) => {
+            queue.waiters.push({ revision: targetRevision, resolve });
+        });
+        void runProjectSaveQueue();
+        return savedPromise;
+    }, [currentProjectId, enqueueProjectSave, runProjectSaveQueue]);
+
+    const persistCanvasMutation = useCallback((nextNodes, nextConnections, options = {}) => {
+        nodesRef.current = nextNodes;
+        connectionsRef.current = nextConnections;
+        setNodes(nextNodes);
+        setConnections(nextConnections);
+        const snapshot = {
+            nodes: nextNodes,
+            connections: nextConnections,
+            ...projectProcessRef.current,
+        };
+        if (currentProjectId) {
+            return enqueueProjectSave(snapshot, { immediate: true, ...options });
+        }
+        return persistAutoSaveSnapshot({ nodes: nextNodes, connections: nextConnections });
+    }, [currentProjectId, enqueueProjectSave, persistAutoSaveSnapshot]);
+
+    const switchProjectSafely = useCallback(async (project) => {
+        if (!project || String(project.id) === String(currentProjectId)) return;
+        const saved = await flushProjectSave();
+        if (saved !== false) onSwitchProject?.(project);
+    }, [currentProjectId, flushProjectSave, onSwitchProject]);
+
+    const exitProjectSafely = useCallback(async () => {
+        const saved = await flushProjectSave();
+        if (saved !== false) onExitToProjects?.();
+    }, [flushProjectSave, onExitToProjects]);
+
+    // 任一可恢复过程状态变化时，以当前 render 快照进入串行保存队列。
     useEffect(() => {
         if (!currentProjectId || !projectLoadedRef.current) return;
-        debouncedProjectSave(nodesRef.current, connectionsRef.current, projectProcessRef.current);
+        const snapshot = {
+            nodes,
+            connections,
+            view,
+            projectName,
+            chatSessions,
+            currentChatId,
+            characterLibrary,
+            batchQueue,
+            batchGroups,
+        };
+        if (skipNextProjectAutoSaveRef.current) {
+            skipNextProjectAutoSaveRef.current = false;
+            return;
+        }
+        if (projectHydrationBaselineRef.current) {
+            if (JSON.stringify(snapshot) === projectHydrationBaselineRef.current) return;
+            projectHydrationBaselineRef.current = '';
+        }
+        void enqueueProjectSave(snapshot);
     }, [
         nodes, connections, view, projectName, chatSessions, currentChatId,
-        characterLibrary, batchQueue, batchGroups, currentProjectId, debouncedProjectSave,
+        characterLibrary, batchQueue, batchGroups, currentProjectId, enqueueProjectSave,
     ]);
 
-    // 退出项目前再提交一次最新完整快照。
+    // 页面进入后台时尽早提交最新快照，降低直接刷新/关闭带来的丢失概率。
     useEffect(() => {
-        return () => {
-            if (currentProjectId && projectLoadedRef.current) {
-                try {
-                    sanitizeObjectForAutoSave({
-                        nodes: nodesRef.current,
-                        connections: connectionsRef.current,
-                        ...projectProcessRef.current,
-                    }).then(snapshot => saveCanvas(currentProjectId, snapshot))
-                        .catch(() => { /* 主保存路径已负责提示错误 */ });
-                } catch { }
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden' && projectDirtyRef.current) {
+                void flushProjectSave();
             }
         };
-    }, [currentProjectId, sanitizeObjectForAutoSave]);
+        window.addEventListener('pagehide', handleVisibilityChange);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            window.removeEventListener('pagehide', handleVisibilityChange);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [flushProjectSave]);
+
+    // 退出项目前取消延时任务，并提交一次最新完整快照。
+    useEffect(() => {
+        projectSaveActiveRef.current = true;
+        return () => {
+            projectSaveActiveRef.current = false;
+            if (projectSaveTimerRef.current) {
+                clearTimeout(projectSaveTimerRef.current);
+                projectSaveTimerRef.current = null;
+            }
+            if (currentProjectId && projectLoadedRef.current && projectDirtyRef.current) {
+                void flushProjectSave({
+                    nodes: nodesRef.current || [],
+                    connections: connectionsRef.current || [],
+                    ...projectProcessRef.current,
+                });
+            }
+        };
+    }, [currentProjectId, flushProjectSave]);
 
     const generateThumbnail = useCallback(async (imageUrl, quality = 'normal', options = {}) => {
         const config = quality === 'ultra'
@@ -9220,12 +9499,20 @@ function TxStudioApp({
     }, [apiConfigs]);
 
     // --- MOVED HELPERS to fix ReferenceError ---
-    const deleteNode = useCallback((id) => {
-        saveToUndoStack(); // V3.4.6: 保存到撤销栈
-        setNodes((prev) => prev.filter((n) => n.id !== id));
-        setConnections((prev) => prev.filter((c) => c.from !== id && c.to !== id));
-        if (selectedNodeId === id) setSelectedNodeId(null);
-    }, [selectedNodeId, saveToUndoStack]);
+    const deleteNodes = useCallback((nodeIds, options = {}) => {
+        const idsToDelete = new Set(Array.from(nodeIds || []).filter(Boolean));
+        if (idsToDelete.size === 0) return Promise.resolve(true);
+        if (!options.skipUndo) saveToUndoStack();
+        const nextNodes = (nodesRef.current || []).filter((node) => !idsToDelete.has(node.id));
+        const nextConnections = (connectionsRef.current || []).filter(
+            (connection) => !idsToDelete.has(connection.from) && !idsToDelete.has(connection.to),
+        );
+        if (idsToDelete.has(selectedNodeIdRef.current)) setSelectedNodeId(null);
+        setSelectedNodeIds(new Set());
+        return persistCanvasMutation(nextNodes, nextConnections, { deletedNodeIds: Array.from(idsToDelete) });
+    }, [persistCanvasMutation, saveToUndoStack]);
+
+    const deleteNode = useCallback((id) => deleteNodes([id]), [deleteNodes]);
 
     const updateNodeSettings = useCallback((id, newSettings) => {
         setNodes((prev) => prev.map((n) => n.id === id ? { ...n, settings: { ...n.settings, ...newSettings } } : n));
@@ -9267,20 +9554,11 @@ function TxStudioApp({
 
                 const currentSelectedId = selectedNodeIdRef.current;
                 const currentSelectedIds = selectedNodeIdsRef.current;
-
-                // 删除选中的节点
-                if (currentSelectedId) {
-                    deleteNode(currentSelectedId);
-                    setSelectedNodeId(null);
-                } else if (currentSelectedIds && currentSelectedIds.size > 0) {
-                    // V3.4.7: 批量删除 - 只保存一次撤销状态 (使用 ref 确保获取最新状态)
-                    if (saveToUndoStackRef.current) {
-                        saveToUndoStackRef.current();
-                    }
-                    const idsToDelete = new Set(currentSelectedIds);
-                    setNodes(prev => prev.filter(n => !idsToDelete.has(n.id)));
-                    setConnections(prev => prev.filter(c => !idsToDelete.has(c.from) && !idsToDelete.has(c.to)));
-                    setSelectedNodeIds(new Set());
+                const idsToDelete = currentSelectedIds && currentSelectedIds.size > 1
+                    ? currentSelectedIds
+                    : (currentSelectedId ? [currentSelectedId] : currentSelectedIds);
+                if (idsToDelete && (Array.isArray(idsToDelete) ? idsToDelete.length > 0 : idsToDelete.size > 0)) {
+                    void deleteNodes(idsToDelete);
                 }
             }
         };
@@ -9289,7 +9567,7 @@ function TxStudioApp({
         return () => {
             window.removeEventListener('keydown', handleDeleteKey);
         };
-    }, []);
+    }, [deleteNodes]);
     // 保存角色库到 localStorage（使用防抖优化）
     const debouncedSaveCharacters = useMemo(() => debounce((charactersToSave) => {
         try {
@@ -21155,6 +21433,8 @@ function TxStudioApp({
             projectCreatingRef.current = true;
             setProjectCreating(true);
             try {
+                const saved = await flushProjectSave();
+                if (saved === false) return;
                 const project = await createProject(name.trim());
                 setProjectOptions((projects) => [project, ...projects.filter((item) => item.id !== project.id)]);
                 onSwitchProject?.(project);
@@ -21178,7 +21458,7 @@ function TxStudioApp({
             }
         }
         await resetProjectState();
-    }, [currentProjectId, nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState, onSwitchProject, showToast]);
+    }, [currentProjectId, nodes, connections, history, chatSessions, characterLibrary, handleSaveProject, resetProjectState, flushProjectSave, onSwitchProject, showToast]);
 
     // 保存选中的工作流（框选节点后右键保存）
     const handleSaveSelectedWorkflow = async () => {
@@ -36199,7 +36479,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         <div className="flex min-w-0 items-center gap-1.5">
                             <button
                                 type="button"
-                                onClick={() => onExitToProjects?.()}
+                                onClick={() => void exitProjectSafely()}
                                 className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-[#666158] transition hover:bg-[#f4f4f2] hover:text-[#24211c]"
                                 title={t('返回项目列表')}
                             >
@@ -36245,7 +36525,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                             aria-selected={active}
                                                             onClick={() => {
                                                                 setProjectSwitcherOpen(false);
-                                                                if (!active) onSwitchProject?.(project);
+                                                                if (!active) void switchProjectSafely(project);
                                                             }}
                                                             className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition ${active ? 'bg-[#fff4cf] text-[#5e4918]' : 'text-[#4e4a42] hover:bg-[#f5f3ee]'}`}
                                                         >
@@ -36258,7 +36538,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                 {projectOptions.length === 0 && <div className="px-2.5 py-3 text-[11px] text-[#8e877a]">{t('还没有项目')}</div>}
                                             </div>
                                         )}
-                                        <button type="button" onClick={() => onExitToProjects?.()} className="mt-1 flex w-full items-center gap-2 border-t border-[#eeeae2] px-2.5 py-2.5 text-left text-[11px] font-medium text-[#746d61] hover:bg-[#f5f3ee]"><LayoutGrid size={13} />{t('管理全部项目')}</button>
+                                        <button type="button" onClick={() => void exitProjectSafely()} className="mt-1 flex w-full items-center gap-2 border-t border-[#eeeae2] px-2.5 py-2.5 text-left text-[11px] font-medium text-[#746d61] hover:bg-[#f5f3ee]"><LayoutGrid size={13} />{t('管理全部项目')}</button>
                                     </div>
                                 )}
                             </div>
@@ -36303,12 +36583,30 @@ ${inputText.substring(0, 15000)} ... (截断)
                         </div>
                     )}
                     <div className={`flex items-center gap-2 ${embedded ? 'mr-32 [&_button]:h-8 [&_button]:min-w-8 [&_button]:justify-center [&_button]:px-2 [&_button_span]:sr-only' : ''}`}>
-                        {embedded && currentProjectId && (
-                            <span className={`hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium sm:flex ${projectSaveError ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`} title={projectSaveError || t('画布过程会自动保存到本地 SQLite')}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${projectSaveError ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                                {projectSaveError ? t('保存失败') : t('自动保存')}
-                            </span>
-                        )}
+                        {embedded && currentProjectId && (() => {
+                            const statusMeta = {
+                                loading: { label: t('加载中...'), className: 'bg-zinc-100 text-zinc-600', dot: 'bg-zinc-400' },
+                                dirty: { label: t('待保存'), className: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
+                                saving: { label: t('保存中...'), className: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
+                                saved: { label: t('已保存'), className: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+                                error: { label: projectSaveErrorKind === 'load' ? t('加载失败') : t('保存失败，点击重试'), className: 'bg-red-50 text-red-600', dot: 'bg-red-500' },
+                            }[projectSaveStatus] || { label: t('自动保存'), className: 'bg-zinc-100 text-zinc-600', dot: 'bg-zinc-400' };
+                            const title = projectSaveError
+                                || (projectSavedAt ? `${t('最近保存')}: ${projectSavedAt.toLocaleTimeString()}` : t('画布过程会自动保存到本地 SQLite'));
+                            return (
+                                <button
+                                    type="button"
+                                    onClick={() => projectSaveStatus === 'error' && projectSaveErrorKind === 'save' && void flushProjectSave()}
+                                    className={`hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium sm:flex ${statusMeta.className} ${projectSaveStatus === 'error' && projectSaveErrorKind === 'save' ? 'cursor-pointer hover:bg-red-100' : 'cursor-default'}`}
+                                    title={title}
+                                >
+                                    {projectSaveStatus === 'saving' || projectSaveStatus === 'loading'
+                                        ? <Loader2 size={11} className="animate-spin" />
+                                        : <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />}
+                                    {statusMeta.label}
+                                </button>
+                            );
+                        })()}
                         <button
                             onClick={() => setAigcStorageMode(prev => prev === 'Permanent' ? 'Temporary' : 'Permanent')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${aigcStorageMode === 'Permanent'
@@ -36380,7 +36678,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                         {currentProjectId && !embedded && (
                             <>
                                 <button
-                                    onClick={() => onExitToProjects?.()}
+                                    onClick={() => void exitProjectSafely()}
                                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${theme === 'dark'
                                         ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
                                         : theme === 'solarized'
@@ -39594,43 +39892,21 @@ ${inputText.substring(0, 15000)} ... (截断)
                 </div>
             )}
 
-            {/* 云端同步错误横幅（阻断式，需用户处理） */}
+            {/* 项目加载/保存错误横幅：保存失败只重试保存，绝不覆盖当前内存画布。 */}
             {currentProjectId && projectSaveError && (
                 <div className="fixed top-0 left-0 right-0 z-[10000] bg-red-700 text-white px-4 py-2 flex items-center justify-between text-sm">
-                    <span>{t('本地项目保存失败')}: {projectSaveError}</span>
+                    <span>{projectSaveErrorKind === 'load' ? t('本地项目加载失败') : t('本地项目保存失败')}: {projectSaveError}</span>
                     <button
                         onClick={() => {
-                            setProjectSaveError(null);
-                            // 重新从本地 SQLite 读取画布。
-                            if (currentProjectId) {
-                                const targetProjectId = currentProjectId;
-                                getCanvas(targetProjectId)
-                                    .then(data => {
-                                        if (String(activeProjectIdRef.current) !== String(targetProjectId)) return;
-                                        if (data && typeof data === 'object') {
-                                            setNodes(Array.isArray(data.nodes) ? data.nodes : []);
-                                            setConnections(Array.isArray(data.connections) ? data.connections : []);
-                                            setView(normalizeViewState(data.view));
-                                            setProjectName(data.projectName || currentProject?.name || '未命名项目');
-                                            setChatSessions(Array.isArray(data.chatSessions) && data.chatSessions.length
-                                                ? data.chatSessions
-                                                : [{ id: 'default', title: t('新对话'), messages: [] }]);
-                                            setCurrentChatId(data.currentChatId || data.chatSessions?.[0]?.id || 'default');
-                                            setCharacterLibrary(Array.isArray(data.characterLibrary) ? data.characterLibrary : []);
-                                            setBatchQueue(Array.isArray(data.batchQueue) ? data.batchQueue : []);
-                                            setBatchGroups(Array.isArray(data.batchGroups) ? data.batchGroups : []);
-                                        }
-                                        projectLoadedRef.current = true;
-                                    })
-                                    .catch(err => {
-                                        if (String(activeProjectIdRef.current) !== String(targetProjectId)) return;
-                                        setProjectSaveError(err.message || '加载画布失败');
-                                    });
+                            if (projectSaveErrorKind === 'save') {
+                                void flushProjectSave();
+                                return;
                             }
+                            window.location.reload();
                         }}
                         className="ml-3 px-3 py-1 bg-red-900 hover:bg-red-800 rounded text-xs font-medium"
                     >
-                        {t('重试')}
+                        {projectSaveErrorKind === 'load' ? t('重新加载页面') : t('重试保存')}
                     </button>
                 </div>
             )}
