@@ -144,8 +144,13 @@ const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
     const rafRef = useRef(null);
 
     const updateMask = useCallback(() => {
-        if (canvasRef.current) {
-            setMaskUrl(canvasRef.current.toDataURL());
+        const canvas = canvasRef.current;
+        // 画布尺寸为 0 时无法导出，直接跳过，避免抛出 IndexSizeError。
+        if (!canvas || !canvas.width || !canvas.height) return;
+        try {
+            setMaskUrl(canvas.toDataURL());
+        } catch (error) {
+            console.warn('[MaskVisualFeedback] 导出蒙版失败:', error);
         }
     }, [canvasRef]);
 
@@ -1382,33 +1387,39 @@ const MaskEditor = ({ nodeId, imageUrl, imageDimensions, isActive, onClose, onSa
     const [history, setHistory] = useState([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
     const maxHistory = 10;
-    const [resolvedDimensions, setResolvedDimensions] = useState(imageDimensions);
+    const isUsableDimensions = (dims) => Number(dims?.w) > 0 && Number(dims?.h) > 0;
+    const [resolvedDimensions, setResolvedDimensions] = useState(() => (
+        isUsableDimensions(imageDimensions) ? imageDimensions : null
+    ));
 
     useEffect(() => {
-        if (imageDimensions?.w && imageDimensions?.h) {
+        if (isUsableDimensions(imageDimensions)) {
             setResolvedDimensions(imageDimensions);
         }
     }, [imageDimensions]);
 
     useEffect(() => {
         if (!isActive || !imageUrl) return;
-        if (imageDimensions?.w && imageDimensions?.h) return;
+        if (isUsableDimensions(imageDimensions)) return;
         let cancelled = false;
         getImageDimensions(imageUrl)
             .then((dims) => {
                 if (cancelled) return;
-                if (dims?.w && dims?.h) {
+                if (isUsableDimensions(dims)) {
                     setResolvedDimensions(dims);
                     if (onUpdateNode) onUpdateNode(nodeId, { dimensions: dims });
                 }
             })
-            .catch(() => { });
+            .catch(() => {
+                if (!cancelled) console.warn('[MaskEditor] 无法读取图片尺寸，蒙版编辑暂不可用');
+            });
         return () => { cancelled = true; };
     }, [isActive, imageUrl, imageDimensions, nodeId, onUpdateNode]);
 
     // 初始化 Canvas
     useEffect(() => {
-        if (!isActive || !canvasRef.current || !resolvedDimensions) return;
+        // 尺寸未知或为 0 时不初始化画布，避免后续 getImageData 抛出 IndexSizeError。
+        if (!isActive || !canvasRef.current || !isUsableDimensions(resolvedDimensions)) return;
 
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
@@ -1439,7 +1450,15 @@ const MaskEditor = ({ nodeId, imageUrl, imageDimensions, isActive, onClose, onSa
         if (!canvasRef.current || !ctxRef.current) return;
         const canvas = canvasRef.current;
         const ctx = ctxRef.current;
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // 画布尺寸为 0 时 getImageData 会抛错，直接跳过本次快照。
+        if (!canvas.width || !canvas.height) return;
+        let imageData;
+        try {
+            imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } catch (error) {
+            console.warn('[MaskEditor] 读取蒙版像素失败:', error);
+            return;
+        }
         const newHistory = history.slice(0, historyIndex + 1);
         newHistory.push(imageData);
         if (newHistory.length > maxHistory) {
@@ -1545,9 +1564,19 @@ const MaskEditor = ({ nodeId, imageUrl, imageDimensions, isActive, onClose, onSa
 
     // 保存蒙版
     const handleSave = () => {
-        if (!canvasRef.current) return;
         const canvas = canvasRef.current;
-        const maskDataUrl = canvas.toDataURL('image/png');
+        if (!canvas || !canvas.width || !canvas.height) {
+            if (onClose) onClose();
+            return;
+        }
+        let maskDataUrl;
+        try {
+            maskDataUrl = canvas.toDataURL('image/png');
+        } catch (error) {
+            console.warn('[MaskEditor] 导出蒙版失败:', error);
+            if (onClose) onClose();
+            return;
+        }
 
         // 更新节点状态
         if (onUpdateNode) {
@@ -1571,7 +1600,7 @@ const MaskEditor = ({ nodeId, imageUrl, imageDimensions, isActive, onClose, onSa
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isActive, historyIndex, history]);
 
-    if (!isActive || !imageUrl || !resolvedDimensions) return null;
+    if (!isActive || !imageUrl || !isUsableDimensions(resolvedDimensions)) return null;
 
     return (
         <>
@@ -17438,8 +17467,9 @@ function TxStudioApp({
 
             // 创建新 Canvas
             const canvas = document.createElement('canvas');
-            canvas.width = maskImg.width;
-            canvas.height = maskImg.height;
+            canvas.width = maskImg.naturalWidth || maskImg.width || 0;
+            canvas.height = maskImg.naturalHeight || maskImg.height || 0;
+            if (!canvas.width || !canvas.height) throw new Error('蒙版尺寸无效');
             const ctx = canvas.getContext('2d');
 
             // 填充黑色背景（代表保留区域，不透明 Alpha=1）
@@ -26399,8 +26429,14 @@ ${inputText.substring(0, 15000)} ... (截断)
             let prevData = null;
 
             video.onloadeddata = async () => {
+                const sourceWidth = Number(video.videoWidth) || 0;
+                const sourceHeight = Number(video.videoHeight) || 0;
+                if (!sourceWidth || !sourceHeight) {
+                    reject(new Error('无法读取视频画面尺寸，无法智能抽帧'));
+                    return;
+                }
                 canvas.width = 320;
-                canvas.height = Math.floor(320 * (video.videoHeight / video.videoWidth));
+                canvas.height = Math.max(1, Math.floor(320 * (sourceHeight / sourceWidth)));
 
                 const duration = video.duration;
                 const sampleRate = 2;
