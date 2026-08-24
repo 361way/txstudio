@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Bot, ChevronRight, Clock, Cloud, Database, Download,
     ExternalLink, History, Image as ImageIcon, Loader2, Play, RefreshCw, Search,
     Trash2, Video, X, XCircle,
 } from 'lucide-react';
-import { deleteGenerationJob, getGenerationJob, listGenerationJobs } from '../api/generationHistory';
+import { deleteGenerationJob, getGenerationJob, importVODGenerationTask, listGenerationJobs, syncGenerationJob, syncPendingGenerationJobs } from '../api/generationHistory';
 import { listProjects } from '../api/project';
 import i18n from '../i18n';
 
@@ -26,7 +26,7 @@ const STATUS = {
 const SOURCE_LABEL = {
     home: '首页', image_tool: '图片工具', video_tool: '视频工具',
     agent: '智能 Agent', canvas: '画布', pipeline: '生成管线', mps_tool: '场景工具',
-    viral_replication: '爆款复刻', video_translate: '视频译制',
+    viral_replication: '爆款复刻', video_translate: '视频译制', cloud_recovery: '云端恢复',
 };
 
 function formatTime(value) {
@@ -87,18 +87,37 @@ function MediaPreview({ job, asset, compact = false, controls = false }) {
     return <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" />;
 }
 
-function HistoryDetail({ id, onClose, onDelete }) {
+function HistoryDetail({ id, onClose, onDelete, onSynced }) {
     const [detail, setDetail] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState('');
-    useEffect(() => {
-        let active = true;
+    const loadDetail = useCallback(async () => {
         setLoading(true);
-        getGenerationJob(id).then((data) => active && setDetail(data))
-            .catch((nextError) => active && setError(nextError?.message || '加载详情失败'))
-            .finally(() => active && setLoading(false));
-        return () => { active = false; };
+        setError('');
+        try {
+            setDetail(await getGenerationJob(id));
+        } catch (nextError) {
+            setError(nextError?.message || '加载详情失败');
+        } finally {
+            setLoading(false);
+        }
     }, [id]);
+    useEffect(() => { void loadDetail(); }, [loadDetail]);
+    const sync = async () => {
+        if (!detail?.cloud_task_id || syncing) return;
+        setSyncing(true);
+        setError('');
+        try {
+            await syncGenerationJob(id);
+            await loadDetail();
+            onSynced?.();
+        } catch (nextError) {
+            setError(nextError?.message || '同步云端任务失败');
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     const outputs = detail?.assets?.filter((item) => item.role === 'output') || [];
     const inputs = detail?.assets?.filter((item) => item.role !== 'output') || [];
@@ -115,7 +134,7 @@ function HistoryDetail({ id, onClose, onDelete }) {
                 {loading ? <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#b98b25]" /></div> : error ? <div className="m-5 rounded-xl bg-red-50 p-4 text-[12px] text-red-600">{error}</div> : detail && (
                     <div className="space-y-6 p-5">
                         <section>
-                            <div className="flex items-start justify-between gap-4"><div><h2 className="text-[17px] font-semibold text-[#302d27]">{detail.model_name || t('生成任务')}</h2><p className="mt-1 text-[11px] text-gray-400">{SOURCE_LABEL[detail.source] || detail.source} · {detail.model_version || '—'} · {formatTime(detail.created_at)}</p></div><StatusBadge status={detail.status} /></div>
+                            <div className="flex items-start justify-between gap-4"><div><h2 className="text-[17px] font-semibold text-[#302d27]">{detail.model_name || t('生成任务')}</h2><p className="mt-1 text-[11px] text-gray-400">{SOURCE_LABEL[detail.source] || detail.source} · {detail.model_version || '—'} · {formatTime(detail.created_at)}</p></div><div className="flex items-center gap-2"><StatusBadge status={detail.status} />{detail.cloud_task_id && <button type="button" onClick={sync} disabled={syncing} className="flex items-center gap-1 rounded-lg border border-[#e4ded0] bg-white px-2 py-1 text-[10px] text-[#876417] hover:bg-[#faf4e6] disabled:opacity-50"><RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />{syncing ? t('同步中...') : t('同步云端')}</button>}</div></div>
                             {detail.prompt && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-[#faf8f2] p-3 text-[12px] leading-6 text-[#5c574d]">{detail.prompt}</p>}
                             {detail.error_message && <div className="mt-3 flex gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] leading-5 text-red-600"><XCircle size={14} className="mt-0.5 shrink-0" />{detail.error_message}</div>}
                         </section>
@@ -150,8 +169,10 @@ export default function GenerationHistory({ initialProjectId = '' }) {
     const [page, setPage] = useState(1);
     const [data, setData] = useState({ items: [], total: 0, page_size: 24 });
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState('');
     const [selectedId, setSelectedId] = useState(null);
+    const initialCloudSyncRef = useRef(false);
 
     const load = useCallback(async () => {
         setLoading(true); setError('');
@@ -159,7 +180,25 @@ export default function GenerationHistory({ initialProjectId = '' }) {
         catch (nextError) { setError(nextError?.message || '加载生成历史失败'); }
         finally { setLoading(false); }
     }, [type, status, projectId, query, page]);
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { void load(); }, [load]);
+    const syncCloudTasks = useCallback(async ({ silent = false } = {}) => {
+        if (syncing) return;
+        setSyncing(true);
+        if (!silent) setError('');
+        try {
+            await syncPendingGenerationJobs(8);
+            await load();
+        } catch (nextError) {
+            if (!silent) setError(nextError?.message || '同步云端任务失败');
+        } finally {
+            setSyncing(false);
+        }
+    }, [load, syncing]);
+    useEffect(() => {
+        if (initialCloudSyncRef.current) return;
+        initialCloudSyncRef.current = true;
+        void syncCloudTasks({ silent: true });
+    }, [syncCloudTasks]);
     useEffect(() => { setPage(1); }, [type, status, projectId, query]);
     useEffect(() => {
         listProjects().then((items) => setProjects(Array.isArray(items) ? items : [])).catch(() => setProjects([]));
@@ -172,6 +211,23 @@ export default function GenerationHistory({ initialProjectId = '' }) {
     const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.page_size || 24)));
     const counts = useMemo(() => `${data.total || 0} 条记录`, [data.total]);
     const projectNames = useMemo(() => new Map(projects.map((project) => [String(project.id), project.name || `项目 #${project.id}`])), [projects]);
+    const importCloudTask = async () => {
+        if (syncing) return;
+        const cloudTaskId = window.prompt(t('请输入腾讯云 AIGC 云端任务 ID'))?.trim();
+        if (!cloudTaskId) return;
+        setSyncing(true);
+        setError('');
+        try {
+            await importVODGenerationTask(cloudTaskId);
+            setQuery(cloudTaskId);
+            setPage(1);
+            await load();
+        } catch (nextError) {
+            setError(nextError?.message || '导入云端任务失败');
+        } finally {
+            setSyncing(false);
+        }
+    };
     const remove = async (id) => {
         if (!window.confirm(t('仅删除历史元数据，不会删除腾讯云媒体文件。确定继续吗？'))) return;
         await deleteGenerationJob(id);
@@ -184,14 +240,14 @@ export default function GenerationHistory({ initialProjectId = '' }) {
             <section className="mx-auto max-w-[1320px]">
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[#ebe6db] pb-6">
                     <div><div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[#b2872c]"><Database size={13} /> Generation Archive</div><h1 className="mt-2 text-[27px] font-semibold tracking-[-0.03em] text-[#28251f]">{t('生成历史')}</h1><p className="mt-2 text-[12px] text-gray-400">{t('统一查看首页、工具、画布与 Agent 的生成任务和素材记录')}</p></div>
-                    <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#e4ded0] bg-white px-3 py-2 text-[11.5px] text-gray-500 hover:bg-[#faf8f2] disabled:opacity-50"><RefreshCw size={13} className={loading ? 'animate-spin' : ''} />{t('刷新')}</button>
+                    <div className="flex items-center gap-2"><button type="button" onClick={() => void importCloudTask()} disabled={loading || syncing} className="flex items-center gap-2 rounded-lg border border-[#e4ded0] bg-white px-3 py-2 text-[11.5px] text-gray-500 hover:bg-[#faf8f2] disabled:opacity-50"><Database size={13} />{t('导入云端任务')}</button><button type="button" onClick={() => void syncCloudTasks()} disabled={loading || syncing} className="flex items-center gap-2 rounded-lg border border-[#e4ded0] bg-white px-3 py-2 text-[11.5px] text-gray-500 hover:bg-[#faf8f2] disabled:opacity-50"><RefreshCw size={13} className={loading || syncing ? 'animate-spin' : ''} />{syncing ? t('同步云端中...') : t('刷新并同步')}</button></div>
                 </header>
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                     <div className="inline-flex rounded-xl border border-[#e8e3d8] bg-white p-1">{FILTERS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setType(id)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11.5px] transition ${type === id ? 'bg-[#f4ead0] font-medium text-[#73530d]' : 'text-gray-400 hover:text-gray-600'}`}><Icon size={13} />{t(label)}</button>)}</div>
                     <select id="generation-history-status" name="generation-history-status" value={status} onChange={(event) => setStatus(event.target.value)} aria-label={t('任务状态')} className="h-9 rounded-lg border border-[#e5dfd2] bg-white px-3 text-[11.5px] text-gray-500 outline-none focus:border-[#d4aa42]"><option value="">{t('全部状态')}</option>{Object.entries(STATUS).map(([value, item]) => <option key={value} value={value}>{t(item.label)}</option>)}</select>
                     <select id="generation-history-project" name="generation-history-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} aria-label={t('画布项目')} className="h-9 max-w-[220px] rounded-lg border border-[#e5dfd2] bg-white px-3 text-[11.5px] text-gray-500 outline-none focus:border-[#d4aa42]"><option value="">{t('全部画布项目')}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name || `项目 #${project.id}`}</option>)}</select>
-                    <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#e5dfd2] bg-white px-3 text-gray-400 sm:max-w-[340px]"><Search size={14} /><input id="generation-history-search" name="generation-history-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('搜索提示词或模型')} className="w-full bg-transparent text-[11.5px] text-[#403c34] outline-none" /></label>
+                    <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-[#e5dfd2] bg-white px-3 text-gray-400 sm:max-w-[340px]"><Search size={14} /><input id="generation-history-search" name="generation-history-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('搜索提示词、模型或云端任务 ID')} className="w-full bg-transparent text-[11.5px] text-[#403c34] outline-none" /></label>
                     <span className="ml-auto text-[10.5px] text-gray-400">{counts}</span>
                 </div>
 
@@ -204,7 +260,7 @@ export default function GenerationHistory({ initialProjectId = '' }) {
 
                 {totalPages > 1 && <div className="mt-7 flex items-center justify-center gap-3"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('上一页')}</button><span className="text-[10.5px] text-gray-400">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('下一页')}</button></div>}
             </section>
-            {selectedId && <HistoryDetail id={selectedId} onClose={() => setSelectedId(null)} onDelete={remove} />}
+            {selectedId && <HistoryDetail id={selectedId} onClose={() => setSelectedId(null)} onDelete={remove} onSynced={load} />}
         </div>
     );
 }

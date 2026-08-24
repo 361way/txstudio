@@ -17,6 +17,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	maxVODInvokeRequestBody  = 1 << 20
+	maxVODInvokeResponseBody = 4 << 20
+)
+
 var vodActions = map[string]struct{}{
 	"ApplyUpload": {}, "CommitUpload": {}, "PullUpload": {},
 	"CreateAigcImageTask": {}, "CreateAigcVideoTask": {},
@@ -91,35 +96,12 @@ func normalizeAigcStorageMode(action string, payload map[string]interface{}) err
 
 // Invoke 从 SQLite 解密全局腾讯云凭证，并仅向预设产品域名转发白名单 action。
 func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxVODInvokeRequestBody)
 	var req invokeReq
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Action) == "" {
 		BadRequest(c, "请求参数无效")
 		return
 	}
-	if _, allowed := h.AllowedActions[req.Action]; !allowed {
-		BadRequest(c, "不支持的腾讯云 Action")
-		return
-	}
-	if req.Version == "" {
-		req.Version = h.DefaultVersion
-	}
-
-	credentialData, err := h.loadTencentCredential()
-	if err != nil {
-		BadRequest(c, err.Error())
-		return
-	}
-	secretID, _ := credentialData["secret_id"].(string)
-	secretKey, _ := credentialData["secret_key"].(string)
-	credentialRegion, _ := credentialData["region"].(string)
-	if secretID == "" || secretKey == "" {
-		BadRequest(c, "腾讯云凭证缺少 SecretId 或 SecretKey")
-		return
-	}
-	if req.Region == "" {
-		req.Region = credentialRegion
-	}
-
 	payload := map[string]interface{}{}
 	if len(req.Payload) > 0 {
 		if err := json.Unmarshal(req.Payload, &payload); err != nil {
@@ -127,35 +109,58 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 			return
 		}
 	}
-	if err := normalizeAigcStorageMode(req.Action, payload); err != nil {
+	statusCode, contentType, responseBody, err := h.CallRaw(c, req.Action, req.Version, req.Region, payload)
+	if err != nil {
 		BadRequest(c, err.Error())
 		return
+	}
+	c.Data(statusCode, contentType, responseBody)
+}
+
+// CallRaw 使用本机加密保存的凭证调用腾讯云白名单 API，供 HTTP 路由与历史同步共用。
+// 调用方永远不接触 SecretId 或 SecretKey。
+func (h *TencentInvokeHandler) CallRaw(c *gin.Context, action, version, region string, payload map[string]interface{}) (int, string, []byte, error) {
+	action = strings.TrimSpace(action)
+	if _, allowed := h.AllowedActions[action]; !allowed {
+		return 0, "", nil, fmt.Errorf("不支持的腾讯云 Action")
+	}
+	if version == "" {
+		version = h.DefaultVersion
+	}
+	credentialData, err := h.loadTencentCredential()
+	if err != nil {
+		return 0, "", nil, err
+	}
+	secretID, _ := credentialData["secret_id"].(string)
+	secretKey, _ := credentialData["secret_key"].(string)
+	credentialRegion, _ := credentialData["region"].(string)
+	if secretID == "" || secretKey == "" {
+		return 0, "", nil, fmt.Errorf("腾讯云凭证缺少 SecretId 或 SecretKey")
+	}
+	if region == "" {
+		region = credentialRegion
+	}
+	if payload == nil {
+		payload = map[string]interface{}{}
+	}
+	if err := normalizeAigcStorageMode(action, payload); err != nil {
+		return 0, "", nil, err
 	}
 	if h.InjectSubAppID {
 		subAppID, parseErr := parsePositiveUint64(credentialData["sub_app_id"])
 		if parseErr != nil {
-			BadRequest(c, "腾讯云凭证中的 SubAppId 必须是正整数")
-			return
+			return 0, "", nil, fmt.Errorf("腾讯云凭证中的 SubAppId 必须是正整数")
 		}
-		// 服务端值始终覆盖浏览器输入，并序列化为 JSON number，满足腾讯云 uint64 类型要求。
 		payload["SubAppId"] = subAppID
 	}
-
 	signedPayload, err := json.Marshal(payload)
 	if err != nil {
-		InternalError(c, "payload 序列化失败")
-		return
+		return 0, "", nil, fmt.Errorf("payload 序列化失败")
 	}
-	timestamp := time.Now().Unix()
-	signed := service.SignVodRequest(
-		secretID, secretKey, req.Action, req.Version, req.Region,
-		h.Service, h.Host, string(signedPayload), timestamp,
-	)
-
+	signed := service.SignVodRequest(secretID, secretKey, action, version, region, h.Service, h.Host, string(signedPayload), time.Now().Unix())
 	httpReq, err := http.NewRequest("POST", "https://"+h.Host, bytes.NewReader(signedPayload))
 	if err != nil {
-		InternalError(c, "构造请求失败")
-		return
+		return 0, "", nil, fmt.Errorf("构造请求失败")
 	}
 	httpReq.Header.Set("Authorization", signed.Authorization)
 	httpReq.Header.Set("Content-Type", signed.ContentType)
@@ -166,29 +171,40 @@ func (h *TencentInvokeHandler) Invoke(c *gin.Context) {
 	if signed.XTCRegion != "" {
 		httpReq.Header.Set("X-TC-Region", signed.XTCRegion)
 	}
-
-	if h.Client == nil {
-		h.Client = &http.Client{Timeout: 120 * time.Second}
+	client := h.Client
+	if client == nil {
+		client = &http.Client{Timeout: 120 * time.Second}
 	}
 	upstreamStartedAt := time.Now()
-	response, err := h.Client.Do(httpReq)
+	response, err := client.Do(httpReq)
 	if err != nil {
-		logUpstreamTransportError(c, "tencent-cloud", h.Service, req.Action, upstreamStartedAt, err)
-		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
-			InternalError(c, "腾讯云 API 响应超时")
-		} else {
-			InternalError(c, "调用腾讯云 API 失败: "+err.Error())
+		if c != nil {
+			logUpstreamTransportError(c, "tencent-cloud", h.Service, action, upstreamStartedAt, err)
 		}
-		return
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
+			return 0, "", nil, fmt.Errorf("腾讯云 API 响应超时")
+		}
+		return 0, "", nil, fmt.Errorf("调用腾讯云 API 失败: %w", err)
 	}
 	defer response.Body.Close()
-	responseBody, _ := io.ReadAll(response.Body)
-	logUpstreamResult(c, "tencent-cloud", h.Service, req.Action, response.StatusCode, upstreamStartedAt, response.Header, responseBody)
+	responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, maxVODInvokeResponseBody+1))
+	if readErr != nil {
+		return 0, "", nil, fmt.Errorf("读取腾讯云 API 响应失败")
+	}
+	if len(responseBody) > maxVODInvokeResponseBody {
+		return 0, "", nil, fmt.Errorf("腾讯云 API 响应过大")
+	}
+	if c != nil {
+		logUpstreamResult(c, "tencent-cloud", h.Service, action, response.StatusCode, upstreamStartedAt, response.Header, responseBody)
+	}
 	contentType := response.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/json; charset=utf-8"
 	}
-	c.Data(response.StatusCode, contentType, responseBody)
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return response.StatusCode, contentType, responseBody, fmt.Errorf("腾讯云 API 返回 HTTP %d", response.StatusCode)
+	}
+	return response.StatusCode, contentType, responseBody, nil
 }
 
 func (h *TencentInvokeHandler) loadTencentCredential() (map[string]interface{}, error) {

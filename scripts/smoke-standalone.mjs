@@ -55,6 +55,21 @@ try {
     if (!html.includes('<title>TxStudio</title>') || !html.includes('id="root"')) {
         throw new Error('内嵌前端未正确返回');
     }
+    // 发布版可能以 localhost 打开页面、以 127.0.0.1 访问 API；这两种同机同端口来源都必须可保存设置。
+    const credentialResponse = await fetch(`http://127.0.0.1:${port}/api/credentials`, {
+        method: 'POST',
+        headers: {
+            Origin: `http://localhost:${port}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            provider: 'tokenhub',
+            data: { api_key: 'smoke-test-key', base_url: 'https://example.test' },
+        }),
+    });
+    if (!credentialResponse.ok || credentialResponse.headers.get('access-control-allow-origin') !== `http://localhost:${port}`) {
+        throw new Error(`发布版凭证保存 CORS 校验失败：HTTP ${credentialResponse.status}`);
+    }
     for (const relativePath of ['txstudio.db', 'secret.key', path.join('logs', 'txstudio.log')]) {
         if (!existsSync(path.join(dataDir, relativePath))) {
             throw new Error(`首次运行未创建 ${relativePath}`);

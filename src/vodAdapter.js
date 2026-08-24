@@ -735,6 +735,8 @@ export async function runVodAigcPipeline(params, ctx = {}) {
         ? await createAigcVideoTask(createParams, ctx)
         : await createAigcImageTask(createParams, ctx);
     emit('task_created', { taskId });
+    // 云端任务 ID 是浏览器中断后的唯一恢复锚点，必须在开始轮询前尽力落库。
+    await tracker?.flush();
 
     // 3) 轮询
     const taskDetail = await pollVodTask(taskId, ctx, {

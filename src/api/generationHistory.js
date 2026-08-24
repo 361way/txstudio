@@ -28,6 +28,9 @@ export const listGenerationImageAssets = (projectId, limit = 60) => {
 };
 
 export const getGenerationJob = (id) => apiGet(`/api/generation-jobs/${id}`);
+export const syncGenerationJob = (id) => apiPost(`/api/generation-jobs/${id}/sync`);
+export const syncPendingGenerationJobs = (limit = 8) => apiPost(`/api/generation-jobs/sync?limit=${Math.max(1, Math.min(16, Number(limit) || 8))}`);
+export const importVODGenerationTask = (cloudTaskId) => apiPost('/api/generation-jobs/import-vod-task', { cloud_task_id: cloudTaskId });
 export const createGenerationJob = (job) => apiPost('/api/generation-jobs', compact(job));
 export const updateGenerationJob = (id, updates) => apiPut(`/api/generation-jobs/${id}`, compact(updates));
 export const deleteGenerationJob = (id) => apiDelete(`/api/generation-jobs/${id}`);

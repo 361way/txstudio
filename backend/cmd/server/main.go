@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os/exec"
 	"runtime"
 	"time"
@@ -31,16 +32,19 @@ func openBrowser(url string) error {
 	return command.Start()
 }
 
-func openBrowserWhenReady(address, url string) {
+func openBrowserWhenReady(url string) {
 	deadline := time.Now().Add(15 * time.Second)
+	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for time.Now().Before(deadline) {
-		connection, err := net.DialTimeout("tcp", address, 300*time.Millisecond)
+		response, err := client.Get(url + "/health")
 		if err == nil {
-			_ = connection.Close()
-			if err := openBrowser(url); err != nil {
-				log.Printf("[browser] 无法自动打开浏览器，请手动访问 %s: %v", url, err)
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				if err := openBrowser(url); err != nil {
+					log.Printf("[browser] 无法自动打开浏览器，请手动访问 %s: %v", url, err)
+				}
+				return
 			}
-			return
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -77,13 +81,17 @@ func main() {
 	}
 
 	address := fmt.Sprintf("127.0.0.1:%d", cfg.Server.Port)
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatalf("[fatal] 端口 %d 已被占用或无法监听: %v", cfg.Server.Port, err)
+	}
 	url := "http://" + address
 	log.Printf("[server] TxStudio %s", version)
 	log.Printf("[server] 数据目录: %s", cfg.DataDir)
 	if *openUI {
-		go openBrowserWhenReady(address, url)
+		go openBrowserWhenReady(url)
 	}
-	if err := a.Run(); err != nil {
+	if err := a.Serve(listener); err != nil {
 		log.Fatalf("[fatal] 服务启动失败: %v", err)
 	}
 }

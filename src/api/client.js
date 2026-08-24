@@ -3,7 +3,9 @@
  * 所有请求直接访问同源 Go 服务；开发环境由 Vite 代理到本地后端。
  */
 
-const DEFAULT_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '';
+// 发布单二进制的前端与 Go API 必须同源，避免 CI 环境变量将凭证保存请求指向其他服务。
+// 仅开发模式允许用 VITE_API_BASE_URL 配合 Vite 代理或独立后端调试。
+const DEFAULT_BASE_URL = import.meta.env?.DEV ? (import.meta.env?.VITE_API_BASE_URL || '') : '';
 
 export async function apiRequest(path, options = {}, _skipAuth = false, rawResponse = false) {
     const url = path.startsWith('http') ? path : `${DEFAULT_BASE_URL}${path}`;

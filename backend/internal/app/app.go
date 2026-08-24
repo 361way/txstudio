@@ -3,7 +3,11 @@ package app
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"cnb.cool/txcloud/txstudio/backend/frontend"
@@ -19,10 +23,11 @@ import (
 )
 
 type App struct {
-	Config *Config
-	DB     *gorm.DB
-	Crypto *service.CryptoService
-	Router *gin.Engine
+	Config            *Config
+	DB                *gorm.DB
+	Crypto            *service.CryptoService
+	Router            *gin.Engine
+	GenerationHandler *handler.GenerationHandler
 }
 
 func NewApp(cfg *Config) (*App, error) {
@@ -59,27 +64,64 @@ func NewApp(cfg *Config) (*App, error) {
 
 func (a *App) Run() error {
 	addr := fmt.Sprintf("127.0.0.1:%d", a.Config.Server.Port)
-	log.Printf("[server] TxStudio 本地服务启动: http://%s", addr)
-	return a.Router.Run(addr)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	return a.Serve(listener)
 }
 
-func (a *App) registerRoutes() error {
-	router := a.Router
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+// Serve 使用已成功绑定的监听器启动服务，避免端口被旧进程占用时误打开其他服务页面。
+func (a *App) Serve(listener net.Listener) error {
+	log.Printf("[server] TxStudio 本地服务启动: http://%s", listener.Addr().String())
+	a.GenerationHandler.StartCloudSyncLoop()
+	return a.Router.RunListener(listener)
+}
+
+func isAllowedLocalUIOrigin(origin string, serverPort int) bool {
+	parsed, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil || parsed.Scheme != "http" || parsed.User != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "localhost" && host != "127.0.0.1" {
+		return false
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil || port <= 0 || port > 65535 {
+		return false
+	}
+	// 仅允许当前单二进制自身的同源页面；开发服务器来源仅在 debug 模式下启用。
+	return port == serverPort
+}
+
+func localCORSConfig(serverPort int, mode string) cors.Config {
+	return cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			if isAllowedLocalUIOrigin(origin, serverPort) {
+				return true
+			}
+			return strings.EqualFold(mode, gin.DebugMode) && isAllowedLocalUIOrigin(origin, 5173)
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"*"},
 		ExposeHeaders:    []string{"*"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
-	}))
+	}
+}
+
+func (a *App) registerRoutes() error {
+	router := a.Router
+	router.Use(cors.New(localCORSConfig(a.Config.Server.Port, a.Config.Server.Mode)))
 
 	projectHandler := &handler.ProjectHandler{DB: a.DB}
-	generationHandler := &handler.GenerationHandler{DB: a.DB}
 	imageTemplateHandler := &handler.ImageTemplateHandler{DB: a.DB}
 	credentialHandler := &handler.CredentialHandler{DB: a.DB, Crypto: a.Crypto}
 	proxyHandler := handler.NewProxyHandler(a.DB, a.Crypto)
 	vodHandler := handler.NewVODInvokeHandler(a.DB, a.Crypto)
+	generationHandler := &handler.GenerationHandler{DB: a.DB, VOD: vodHandler}
+	a.GenerationHandler = generationHandler
 	mpsHandler := handler.NewMPSInvokeHandler(a.DB, a.Crypto)
 	agentChatHandler := handler.NewAgentChatHandler(a.DB, a.Crypto, a.Config.Agent.APIKey, a.Config.Agent.BaseURL)
 	mpsAssetHandler := &handler.MPSAssetHandler{DB: a.DB, Crypto: a.Crypto}
@@ -125,9 +167,12 @@ func (a *App) registerRoutes() error {
 		generationJobs := api.Group("/generation-jobs")
 		{
 			generationJobs.GET("/assets", generationHandler.ListAssets)
+			generationJobs.POST("/sync", generationHandler.SyncPending)
+			generationJobs.POST("/import-vod-task", generationHandler.ImportVODTask)
 			generationJobs.GET("", generationHandler.List)
 			generationJobs.POST("", generationHandler.Create)
 			generationJobs.GET("/:id", generationHandler.Get)
+			generationJobs.POST("/:id/sync", generationHandler.Sync)
 			generationJobs.PUT("/:id", generationHandler.Update)
 			generationJobs.DELETE("/:id", generationHandler.Delete)
 		}

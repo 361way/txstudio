@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cnb.cool/txcloud/txstudio/backend/internal/model"
@@ -28,7 +30,12 @@ var allowedGenerationTypes = map[string]bool{
 }
 
 type GenerationHandler struct {
-	DB *gorm.DB
+	DB  *gorm.DB
+	VOD *TencentInvokeHandler
+
+	cloudSyncOnce sync.Once
+	cloudSyncMu   sync.Mutex
+	cloudImportMu sync.Mutex
 }
 
 type generationEventReq struct {
@@ -88,6 +95,18 @@ type generationDetail struct {
 	model.GenerationJob
 	Assets []model.GenerationAsset `json:"assets"`
 	Events []model.GenerationEvent `json:"events"`
+}
+
+type generationSyncResult struct {
+	JobID       uint   `json:"job_id"`
+	CloudTaskID string `json:"cloud_task_id"`
+	Status      string `json:"status"`
+	Outputs     int    `json:"outputs"`
+	Message     string `json:"message"`
+}
+
+type importVODTaskReq struct {
+	CloudTaskID string `json:"cloud_task_id"`
 }
 
 func cleanText(value string, max int) string {
@@ -174,6 +193,406 @@ func upsertGenerationAssets(tx *gorm.DB, jobID uint, items []generationAssetReq)
 	return nil
 }
 
+func mapAny(value any) map[string]any {
+	mapped, _ := value.(map[string]any)
+	return mapped
+}
+
+func stringAny(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case json.Number:
+		return typed.String()
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(typed)
+	default:
+		return ""
+	}
+}
+
+func intAny(value any) int {
+	parsed, _ := strconv.Atoi(stringAny(value))
+	return parsed
+}
+
+func floatAny(value any) float64 {
+	parsed, _ := strconv.ParseFloat(stringAny(value), 64)
+	return parsed
+}
+
+func vodTaskNode(response map[string]any) map[string]any {
+	for _, key := range []string{"AigcImageTask", "AigcVideoTask", "SceneAigcImageTask", "SceneAigcVideoTask"} {
+		if node := mapAny(response[key]); len(node) > 0 {
+			return node
+		}
+	}
+	return nil
+}
+
+func mediaTypeForGenerationJob(job model.GenerationJob) string {
+	if job.Type == "video" {
+		return "video"
+	}
+	return "image"
+}
+
+func mimeTypeForVODFile(fileType string) string {
+	switch strings.ToLower(strings.TrimSpace(fileType)) {
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "png":
+		return "image/png"
+	case "webp":
+		return "image/webp"
+	case "mp4":
+		return "video/mp4"
+	case "mov":
+		return "video/quicktime"
+	default:
+		return ""
+	}
+}
+
+func extractVODOutputAssets(job model.GenerationJob, taskNode map[string]any) []generationAssetReq {
+	output := mapAny(taskNode["Output"])
+	fileInfos, _ := output["FileInfos"].([]any)
+	assets := make([]generationAssetReq, 0, len(fileInfos))
+	for _, value := range fileInfos {
+		fileInfo := mapAny(value)
+		fileURL := stringAny(fileInfo["FileUrl"])
+		if !strings.HasPrefix(fileURL, "http://") && !strings.HasPrefix(fileURL, "https://") {
+			continue
+		}
+		metadata := mapAny(fileInfo["MetaData"])
+		assets = append(assets, generationAssetReq{
+			Role:            "output",
+			Ordinal:         len(assets),
+			MediaType:       mediaTypeForGenerationJob(job),
+			CloudFileID:     stringAny(fileInfo["FileId"]),
+			CloudURL:        fileURL,
+			StorageProvider: "tencent-vod",
+			StorageMode:     normalizedStorageMode(job.StorageMode),
+			MimeType:        mimeTypeForVODFile(stringAny(fileInfo["FileType"])),
+			FileSize:        int64(floatAny(metadata["Size"])),
+			Width:           intAny(metadata["Width"]),
+			Height:          intAny(metadata["Height"]),
+			Duration:        floatAny(metadata["Duration"]),
+			Metadata: map[string]any{
+				"cloud_task_status": stringAny(taskNode["Status"]),
+				"file_type":         stringAny(fileInfo["FileType"]),
+			},
+		})
+	}
+	if len(assets) == 0 {
+		// 部分 VOD 返回仅提供 URL 数组，不携带 FileInfos；仍可恢复可展示媒体。
+		for _, key := range []string{"FileUrls", "Urls", "OutputUrls"} {
+			values, _ := output[key].([]any)
+			for _, value := range values {
+				fileURL := stringAny(value)
+				if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
+					assets = append(assets, generationAssetReq{
+						Role: "output", Ordinal: len(assets), MediaType: mediaTypeForGenerationJob(job), CloudURL: fileURL,
+						StorageProvider: "tencent-vod", StorageMode: normalizedStorageMode(job.StorageMode),
+						Metadata: map[string]any{"cloud_task_status": stringAny(taskNode["Status"]), "output_field": key},
+					})
+				}
+			}
+		}
+	}
+	return assets
+}
+
+func (h *GenerationHandler) persistVODSync(job *model.GenerationJob, status string, progress int, errorCode, errorMessage string, assets []generationAssetReq, event generationEventReq) error {
+	return h.DB.Transaction(func(tx *gorm.DB) error {
+		updates := map[string]any{
+			"status":        status,
+			"progress":      progress,
+			"error_code":    cleanText(errorCode, 128),
+			"error_message": cleanText(errorMessage, 4000),
+		}
+		if status == "completed" || status == "completed_with_errors" || status == "failed" || status == "cancelled" {
+			now := time.Now()
+			updates["finished_at"] = &now
+		}
+		if err := tx.Model(job).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := upsertGenerationAssets(tx, job.ID, assets); err != nil {
+			return err
+		}
+		return appendGenerationEvent(tx, job.ID, event)
+	})
+}
+
+func (h *GenerationHandler) describeVODTask(taskID string) (map[string]any, map[string]any, string, error) {
+	if h.VOD == nil {
+		return nil, nil, "", fmt.Errorf("腾讯云同步服务未初始化")
+	}
+	_, _, rawResponse, err := h.VOD.CallRaw(nil, "DescribeTaskDetail", "2018-07-17", "", map[string]any{"TaskId": taskID})
+	if err != nil {
+		return nil, nil, "", err
+	}
+	var envelope struct {
+		Response map[string]any `json:"Response"`
+	}
+	if err := json.Unmarshal(rawResponse, &envelope); err != nil {
+		return nil, nil, "", fmt.Errorf("解析腾讯云任务响应失败")
+	}
+	if cloudError := mapAny(envelope.Response["Error"]); len(cloudError) > 0 {
+		return nil, nil, "", fmt.Errorf("腾讯云任务查询失败: %s", stringAny(cloudError["Message"]))
+	}
+	taskNode := vodTaskNode(envelope.Response)
+	if len(taskNode) == 0 {
+		return nil, nil, "", fmt.Errorf("腾讯云响应未包含 AIGC 任务详情")
+	}
+	return envelope.Response, taskNode, strings.ToUpper(stringAny(envelope.Response["Status"])), nil
+}
+
+// SyncCloudTask 查询 VOD 的真实状态，并把完成结果原子写回统一生成历史。
+func (h *GenerationHandler) SyncCloudTask(job *model.GenerationJob) (generationSyncResult, error) {
+	h.cloudSyncMu.Lock()
+	defer h.cloudSyncMu.Unlock()
+
+	if err := h.DB.First(job, job.ID).Error; err != nil {
+		return generationSyncResult{JobID: job.ID}, fmt.Errorf("生成任务不存在")
+	}
+	result := generationSyncResult{JobID: job.ID, CloudTaskID: job.CloudTaskID, Status: job.Status}
+	if job.Provider != "tencent-vod" || strings.TrimSpace(job.CloudTaskID) == "" {
+		return result, fmt.Errorf("该任务没有可同步的腾讯云任务 ID")
+	}
+	// 已有输出的成功任务无需重复查询或追加事件，保证手动同步幂等。
+	if job.Status == "completed" {
+		var outputs int64
+		if err := h.DB.Model(&model.GenerationAsset{}).Where("job_id = ? AND role = ? AND cloud_url <> ''", job.ID, "output").Count(&outputs).Error; err != nil {
+			return result, err
+		}
+		if outputs > 0 {
+			result.Outputs = int(outputs)
+			result.Message = "任务已同步完成"
+			return result, nil
+		}
+	}
+	_, taskNode, cloudStatus, err := h.describeVODTask(job.CloudTaskID)
+	if err != nil {
+		return result, err
+	}
+	progress := intAny(taskNode["Progress"])
+	if progress < 0 || progress > 100 {
+		progress = 0
+	}
+	if cloudStatus == "FINISH" {
+		errorCode := stringAny(taskNode["ErrCodeExt"])
+		if errorCode == "" || errorCode == "0" {
+			errorCode = stringAny(taskNode["ErrCode"])
+		}
+		if errorCode != "" && errorCode != "0" {
+			message := stringAny(taskNode["Message"])
+			if message == "" {
+				message = "腾讯云 AIGC 任务失败"
+			}
+			if err := h.persistVODSync(job, "failed", 100, errorCode, message, nil, generationEventReq{Stage: "cloud_sync_failed", Level: "error", Message: message}); err != nil {
+				return result, err
+			}
+			result.Status = "failed"
+			result.Message = message
+			return result, nil
+		}
+		assets := extractVODOutputAssets(*job, taskNode)
+		if len(assets) == 0 {
+			message := "云端任务已完成，但未返回可展示的输出文件"
+			if err := h.persistVODSync(job, "completed_with_errors", 100, "OUTPUT_NOT_FOUND", message, nil, generationEventReq{Stage: "cloud_sync_partial", Level: "warning", Message: message}); err != nil {
+				return result, err
+			}
+			result.Status = "completed_with_errors"
+			result.Message = message
+			return result, nil
+		}
+		if err := h.persistVODSync(job, "completed", 100, "", "", assets, generationEventReq{Stage: "cloud_sync_completed", Level: "info", Message: "已从腾讯云同步完成结果", Metadata: map[string]any{"outputs": len(assets)}}); err != nil {
+			return result, err
+		}
+		result.Status = "completed"
+		result.Outputs = len(assets)
+		result.Message = "已同步云端完成结果"
+		return result, nil
+	}
+	if cloudStatus == "ABORTED" || cloudStatus == "FAILED" {
+		message := stringAny(taskNode["Message"])
+		if message == "" {
+			message = "腾讯云任务已终止"
+		}
+		if err := h.persistVODSync(job, "failed", progress, stringAny(taskNode["ErrCode"]), message, nil, generationEventReq{Stage: "cloud_sync_failed", Level: "error", Message: message}); err != nil {
+			return result, err
+		}
+		result.Status = "failed"
+		result.Message = message
+		return result, nil
+	}
+	if progress == 0 {
+		progress = job.Progress
+	}
+	if job.Status != "running" || job.Progress != progress {
+		if err := h.persistVODSync(job, "running", progress, "", "", nil, generationEventReq{Stage: "cloud_sync_running", Level: "info", Message: "已同步腾讯云任务状态", Metadata: map[string]any{"cloud_status": cloudStatus}}); err != nil {
+			return result, err
+		}
+	}
+	result.Status = "running"
+	result.Message = "云端任务仍在处理中"
+	return result, nil
+}
+
+func (h *GenerationHandler) Sync(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		BadRequest(c, "任务 ID 无效")
+		return
+	}
+	var job model.GenerationJob
+	if err := h.DB.First(&job, id).Error; err != nil {
+		NotFound(c, "生成任务不存在")
+		return
+	}
+	result, err := h.SyncCloudTask(&job)
+	if err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+	OK(c, result)
+}
+
+// ImportVODTask 将云端已存在、但本地记录缺失的 AIGC 任务导入生成历史。
+func (h *GenerationHandler) ImportVODTask(c *gin.Context) {
+	h.cloudImportMu.Lock()
+	defer h.cloudImportMu.Unlock()
+
+	var req importVODTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "请求参数无效")
+		return
+	}
+	taskID := cleanText(req.CloudTaskID, 255)
+	if !strings.Contains(taskID, "-AigcImageTask-") && !strings.Contains(taskID, "-AigcVideoTask-") {
+		BadRequest(c, "仅支持导入腾讯云 AIGC 图片或视频任务")
+		return
+	}
+	var existing model.GenerationJob
+	if err := h.DB.Where("cloud_task_id = ?", taskID).First(&existing).Error; err == nil {
+		result, syncErr := h.SyncCloudTask(&existing)
+		if syncErr != nil {
+			BadRequest(c, syncErr.Error())
+			return
+		}
+		OK(c, result)
+		return
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		InternalError(c, "查询已有任务失败")
+		return
+	}
+	response, taskNode, _, err := h.describeVODTask(taskID)
+	if err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+	input := mapAny(taskNode["Input"])
+	outputConfig := mapAny(input["OutputConfig"])
+	taskType := stringAny(response["TaskType"])
+	jobType := "image"
+	if strings.Contains(taskType, "Video") {
+		jobType = "video"
+	}
+	createdAt := time.Now()
+	if parsed, parseErr := time.Parse(time.RFC3339, stringAny(response["CreateTime"])); parseErr == nil {
+		createdAt = parsed
+	}
+	job := model.GenerationJob{
+		ClientID:     "cloud-recovery:" + taskID,
+		Source:       "cloud_recovery",
+		Type:         jobType,
+		Provider:     "tencent-vod",
+		CloudTaskID:  taskID,
+		Status:       "running",
+		Progress:     0,
+		Prompt:       cleanText(stringAny(input["Prompt"]), 20000),
+		ModelName:    cleanText(stringAny(input["ModelName"]), 128),
+		ModelVersion: cleanText(stringAny(input["ModelVersion"]), 128),
+		Parameters:   safeJSON(input),
+		StorageMode:  normalizedStorageMode(stringAny(outputConfig["StorageMode"])),
+		StartedAt:    &createdAt,
+	}
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&job).Error; err != nil {
+			return err
+		}
+		return appendGenerationEvent(tx, job.ID, generationEventReq{Stage: "cloud_imported", Level: "info", Message: "已从腾讯云导入历史任务", Metadata: map[string]any{"task_type": taskType}})
+	}); err != nil {
+		InternalError(c, "创建恢复任务失败")
+		return
+	}
+	result, syncErr := h.SyncCloudTask(&job)
+	if syncErr != nil {
+		// 云端查询临时失败时保留已导入的 running 记录，后台补偿将继续重试。
+		c.JSON(202, gin.H{"success": true, "data": gin.H{"job_id": job.ID, "cloud_task_id": taskID, "status": "running", "message": "任务已导入，等待云端状态同步"}})
+		return
+	}
+	OK(c, result)
+}
+
+func (h *GenerationHandler) SyncRecentPending(limit int) ([]generationSyncResult, error) {
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 16 {
+		limit = 16
+	}
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+	var jobs []model.GenerationJob
+	if err := h.DB.Where("provider = ? AND status IN ? AND cloud_task_id <> '' AND created_at >= ?", "tencent-vod", []string{"queued", "running"}, cutoff).
+		Order("created_at DESC").Limit(limit).Find(&jobs).Error; err != nil {
+		return nil, err
+	}
+	results := make([]generationSyncResult, 0, len(jobs))
+	for index := range jobs {
+		result, syncErr := h.SyncCloudTask(&jobs[index])
+		if syncErr != nil {
+			result.Message = syncErr.Error()
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+// StartCloudSyncLoop 在本地服务运行期间补偿近期被浏览器中断的 VOD 任务。
+// 仅扫描带 cloud_task_id 的 queued/running 任务，已完成任务不会重复请求云端。
+func (h *GenerationHandler) StartCloudSyncLoop() {
+	h.cloudSyncOnce.Do(func() {
+		go func() {
+			initialDelay := time.NewTimer(8 * time.Second)
+			defer initialDelay.Stop()
+			<-initialDelay.C
+			if _, err := h.SyncRecentPending(8); err != nil {
+				// 凭证尚未配置或网络暂不可用时静默等待下一轮，不影响本地服务。
+			}
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				_, _ = h.SyncRecentPending(8)
+			}
+		}()
+	})
+}
+
+func (h *GenerationHandler) SyncPending(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "8"))
+	results, err := h.SyncRecentPending(limit)
+	if err != nil {
+		InternalError(c, "查询待同步任务失败")
+		return
+	}
+	OK(c, gin.H{"items": results, "count": len(results)})
+}
+
 func (h *GenerationHandler) ListAssets(c *gin.Context) {
 	rawProjectID := strings.TrimSpace(c.Query("project_id"))
 	projectID, err := strconv.ParseUint(rawProjectID, 10, 64)
@@ -238,7 +657,7 @@ func (h *GenerationHandler) List(c *gin.Context) {
 	}
 	if value := cleanText(c.Query("q"), 200); value != "" {
 		pattern := "%" + strings.ReplaceAll(strings.ReplaceAll(value, "%", "\\%"), "_", "\\_") + "%"
-		query = query.Where("prompt LIKE ? ESCAPE '\\' OR model_name LIKE ? ESCAPE '\\'", pattern, pattern)
+		query = query.Where("prompt LIKE ? ESCAPE '\\' OR model_name LIKE ? ESCAPE '\\' OR cloud_task_id LIKE ? ESCAPE '\\'", pattern, pattern, pattern)
 	}
 
 	var total int64
