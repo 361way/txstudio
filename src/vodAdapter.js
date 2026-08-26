@@ -47,7 +47,7 @@ export const VOD_VIDEO_MODEL_MATRIX = {
     OS: ['2.0'],
     Hunyuan: ['1.5'],
     Mingmou: ['1.0'],
-    PixVerse: ['v5.6', 'v6', 'c1']
+    PixVerse: ['v6', 'c1']
 };
 
 // ============================================================================
@@ -315,6 +315,45 @@ async function resolveBlob(input, ctx = {}) {
     throw new Error('[VOD Upload] 不支持的输入类型');
 }
 
+const PIXVERSE_REFERENCE_MAX_PIXELS = 16 * 1024 * 1024;
+
+async function normalizePixVerseReference(input, ctx) {
+    const { blob, mime } = await resolveBlob(input, ctx);
+    const normalizedMime = String(mime || '').toLowerCase();
+    const maxBytes = PIXVERSE_VIDEO_CAPABILITY.maxReferenceImageBytes;
+    if (!blob.size || blob.size > maxBytes) {
+        throw new Error(`PixVerse v6 参考图须为不超过 ${Math.floor(maxBytes / 1024 / 1024)}MB 的 JPG 或 PNG 图片`);
+    }
+    if (['image/jpeg', 'image/jpg', 'image/png'].includes(normalizedMime)) return blob;
+    if (normalizedMime !== 'image/webp') {
+        throw new Error('PixVerse v6 参考图仅支持 JPG 或 PNG 图片');
+    }
+    if (typeof createImageBitmap !== 'function') {
+        throw new Error('当前浏览器无法转换 WEBP，请改用 JPG 或 PNG 图片');
+    }
+    const bitmap = await createImageBitmap(blob);
+    try {
+        if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > PIXVERSE_REFERENCE_MAX_PIXELS) {
+            throw new Error('PixVerse v6 参考图尺寸无效或像素过大，请改用较小的 JPG 或 PNG 图片');
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('当前浏览器无法处理参考图');
+        context.drawImage(bitmap, 0, 0);
+        const converted = await new Promise((resolve, reject) => {
+            canvas.toBlob((value) => value ? resolve(value) : reject(new Error('WEBP 转换 JPG 失败')), 'image/jpeg', 0.92);
+        });
+        if (converted.size > maxBytes) {
+            throw new Error(`转换后的参考图超过 ${Math.floor(maxBytes / 1024 / 1024)}MB，请使用更小的 JPG 或 PNG 图片`);
+        }
+        return converted;
+    } finally {
+        bitmap.close?.();
+    }
+}
+
 function mimeToExt(mime) {
     const m = String(mime || '').toLowerCase();
     if (m.includes('png')) return 'png';
@@ -432,6 +471,37 @@ export async function uploadImageToVod(imageInput, ctx) {
         throw new Error('[VOD Upload] CommitUpload 未返回 FileId');
     }
     return { fileId: commitResp.FileId, mediaUrl: commitResp.MediaUrl };
+}
+
+async function waitForVodImageReady(fileId, ctx, { timeoutMs = 30000, intervalMs = 1000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastStatus = '';
+    while (Date.now() < deadline) {
+        const response = await callVodApi('DescribeMediaInfos', {
+            FileIds: [fileId],
+            SubAppId: ctx.credentials.subAppId,
+        }, ctx);
+        const media = Array.isArray(response.MediaInfoSet) ? response.MediaInfoSet[0] : null;
+        const basic = media?.BasicInfo || {};
+        const metadata = media?.MetaData || {};
+        lastStatus = String(basic.Status || '');
+        const width = Number(metadata.Width || 0);
+        const height = Number(metadata.Height || 0);
+        if (lastStatus === 'Normal') {
+            if (basic.Category !== 'Image' || !width || !height) {
+                throw new Error('PixVerse 参考图上传后未被 VOD 识别为有效图片');
+            }
+            if (width > 4000 || height > 4000) {
+                throw new Error(`PixVerse 参考图尺寸不能超过 4000×4000，当前为 ${width}×${height}`);
+            }
+            return { width, height, mediaUrl: basic.MediaUrl || '' };
+        }
+        if (lastStatus === 'Failed' || lastStatus === 'Forbidden') {
+            throw new Error(`PixVerse 参考图媒资处理失败（VOD 状态：${lastStatus}）`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`PixVerse 参考图仍未在 VOD 中就绪（最后状态：${lastStatus || '未知'}），请稍后重试`);
 }
 
 // ============================================================================
@@ -665,51 +735,98 @@ export async function runVodAigcPipeline(params, ctx = {}) {
     };
 
     try {
-    // 1) 上传参考图（如有）
-    const sourceImages = Array.isArray(params.sourceImages)
-        ? params.sourceImages.filter(Boolean)
-        : [];
+    // 1) 上传参考图（如有）。默认统一转为 VOD FileId，避免模型端拉取临时/私有 URL 失败。
     const sourceFileInfos = Array.isArray(params.sourceFileInfos) ? params.sourceFileInfos : null;
+    const rawLastFrameIndex = Number.isInteger(params.lastFrameSourceIndex) ? params.lastFrameSourceIndex : -1;
+    const sourceEntries = (Array.isArray(params.sourceImages) ? params.sourceImages : [])
+        .map((source, originalIndex) => ({
+            source,
+            originalIndex,
+            meta: sourceFileInfos?.[originalIndex] ?? null,
+            isLastFrame: originalIndex === rawLastFrameIndex,
+        }))
+        .filter((entry) => Boolean(entry.source));
+    const videoCapability = params.type === 'video'
+        ? getVodVideoModelCapability(params.modelName, params.modelVersion)
+        : null;
+    const forceVodFileIdReferences = !!videoCapability?.forceVodFileIdReferences;
+    const isPixVerseVideo = params.type === 'video' && params.modelName === 'PixVerse';
+    const isPixVerseVideoEdit = isPixVerseVideo && !!videoCapability?.supportsVideoEditing;
+    const canReferenceUrlDirectly = params.allowDirectReferenceUrls === true && !forceVodFileIdReferences;
     const uploadResults = [];
-    const sourceRoleAt = (index) => index === params.lastFrameSourceIndex
+    const sourceRoleAt = (entry) => entry.isLastFrame
         ? 'last_frame'
-        : index === 0 && sourceFileInfos?.[index]?.Usage === 'FirstFrame'
+        : entry.originalIndex === 0 && entry.meta?.Usage === 'FirstFrame'
             ? 'first_frame'
             : 'reference';
-    const isInnerIpUrl = (url) => {
-        if (typeof url !== 'string') return false;
-        // 内网 IP / 本地地址：127.x.x.x、192.168.x.x、10.x.x.x、172.16-31.x.x、localhost、0.0.0.0
-        return /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?(\/|$)/i.test(url);
-    };
-    for (let i = 0; i < sourceImages.length; i++) {
-        const source = sourceImages[i];
-        const canReferenceUrlDirectly = !!sourceFileInfos && typeof source === 'string' && /^https?:\/\//i.test(source) && !isInnerIpUrl(source);
-        emit('upload_start', { index: i, total: sourceImages.length, directUrl: canReferenceUrlDirectly });
-        if (canReferenceUrlDirectly) {
-            uploadResults.push({ url: source });
-            emit('upload_done', { index: i, total: sourceImages.length, role: sourceRoleAt(i), url: source, directUrl: true });
+    for (let index = 0; index < sourceEntries.length; index++) {
+        const entry = sourceEntries[index];
+        const directUrl = canReferenceUrlDirectly
+            && typeof entry.source === 'string'
+            && /^https?:\/\//i.test(entry.source);
+        emit('upload_start', { index, total: sourceEntries.length, directUrl });
+        if (directUrl) {
+            uploadResults.push({ ...entry, url: entry.source });
+            emit('upload_done', { index, total: sourceEntries.length, role: sourceRoleAt(entry), url: entry.source, directUrl: true });
             continue;
         }
-        const uploadResult = await uploadImageToVod(source, ctx);
-        uploadResults.push(uploadResult);
-        emit('upload_done', { index: i, total: sourceImages.length, role: sourceRoleAt(i), fileId: uploadResult.fileId });
+        const isPixVerseEditInput = isPixVerseVideoEdit || entry.meta?.Category === 'Video';
+        const uploadInput = isPixVerseVideo && !isPixVerseEditInput
+            ? await normalizePixVerseReference(entry.source, ctx)
+            : entry.source;
+        const uploadResult = await uploadImageToVod(uploadInput, ctx);
+        const pixVerseMedia = isPixVerseVideo && !isPixVerseEditInput
+            ? await waitForVodImageReady(uploadResult.fileId, ctx)
+            : null;
+        uploadResults.push({ ...entry, ...uploadResult, pixVerseMedia });
+        const donePayload = { index, total: sourceEntries.length, role: sourceRoleAt(entry), fileId: uploadResult.fileId };
+        if (isPixVerseEditInput) {
+            donePayload.mediaUrl = uploadResult.mediaUrl;
+        } else {
+            donePayload.width = pixVerseMedia?.width;
+            donePayload.height = pixVerseMedia?.height;
+        }
+        emit('upload_done', donePayload);
     }
     const fileIds = uploadResults.map((item) => item.fileId).filter(Boolean);
     const fileInfos = sourceFileInfos
         ? uploadResults
             .map((item, index) => {
-                const meta = sourceFileInfos[index];
-                if (!meta) return null;
-                if (item.fileId) return { FileId: item.fileId, ...meta };
-                if (item.url) return { ...meta, Type: meta.Type || 'Url', Url: item.url };
-                return null;
+                if (!item.meta) return null;
+                const pixVerseMeta = isPixVerseVideo
+                    ? {
+                        Type: 'Url',
+                        Url: item.mediaUrl || item.pixVerseMedia?.mediaUrl || item.url,
+                    }
+                    : { FileId: item.fileId };
+                if (isPixVerseVideo && !pixVerseMeta.Url) return null;
+                if (!isPixVerseVideo && !pixVerseMeta.FileId) return null;
+                const referenceMeta = isPixVerseVideo && item.meta.Usage === 'Reference'
+                    ? {
+                        Category: item.meta.Category || 'Image',
+                        Text: item.meta.Text || `pic${index + 1}`,
+                        Usage: 'Reference',
+                        ...(item.meta.ReferenceType ? { ReferenceType: item.meta.ReferenceType } : {}),
+                    }
+                    : item.meta;
+                return { ...pixVerseMeta, ...referenceMeta };
             })
             .filter(Boolean)
         : null;
-    const lastFrameSourceIndex = Number.isInteger(params.lastFrameSourceIndex) ? params.lastFrameSourceIndex : -1;
-    const lastFrameSource = lastFrameSourceIndex >= 0 ? uploadResults[lastFrameSourceIndex] : null;
-    const lastFrameFileId = lastFrameSource?.fileId;
-    const lastFrameUrl = lastFrameSource?.url;
+    const lastFrameSource = uploadResults.find((item) => item.isLastFrame) || null;
+    const lastFrameFileId = isPixVerseVideo ? undefined : lastFrameSource?.fileId;
+    const lastFrameUrl = isPixVerseVideo
+        ? (lastFrameSource?.mediaUrl || lastFrameSource?.pixVerseMedia?.mediaUrl || lastFrameSource?.url)
+        : lastFrameSource?.url;
+    if (isPixVerseVideo && sourceFileInfos && fileInfos?.length !== uploadResults.filter((item) => item.meta).length) {
+        throw new Error('PixVerse 参考图上传完成但未取得公网 MediaUrl，无法按 Url 请求提交');
+    }
+    if (isPixVerseVideo && lastFrameSource && !lastFrameUrl) {
+        throw new Error('PixVerse 尾帧上传完成但未取得公网 MediaUrl');
+    }
+    if (lastFrameSource && !uploadResults.some((item) => item.meta?.Usage === 'FirstFrame')) {
+        throw new Error(`${params.modelName} ${params.modelVersion} 的尾帧必须与首帧一起使用，请先提供首帧图片`);
+    }
 
     // 2) 创建任务
     const outputConfig = {
@@ -755,8 +872,15 @@ export async function runVodAigcPipeline(params, ctx = {}) {
     await tracker?.complete({ urls, fileIds: outputFileIds, mediaType: params.type });
     return { urls, taskId, taskDetail, outputFileIds, historyJobId: tracker?.id };
     } catch (error) {
-        await tracker?.fail(error, error?.name === 'AbortError' ? 'cancelled' : 'failed');
-        throw error;
+        const originalError = error instanceof Error ? error : new Error(String(error || 'VOD 生成失败'));
+        const isPixVerseUploadFailure = params.type === 'video'
+            && params.modelName === 'PixVerse'
+            && /upload image to pixverse failed|ModelGenerateFailed|recv from pixverse failed|Invalid or inaccessible media_url/i.test(originalError.message);
+        const surfacedError = isPixVerseUploadFailure
+            ? new Error(`图片内容未通过 PixVerse 审核，生成失败。请更换内容合规的参考图或首尾帧后重试。原始诊断：${originalError.message}`)
+            : originalError;
+        await tracker?.fail(surfacedError, surfacedError.name === 'AbortError' ? 'cancelled' : 'failed');
+        throw surfacedError;
     }
 }
 
@@ -782,10 +906,31 @@ const DEFAULT_VIDEO_CAPABILITY = Object.freeze({
     ratios: VOD_VIDEO_RATIOS,
     resolutions: ['720P', '1080P', '2K', '4K'],
     maxReferenceImages: 10,
+    maxReferenceImageBytes: 20 * 1024 * 1024,
+    referenceImageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
     supportsFirstLastFrame: false,
+    supportsReferenceImages: true,
+});
+
+const PIXVERSE_VIDEO_CAPABILITY = Object.freeze({
+    // PixVerse v6/c1：支持首尾帧和 1–7 张参考图；官方支持 360P/540P/720P/1080P，默认 720P。
+    ...DEFAULT_VIDEO_CAPABILITY,
+    durations: Array.from({ length: 15 }, (_, index) => `${index + 1}s`),
+    resolutions: ['360P', '540P', '720P', '1080P'],
+    defaultResolution: '720P',
+    maxReferenceImages: 7,
+    maxReferenceImageBytes: 10 * 1024 * 1024,
+    referenceImageMimeTypes: ['image/jpeg', 'image/png'],
+    supportsFirstLastFrame: true,
+    supportsReferenceImages: true,
+    supportsVideoEditing: false,
+    forceVodFileIdReferences: true,
 });
 
 export function getVodVideoModelCapability(modelName, modelVersion) {
+    if (modelName === 'PixVerse' && ['v6', 'c1'].includes(modelVersion)) {
+        return PIXVERSE_VIDEO_CAPABILITY;
+    }
     if (modelName === 'Hailuo' && modelVersion === 'H3') {
         return HAILUO_H3_VIDEO_CAPABILITY;
     }

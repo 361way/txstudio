@@ -315,7 +315,8 @@ export async function runScriptAgentLoop({
                     modelVersion: videoModelVersion,
                     prompt: `${shot.videoPrompt}。保持参考分镜中的人物身份、服装、场景和构图连续。${shot.dialogue ? `对白或旁白内容：${shot.dialogue}` : ''}`,
                     sourceImages: [shot.imageUrl],
-                    sourceFileInfos: [videoCapability.supportsFirstLastFrame ? { Usage: 'FirstFrame' } : {}],
+                    // 不支持首尾帧的模型只传普通 FileId，禁止把临时图片 URL 交给模型端自行下载。
+                    sourceFileInfos: videoCapability.supportsFirstLastFrame ? [{ Usage: 'FirstFrame' }] : null,
                     aspectRatio: videoSettings.aspectRatio,
                     enhancePrompt: 'Enabled',
                     extraConfig: {

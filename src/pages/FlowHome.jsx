@@ -99,7 +99,6 @@ const VIDEO_MODELS = Object.keys(VOD_VIDEO_MODEL_MATRIX);
 const HOME_REFERENCE_MAX_BYTES = 20 * 1024 * 1024;
 
 const REFERENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const REFERENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 const HOME_PIPELINE_CONTEXT = {
     credentials: {},
     useProxy: true,
@@ -284,6 +283,7 @@ export default function FlowHome() {
     const [homeVideoStage, setHomeVideoStage] = useState('');
     const [homeVideoResults, setHomeVideoResults] = useState([]);
     const [homeReferenceImages, setHomeReferenceImages] = useState([]);
+    const [homePixVerseReferenceMode, setHomePixVerseReferenceMode] = useState('firstlast');
     const [homeAspectRatio, setHomeAspectRatio] = useState('16:9');
     const [homeResolution, setHomeResolution] = useState('1K');
     const [homeEnhancePrompt, setHomeEnhancePrompt] = useState(true);
@@ -306,17 +306,22 @@ export default function FlowHome() {
     const homeVideoModelVersions = VOD_VIDEO_MODEL_MATRIX[videoModel] || [];
     const isHomeVideo = homeGenerationType === 'video';
     const homeVideoCapability = getVodVideoModelCapability(videoModel, videoModelVersion);
+    const isPixVerseVideo = isHomeVideo && videoModel === 'PixVerse';
     const homeVideoReferenceFeature = !isHomeVideo
         ? ''
-        : videoModel === 'Hailuo' && videoModelVersion === 'H3'
-            ? 'firstLastFrame'
-            : videoModel === 'Kling' && videoModelVersion === '3.0'
+        : isPixVerseVideo
+            ? homePixVerseReferenceMode
+            : videoModel === 'Hailuo' && videoModelVersion === 'H3'
                 ? 'firstLastFrame'
-                : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
-                    ? 'multiReference'
-                    : videoModel === 'Kling' && videoModelVersion === 'O1'
-                        ? 'subjectReference'
-                        : '';
+                : videoModel === 'Kling' && videoModelVersion === '3.0'
+                    ? 'firstLastFrame'
+                    : videoModel === 'Kling' && videoModelVersion === '3.0-Omni'
+                        ? 'multiReference'
+                        : videoModel === 'Kling' && videoModelVersion === 'O1'
+                            ? 'subjectReference'
+                            : homeVideoCapability.supportsFirstLastFrame
+                                ? 'firstLastFrame'
+                                : '';
     const supportsHomeVideoSubjects = isHomeVideo && videoModel === 'Kling' && ['O1', '3.0-Omni'].includes(videoModelVersion);
     const homeVideoSubjectInfos = isHomeVideo ? parseHomeVideoSubjectInfos(homeVideoSubjectText) : [];
     const homeReferenceLimit = isHomeVideo
@@ -325,6 +330,14 @@ export default function FlowHome() {
     const homeRatioOptions = isHomeVideo ? homeVideoCapability.ratios : homeModelCapability.ratios;
     const homeResolutionOptions = isHomeVideo ? homeVideoCapability.resolutions : homeModelCapability.resolutions;
     const homeVideoDurationOptions = homeVideoCapability.durations;
+    const homeReferenceMimeTypes = isHomeVideo
+        ? new Set(homeVideoCapability.referenceImageMimeTypes || REFERENCE_IMAGE_TYPES)
+        : REFERENCE_IMAGE_TYPES;
+    const homeReferenceMaxBytes = isHomeVideo
+        ? (homeVideoCapability.maxReferenceImageBytes || HOME_REFERENCE_MAX_BYTES)
+        : HOME_REFERENCE_MAX_BYTES;
+    const homeReferenceAccept = Array.from(homeReferenceMimeTypes).join(',');
+    const homeReferenceRequirement = `${Array.from(homeReferenceMimeTypes).map((type) => type.replace('image/', '').toUpperCase()).join('、')}，单张不超过 ${Math.floor(homeReferenceMaxBytes / 1024 / 1024)}MB`;
     const activeHomeModel = isHomeVideo ? videoModel : imageModel;
     const activeHomeModelVersion = isHomeVideo ? videoModelVersion : imageModelVersion;
     const homeGenerationLoading = isHomeVideo ? homeVideoLoading : homeImageLoading;
@@ -530,11 +543,11 @@ export default function FlowHome() {
     const handleHomeReferenceUpload = (files) => {
         const list = Array.from(files || []);
         const remaining = Math.max(0, homeReferenceLimit - homeReferenceImages.length);
-        const validFiles = list.filter((file) => REFERENCE_IMAGE_TYPES.has(file?.type) && file.size > 0 && file.size <= HOME_REFERENCE_MAX_BYTES);
+        const validFiles = list.filter((file) => homeReferenceMimeTypes.has(file?.type) && file.size > 0 && file.size <= homeReferenceMaxBytes);
         if (!remaining) {
             setHomeParameterError(`当前 ${activeHomeModel} ${activeHomeModelVersion} 最多支持 ${homeReferenceLimit} 张参考图`);
         } else if (!validFiles.length) {
-            setHomeParameterError('请选择单张不超过 20MB 的 JPG、PNG 或 WEBP 图片');
+            setHomeParameterError(`请选择 ${homeReferenceRequirement} 的参考图`);
         } else {
             const accepted = validFiles.slice(0, remaining).map((file) => ({ file, preview: URL.createObjectURL(file) }));
             setHomeReferenceImages((previous) => [...previous, ...accepted]);
@@ -616,6 +629,9 @@ export default function FlowHome() {
                 duration: homeVideoDuration,
             });
             const referenceFiles = homeReferenceImages.map((item) => item.file);
+            const pixVerseReferencePrompt = isPixVerseVideo && homeVideoReferenceFeature === 'multiReference' && referenceFiles.length > 0 && !/@pic\d+/i.test(value)
+                ? `${value}${value ? '。' : ''}参考图标记：${referenceFiles.map((_, index) => `@pic${index + 1}`).join('、')}。请根据提示词使用对应参考图。`
+                : value;
             const subjectOnly = homeVideoReferenceFeature === 'subjectReference' && homeVideoSubjectInfos.length > 0;
             const sourceImages = subjectOnly ? [] : referenceFiles;
             const sourceFileInfos = homeVideoReferenceFeature === 'firstLastFrame'
@@ -627,7 +643,7 @@ export default function FlowHome() {
                 type: 'video',
                 modelName: videoModel,
                 modelVersion: videoModelVersion,
-                prompt: value,
+                prompt: pixVerseReferencePrompt,
                 enhancePrompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
                 sourceImages,
                 sourceFileInfos,
@@ -1161,7 +1177,7 @@ export default function FlowHome() {
                                                 ref={homeReferenceInputRef}
                                                 id="home-reference-images"
                                                 type="file"
-                                                accept={REFERENCE_IMAGE_ACCEPT}
+                                                accept={homeReferenceAccept}
                                                 multiple
                                                 className="sr-only"
                                                 onChange={(event) => handleHomeReferenceUpload(event.target.files)}
@@ -1171,9 +1187,15 @@ export default function FlowHome() {
                                                     <button type="button" aria-label={t('关闭参考图菜单')} className="fixed inset-0 z-10 cursor-default" onClick={() => setHomeParameterOpen(null)} />
                                                     <div className="absolute bottom-full left-0 z-20 mb-2 w-[min(400px,calc(100vw-48px))] rounded-xl border border-[#e7e4da] bg-white p-3 shadow-[0_12px_34px_rgba(37,32,19,0.14)]">
                                                         <div className="flex items-start justify-between gap-3">
-                                                            <div><div className="text-[12px] font-semibold text-[#2e2c27]">{t(homeVideoReferenceFeature === 'firstLastFrame' ? '首帧 / 尾帧' : homeVideoReferenceFeature === 'multiReference' ? '角色参考图' : homeVideoReferenceFeature === 'subjectReference' ? '角色参考' : '参考图')}</div><p className="mt-0.5 text-[10.5px] leading-4 text-gray-400">{t(homeVideoReferenceFeature === 'multiReference' ? `最多 ${homeReferenceLimit} 张角色参考图，将以 Reference 提交。` : `当前 ${activeHomeModel} ${activeHomeModelVersion} 最多 ${homeReferenceLimit} 张；单张不超过 20MB。`)}</p></div>
+                                                            <div><div className="text-[12px] font-semibold text-[#2e2c27]">{t(homeVideoReferenceFeature === 'firstLastFrame' ? '首帧 / 尾帧' : homeVideoReferenceFeature === 'multiReference' ? '角色参考图' : homeVideoReferenceFeature === 'subjectReference' ? '角色参考' : '参考图')}</div><p className="mt-0.5 text-[10.5px] leading-4 text-gray-400">{t(homeVideoReferenceFeature === 'multiReference' ? `最多 ${homeReferenceLimit} 张角色参考图，将以 Reference 提交。` : `当前 ${activeHomeModel} ${activeHomeModelVersion} 最多 ${homeReferenceLimit} 张；${homeReferenceRequirement}。`)}</p></div>
                                                             <Info size={14} className="mt-0.5 shrink-0 text-[#b28b2b]" />
                                                         </div>
+                                                        {isPixVerseVideo && (
+                                                            <div className="mt-2 flex rounded-md bg-[#f5f3ee] p-0.5 text-[10px]">
+                                                                <button type="button" onClick={() => { setHomePixVerseReferenceMode('firstLastFrame'); setHomeReferenceImages((items) => items.slice(0, 2)); }} className={`flex-1 rounded px-2 py-1 ${homePixVerseReferenceMode === 'firstLastFrame' ? 'bg-white text-[#805f16] shadow-sm' : 'text-gray-500'}`}>{t('首尾帧')}</button>
+                                                                <button type="button" onClick={() => setHomePixVerseReferenceMode('multiReference')} className={`flex-1 rounded px-2 py-1 ${homePixVerseReferenceMode === 'multiReference' ? 'bg-white text-[#805f16] shadow-sm' : 'text-gray-500'}`}>{t('多图参考')}</button>
+                                                            </div>
+                                                        )}
                                                         <div className="mt-3 flex flex-wrap gap-2">
                                                             {homeReferenceImages.map((item, index) => (
                                                                 <div key={`${item.file.name}-${index}`} className="group relative h-14 w-14 overflow-hidden rounded-lg border border-[#e7e3d9] bg-[#f6f5f2]">

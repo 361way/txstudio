@@ -65,22 +65,60 @@ function StatusBadge({ status }) {
     return <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${info.className}`}>{t(info.label)}</span>;
 }
 
+function HistoryVideoModal({ job, asset, onClose }) {
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('视频预览')}>
+            <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label={t('关闭视频预览')} />
+            <div className="relative flex max-h-[88vh] w-full max-w-[980px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
+                    <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium">{job?.model_name || t('生成视频')} {job?.model_version ? `· ${job.model_version}` : ''}</div>
+                        {job?.prompt && <div className="mt-0.5 truncate text-[10px] text-white/55">{job.prompt}</div>}
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white" aria-label={t('关闭视频预览')}><X size={17} /></button>
+                </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-2">
+                    <MediaPreview job={job} asset={asset} controls />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function MediaPreview({ job, asset, compact = false, controls = false }) {
     const url = safeMediaURL(asset?.cloud_url || asset?.local_path) || '';
     const isVideo = job?.type === 'video' || asset?.media_type === 'video';
+    const [videoRatio, setVideoRatio] = useState(16 / 9);
     if (!url) {
         const Icon = job?.type === 'agent' ? Bot : isVideo ? Video : ImageIcon;
         return <div className="flex h-full w-full items-center justify-center bg-[#f2f0e9] text-[#c5bda9]"><Icon size={compact ? 20 : 28} /></div>;
     }
     if (isVideo) {
+        // 播放视图必须保持文件真实长宽比，只用宽度约束高度，避免 object-cover 裁剪画面。
+        if (controls) {
+            return (
+                <div className="w-full bg-black" style={{ aspectRatio: String(videoRatio), maxHeight: 360 }}>
+                    <video
+                        src={url}
+                        playsInline
+                        preload="metadata"
+                        controls
+                        className="mx-auto h-full w-full object-contain"
+                        onLoadedMetadata={(event) => {
+                            const width = Number(event.currentTarget.videoWidth) || 0;
+                            const height = Number(event.currentTarget.videoHeight) || 0;
+                            if (width > 0 && height > 0) setVideoRatio(width / height);
+                        }}
+                    />
+                </div>
+            );
+        }
         return (
             <div className="relative h-full w-full">
-                <video src={url} muted playsInline preload="metadata" controls={controls} className="h-full w-full bg-black object-cover" />
-                {!controls && (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white shadow"><Play size={16} className="ml-0.5" /></span>
-                    </div>
-                )}
+                <video src={url} muted playsInline preload="metadata" controls={false} className="h-full w-full bg-black object-cover" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white shadow"><Play size={16} className="ml-0.5" /></span>
+                </div>
             </div>
         );
     }
@@ -139,7 +177,7 @@ function HistoryDetail({ id, onClose, onDelete, onSynced }) {
                             {detail.error_message && <div className="mt-3 flex gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] leading-5 text-red-600"><XCircle size={14} className="mt-0.5 shrink-0" />{detail.error_message}</div>}
                         </section>
 
-                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><div className="aspect-video"><MediaPreview job={detail} asset={asset} controls /></div><div className="flex items-center justify-end gap-1 p-2">{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
+                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><MediaPreview job={detail} asset={asset} controls /><div className="flex items-center justify-end gap-1 p-2">{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
 
                         <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('生成参数')}</h3><div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-[#eee9de] p-4 text-[11px]">{[
                             ['类型', detail.type], ['来源', SOURCE_LABEL[detail.source] || detail.source],
@@ -172,6 +210,7 @@ export default function GenerationHistory({ initialProjectId = '' }) {
     const [syncing, setSyncing] = useState(false);
     const [error, setError] = useState('');
     const [selectedId, setSelectedId] = useState(null);
+    const [videoPreview, setVideoPreview] = useState(null);
     const initialCloudSyncRef = useRef(false);
 
     const load = useCallback(async () => {
@@ -255,12 +294,14 @@ export default function GenerationHistory({ initialProjectId = '' }) {
                 {loading ? <div className="flex h-72 items-center justify-center"><Loader2 size={24} className="animate-spin text-[#b98b25]" /></div> : !data.items?.length ? (
                     <div className="mt-8 flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#ddd6c7] bg-white text-center"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f6edd8] text-[#9e751c]"><History size={25} /></div><h2 className="mt-4 text-[14px] font-semibold text-[#514b40]">{t('暂无生成历史')}</h2><p className="mt-2 text-[11px] text-gray-400">{t('从首页、图片、视频或 Agent 发起任务后，记录会自动出现在这里。')}</p></div>
                 ) : <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{data.items.map(({ job, preview }) => {
-                    return <button key={job.id} type="button" onClick={() => setSelectedId(job.id)} className="group overflow-hidden rounded-2xl border border-[#e8e2d6] bg-white text-left shadow-[0_6px_20px_rgba(58,49,28,0.04)] transition hover:-translate-y-0.5 hover:border-[#d8c99e] hover:shadow-[0_12px_28px_rgba(58,49,28,0.09)]"><div className="relative aspect-[16/10] overflow-hidden"><MediaPreview job={job} asset={preview} /><div className="absolute left-2.5 top-2.5"><StatusBadge status={job.status} /></div>{job.status === 'running' && <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10"><div className="h-full bg-[#e1ae35]" style={{ width: `${job.progress || 0}%` }} /></div>}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate text-[12.5px] font-semibold text-[#3e3a32]">{job.model_name || (job.type === 'agent' ? 'AgentLoop' : t('生成任务'))}</h2><div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-gray-400"><span>{SOURCE_LABEL[job.source] || job.source}</span><span>·</span><span>{job.model_version || job.type}</span>{job.project_id && <><span>·</span><span className="max-w-[130px] truncate text-[#9a741f]">{projectNames.get(String(job.project_id)) || `项目 #${job.project_id}`}</span></>}</div></div><ChevronRight size={15} className="mt-1 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-[#a77c1c]" /></div><p className="mt-3 line-clamp-2 min-h-[34px] text-[10.5px] leading-[17px] text-gray-500">{job.prompt || t('无提示词')}</p><div className="mt-3 flex items-center justify-between border-t border-[#f0ede6] pt-3 text-[9.5px] text-gray-400"><span className="flex items-center gap-1"><Clock size={11} />{formatTime(job.created_at)}</span><span className="flex items-center gap-1">{job.storage_mode === 'Permanent' ? <Database size={11} /> : <Cloud size={11} />}{job.storage_mode === 'Permanent' ? t('永久') : t('云端')}</span></div></div></button>;
+                    const previewIsVideo = job.type === 'video' || preview?.media_type === 'video';
+                    return <article key={job.id} className="group overflow-hidden rounded-2xl border border-[#e8e2d6] bg-white text-left shadow-[0_6px_20px_rgba(58,49,28,0.04)] transition hover:-translate-y-0.5 hover:border-[#d8c99e] hover:shadow-[0_12px_28px_rgba(58,49,28,0.09)]"><div className="relative aspect-[16/10] overflow-hidden">{previewIsVideo ? <button type="button" onClick={() => setVideoPreview({ job, asset: preview })} className="block h-full w-full cursor-pointer text-left" aria-label={t('播放视频预览')}><MediaPreview job={job} asset={preview} /></button> : <MediaPreview job={job} asset={preview} />}<div className="absolute left-2.5 top-2.5"><StatusBadge status={job.status} /></div>{job.status === 'running' && <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10"><div className="h-full bg-[#e1ae35]" style={{ width: `${job.progress || 0}%` }} /></div>}</div><button type="button" onClick={() => setSelectedId(job.id)} className="block w-full p-4 text-left"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate text-[12.5px] font-semibold text-[#3e3a32]">{job.model_name || (job.type === 'agent' ? 'AgentLoop' : t('生成任务'))}</h2><div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-gray-400"><span>{SOURCE_LABEL[job.source] || job.source}</span><span>·</span><span>{job.model_version || job.type}</span>{job.project_id && <><span>·</span><span className="max-w-[130px] truncate text-[#9a741f]">{projectNames.get(String(job.project_id)) || `项目 #${job.project_id}`}</span></>}</div></div><ChevronRight size={15} className="mt-1 shrink-0 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-[#a77c1c]" /></div><p className="mt-3 line-clamp-2 min-h-[34px] text-[10.5px] leading-[17px] text-gray-500">{job.prompt || t('无提示词')}</p><div className="mt-3 flex items-center justify-between border-t border-[#f0ede6] pt-3 text-[9.5px] text-gray-400"><span className="flex items-center gap-1"><Clock size={11} />{formatTime(job.created_at)}</span><span className="flex items-center gap-1">{job.storage_mode === 'Permanent' ? <Database size={11} /> : <Cloud size={11} />}{job.storage_mode === 'Permanent' ? t('永久') : t('云端')}</span></div></button></article>;
                 })}</div>}
 
                 {totalPages > 1 && <div className="mt-7 flex items-center justify-center gap-3"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('上一页')}</button><span className="text-[10.5px] text-gray-400">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('下一页')}</button></div>}
             </section>
             {selectedId && <HistoryDetail id={selectedId} onClose={() => setSelectedId(null)} onDelete={remove} onSynced={load} />}
+            {videoPreview && <HistoryVideoModal job={videoPreview.job} asset={videoPreview.asset} onClose={() => setVideoPreview(null)} />}
         </div>
     );
 }

@@ -23,7 +23,6 @@ const PIPELINE_CONTEXT = {
 };
 const VIDEO_REFERENCE_MAX_BYTES = 20 * 1024 * 1024;
 const REFERENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const REFERENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 
 const STAGE_LABELS = {
     upload_start: '上传参考图...',
@@ -55,21 +54,30 @@ export default function VideoTool({ onBack, template, embedded = false }) {
 
     const versions = VOD_VIDEO_MODEL_MATRIX[modelName] || [];
     const videoCapability = getVodVideoModelCapability(modelName, modelVersion);
+    const supportedReferenceMimeTypes = new Set([
+        ...(videoCapability.referenceImageMimeTypes || REFERENCE_IMAGE_TYPES),
+        ...(videoCapability.forceVodFileIdReferences ? ['image/webp'] : []),
+    ]);
+    const referenceMaxBytes = videoCapability.maxReferenceImageBytes || VIDEO_REFERENCE_MAX_BYTES;
+    const supportsFirstLastFrame = !!videoCapability.supportsFirstLastFrame;
+    const supportsReferenceImages = videoCapability.supportsReferenceImages !== false;
+    const referenceImageRequirement = `${Array.from(supportedReferenceMimeTypes).map((type) => type.replace('image/', '').toUpperCase()).join('、')}，单张不超过 ${Math.floor(referenceMaxBytes / 1024 / 1024)}MB`;
+    const referenceImageAccept = Array.from(supportedReferenceMimeTypes).join(',');
 
     const makePreview = useCallback((file) => ({
         file,
         preview: URL.createObjectURL(file),
     }), []);
 
-    const isValidReferenceImage = (file) => REFERENCE_IMAGE_TYPES.has(file?.type)
+    const isValidReferenceImage = (file) => supportedReferenceMimeTypes.has(file?.type)
         && file.size > 0
-        && file.size <= VIDEO_REFERENCE_MAX_BYTES;
+        && file.size <= referenceMaxBytes;
 
     const handleUploadSingle = (files, setter) => {
         const file = files?.[0];
         if (!file) return;
         if (!isValidReferenceImage(file)) {
-            setError('请选择单张不超过 20MB 的 JPG、PNG 或 WEBP 图片');
+            setError(`请选择 ${referenceImageRequirement} 的参考图`);
             return;
         }
         setError('');
@@ -86,7 +94,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             return;
         }
         if (!validFiles.length) {
-            setError('请选择单张不超过 20MB 的 JPG、PNG 或 WEBP 图片');
+            setError(`请选择 ${referenceImageRequirement} 的参考图`);
             return;
         }
         const accepted = validFiles.slice(0, remaining).map(makePreview);
@@ -106,27 +114,34 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             let sourceFileInfos = null;
             let lastFrameSourceIndex = -1;
             if (mode === 'firstlast') {
-                if (!firstFrame && !lastFrame) { setError('请上传首帧或尾帧'); setLoading(false); setStage(''); return; }
-                if (firstFrame) {
-                    sourceImages.push(firstFrame.file);
-                    sourceFileInfos = [{ Usage: 'FirstFrame' }];
+                if (!supportsFirstLastFrame) {
+                    setError(`当前 ${modelName} ${modelVersion} 不支持首尾帧模式，请改用多图模式或切换模型`); setLoading(false); setStage(''); return;
                 }
+                if (!firstFrame) { setError('首尾帧模式必须上传首帧；尾帧不能单独使用'); setLoading(false); setStage(''); return; }
+                sourceImages.push(firstFrame.file);
+                sourceFileInfos = [{ Usage: 'FirstFrame' }];
                 if (lastFrame) {
                     sourceImages.push(lastFrame.file);
-                    sourceFileInfos = [...(sourceFileInfos || []), null];
+                    sourceFileInfos.push(null);
                     lastFrameSourceIndex = sourceImages.length - 1;
                 }
             } else {
+                if (!supportsReferenceImages) {
+                    setError(`当前 ${modelName} ${modelVersion} 不支持多图参考模式，请切换模型`); setLoading(false); setStage(''); return;
+                }
                 if (!multiImages.length) { setError('请至少上传一张图片'); setLoading(false); setStage(''); return; }
                 sourceImages = multiImages.map((item) => item.file);
-                sourceFileInfos = sourceImages.map(() => ({ Usage: 'Reference', Category: 'Image' }));
+                sourceFileInfos = sourceImages.map(() => ({ Usage: 'Reference' }));
             }
             const durationValue = Number(String(duration).replace(/[^0-9.]/g, ''));
+            const pixVersePrompt = modelName === 'PixVerse' && mode === 'multi' && sourceImages.length > 0 && !/@pic\d+/i.test(prompt)
+                ? `${prompt.trim()}${prompt.trim() ? '。' : ''}参考图标记：${sourceImages.map((_, index) => `@pic${index + 1}`).join('、')}。请根据提示词使用对应参考图。`
+                : prompt.trim() || undefined;
             const { urls } = await runVodAigcPipeline({
                 type: 'video',
                 modelName,
                 modelVersion,
-                prompt: prompt.trim() || undefined,
+                prompt: pixVersePrompt,
                 sourceImages,
                 sourceFileInfos,
                 lastFrameSourceIndex,
@@ -153,7 +168,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             <input
                 ref={inputRef}
                 type="file"
-                accept={REFERENCE_IMAGE_ACCEPT}
+                accept={referenceImageAccept}
                 className="sr-only"
                 onChange={(event) => {
                     handleUploadSingle(event.target.files, onPick);
@@ -208,10 +223,10 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 <div className="glass-card rounded-2xl p-6 mb-6 animate-fade-in">
                     {/* 模式切换 */}
                     <div className="segmented mb-6">
-                        <button data-active={mode === 'firstlast'} onClick={() => setMode('firstlast')}>
+                        <button data-active={mode === 'firstlast'} onClick={() => setMode('firstlast')} disabled={!supportsFirstLastFrame} title={supportsFirstLastFrame ? undefined : t('当前模型不支持首尾帧')}>
                             <span className="inline-flex items-center gap-1.5 justify-center"><Film className="w-4 h-4" />{t('首尾帧模式')}</span>
                         </button>
-                        <button data-active={mode === 'multi'} onClick={() => setMode('multi')}>
+                        <button data-active={mode === 'multi'} onClick={() => setMode('multi')} disabled={!supportsReferenceImages} title={supportsReferenceImages ? undefined : t('当前模型不支持多图参考')}>
                             <span className="inline-flex items-center gap-1.5 justify-center"><Images className="w-4 h-4" />{t('多图模式')}</span>
                         </button>
                     </div>
@@ -244,7 +259,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                             <input
                                                 ref={multiImagesInputRef}
                                                 type="file"
-                                                accept={REFERENCE_IMAGE_ACCEPT}
+                                                accept={referenceImageAccept}
                                                 multiple
                                                 className="sr-only"
                                                 onChange={(event) => {

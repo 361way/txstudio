@@ -17950,8 +17950,8 @@ function TxStudioApp({
                             errorMsg: msg,
                             durationCost: durationMs / 1000
                         }, { onlyIfStatus: 'generating' });
-                        storyboardTaskMapRef.current.delete(taskId);
-                        storyboardHistoryMapRef.current.delete(taskId);
+                        storyboardTaskMapRef.current.delete(vodTaskId);
+                        storyboardHistoryMapRef.current.delete(vodTaskId);
                     }
                     if (vodSourceNodeId && !vodStoryboardTask) {
                         setNodes((prev) => prev.map((n) => n.id === vodSourceNodeId ? { ...n, isGenerating: false } : n));
@@ -24542,6 +24542,12 @@ function TxStudioApp({
             references: characterReferenceImages.filter((img) => img && img !== firstFrameImage && img !== lastFrameImage),
             lastFrame: lastFrameImage || ''
         };
+        if (lastFrameImage && !firstFrameImage) {
+            const message = t('尾帧不能单独生成视频，请先提供首帧图片');
+            updateShot(nodeId, shot.id, { status: 'failed', errorMsg: message });
+            showToast(message, 'error', 4500);
+            return;
+        }
 
         // 4. 更新 shot 状态为生成中
         const startAt = Date.now();

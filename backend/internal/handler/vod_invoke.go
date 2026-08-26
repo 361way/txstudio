@@ -25,7 +25,7 @@ const (
 var vodActions = map[string]struct{}{
 	"ApplyUpload": {}, "CommitUpload": {}, "PullUpload": {},
 	"CreateAigcImageTask": {}, "CreateAigcVideoTask": {},
-	"DescribeTaskDetail": {}, "DescribeTaskResult": {}, "DescribeTasks": {},
+	"DescribeTaskDetail": {}, "DescribeTaskResult": {}, "DescribeTasks": {}, "DescribeMediaInfos": {},
 	"ComposeMedia": {}, "ProcessMedia": {},
 }
 
