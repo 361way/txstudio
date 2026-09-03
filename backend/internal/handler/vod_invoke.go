@@ -208,11 +208,16 @@ func (h *TencentInvokeHandler) CallRaw(c *gin.Context, action, version, region s
 }
 
 func (h *TencentInvokeHandler) loadTencentCredential() (map[string]interface{}, error) {
+	return loadTencentCredentialData(h.DB, h.Crypto)
+}
+
+// loadTencentCredentialData 读取本机加密保存的腾讯云媒体服务凭证，供 VOD 代签与素材缓存共用。
+func loadTencentCredentialData(db *gorm.DB, crypto *service.CryptoService) (map[string]interface{}, error) {
 	var credential model.Credential
-	if err := h.DB.Where("provider = ?", "tencent-cloud").First(&credential).Error; err != nil {
+	if err := db.Where("provider = ?", "tencent-cloud").First(&credential).Error; err != nil {
 		return nil, &publicError{message: "未配置腾讯云媒体服务凭证，请在右上角 API 设置中配置"}
 	}
-	plaintext, err := h.Crypto.Decrypt(credential.EncryptedData)
+	plaintext, err := crypto.Decrypt(credential.EncryptedData)
 	if err != nil {
 		return nil, &publicError{message: "腾讯云凭证解密失败"}
 	}

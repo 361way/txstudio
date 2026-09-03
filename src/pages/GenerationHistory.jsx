@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     Bot, ChevronRight, Clock, Cloud, Database, Download,
     ExternalLink, History, Image as ImageIcon, Loader2, Play, RefreshCw, Search,
-    Trash2, Video, X, XCircle,
+    Send, Trash2, Video, X, XCircle,
 } from 'lucide-react';
 import { deleteGenerationJob, getGenerationJob, importVODGenerationTask, listGenerationJobs, syncGenerationJob, syncPendingGenerationJobs } from '../api/generationHistory';
 import { listProjects } from '../api/project';
+import { buildCanvasAssetNode, inferMediaType } from '../api/sendToCanvas';
+import SendToCanvasDialog from '../components/SendToCanvasDialog';
 import i18n from '../i18n';
 
 const t = (value) => (i18n.t ? i18n.t(value) : value);
@@ -125,10 +127,11 @@ function MediaPreview({ job, asset, compact = false, controls = false }) {
     return <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" />;
 }
 
-function HistoryDetail({ id, onClose, onDelete, onSynced }) {
+function HistoryDetail({ id, onClose, onDelete, onSynced, onSendToCanvas }) {
     const [detail, setDetail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
+    const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const loadDetail = useCallback(async () => {
         setLoading(true);
@@ -142,6 +145,26 @@ function HistoryDetail({ id, onClose, onDelete, onSynced }) {
         }
     }, [id]);
     useEffect(() => { void loadDetail(); }, [loadDetail]);
+    const sendToCanvas = () => {
+        if (!detail || sending) return;
+        const nodes = (detail.assets || [])
+            .filter((asset) => asset?.role === 'output')
+            .map((asset, index) => buildCanvasAssetNode(asset, {
+                mediaType: inferMediaType(asset, detail.type),
+                index,
+                prompt: detail.prompt,
+                modelName: detail.model_name,
+            }))
+            .filter(Boolean);
+        if (!nodes.length) {
+            setError('该任务还没有可发送的输出素材');
+            return;
+        }
+        setSending(true);
+        onSendToCanvas?.(nodes);
+        setSending(false);
+    };
+
     const sync = async () => {
         if (!detail?.cloud_task_id || syncing) return;
         setSyncing(true);
@@ -172,12 +195,12 @@ function HistoryDetail({ id, onClose, onDelete, onSynced }) {
                 {loading ? <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#b98b25]" /></div> : error ? <div className="m-5 rounded-xl bg-red-50 p-4 text-[12px] text-red-600">{error}</div> : detail && (
                     <div className="space-y-6 p-5">
                         <section>
-                            <div className="flex items-start justify-between gap-4"><div><h2 className="text-[17px] font-semibold text-[#302d27]">{detail.model_name || t('生成任务')}</h2><p className="mt-1 text-[11px] text-gray-400">{SOURCE_LABEL[detail.source] || detail.source} · {detail.model_version || '—'} · {formatTime(detail.created_at)}</p></div><div className="flex items-center gap-2"><StatusBadge status={detail.status} />{detail.cloud_task_id && <button type="button" onClick={sync} disabled={syncing} className="flex items-center gap-1 rounded-lg border border-[#e4ded0] bg-white px-2 py-1 text-[10px] text-[#876417] hover:bg-[#faf4e6] disabled:opacity-50"><RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />{syncing ? t('同步中...') : t('同步云端')}</button>}</div></div>
+                            <div className="flex items-start justify-between gap-4"><div><h2 className="text-[17px] font-semibold text-[#302d27]">{detail.model_name || t('生成任务')}</h2><p className="mt-1 text-[11px] text-gray-400">{SOURCE_LABEL[detail.source] || detail.source} · {detail.model_version || '—'} · {formatTime(detail.created_at)}</p></div><div className="flex items-center gap-2"><StatusBadge status={detail.status} />{outputs.length > 0 && <button type="button" onClick={sendToCanvas} disabled={sending} className="flex items-center gap-1 rounded-lg bg-[#8a6b1f] px-2 py-1 text-[10px] text-white transition hover:bg-[#745a19] disabled:opacity-50"><Send size={11} />{t('发送到画布')}</button>}{detail.cloud_task_id && <button type="button" onClick={sync} disabled={syncing} className="flex items-center gap-1 rounded-lg border border-[#e4ded0] bg-white px-2 py-1 text-[10px] text-[#876417] hover:bg-[#faf4e6] disabled:opacity-50"><RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />{syncing ? t('同步中...') : t('同步云端')}</button>}</div></div>
                             {detail.prompt && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-[#faf8f2] p-3 text-[12px] leading-6 text-[#5c574d]">{detail.prompt}</p>}
                             {detail.error_message && <div className="mt-3 flex gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] leading-5 text-red-600"><XCircle size={14} className="mt-0.5 shrink-0" />{detail.error_message}</div>}
                         </section>
 
-                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><MediaPreview job={detail} asset={asset} controls /><div className="flex items-center justify-end gap-1 p-2">{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
+                        {outputs.length > 0 && <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('输出素材')}</h3><div className="grid grid-cols-2 gap-3">{outputs.map((asset) => { const url = safeMediaURL(asset.cloud_url || asset.local_path); return <div key={asset.id} className="overflow-hidden rounded-xl border border-[#ebe6da] bg-[#faf9f5]"><MediaPreview job={detail} asset={asset} controls /><div className="flex items-center justify-end gap-1 p-2"><button type="button" onClick={() => onSendToCanvas?.([buildCanvasAssetNode(asset, { mediaType: inferMediaType(asset, detail.type), prompt: detail.prompt, modelName: detail.model_name })].filter(Boolean))} className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]" title={t('发送到画布')}><Send size={13} /></button>{url && <><a href={url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><ExternalLink size={13} /></a><a href={url} download target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-[#876417]"><Download size={13} /></a></>}</div></div>; })}</div></section>}
 
                         <section><h3 className="mb-3 text-[12px] font-semibold text-[#454139]">{t('生成参数')}</h3><div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-[#eee9de] p-4 text-[11px]">{[
                             ['类型', detail.type], ['来源', SOURCE_LABEL[detail.source] || detail.source],
@@ -198,7 +221,7 @@ function HistoryDetail({ id, onClose, onDelete, onSynced }) {
     );
 }
 
-export default function GenerationHistory({ initialProjectId = '' }) {
+export default function GenerationHistory({ initialProjectId = '', onOpenCanvas }) {
     const [type, setType] = useState('');
     const [status, setStatus] = useState('');
     const [projectId, setProjectId] = useState(initialProjectId ? String(initialProjectId) : '');
@@ -211,7 +234,20 @@ export default function GenerationHistory({ initialProjectId = '' }) {
     const [error, setError] = useState('');
     const [selectedId, setSelectedId] = useState(null);
     const [videoPreview, setVideoPreview] = useState(null);
+    const [sendNodes, setSendNodes] = useState(null);
+    const [toast, setToast] = useState('');
     const initialCloudSyncRef = useRef(false);
+
+    const handleSendToCanvas = useCallback((nodes) => {
+        if (!Array.isArray(nodes) || nodes.length === 0) return;
+        setSendNodes(nodes);
+    }, []);
+
+    useEffect(() => {
+        if (!toast) return;
+        const timer = setTimeout(() => setToast(''), 2600);
+        return () => clearTimeout(timer);
+    }, [toast]);
 
     const load = useCallback(async () => {
         setLoading(true); setError('');
@@ -300,8 +336,20 @@ export default function GenerationHistory({ initialProjectId = '' }) {
 
                 {totalPages > 1 && <div className="mt-7 flex items-center justify-center gap-3"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('上一页')}</button><span className="text-[10.5px] text-gray-400">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-[#e6e0d4] bg-white px-3 py-2 text-[11px] text-gray-500 disabled:opacity-30">{t('下一页')}</button></div>}
             </section>
-            {selectedId && <HistoryDetail id={selectedId} onClose={() => setSelectedId(null)} onDelete={remove} onSynced={load} />}
+            {selectedId && <HistoryDetail id={selectedId} onClose={() => setSelectedId(null)} onDelete={remove} onSynced={load} onSendToCanvas={handleSendToCanvas} />}
             {videoPreview && <HistoryVideoModal job={videoPreview.job} asset={videoPreview.asset} onClose={() => setVideoPreview(null)} />}
+            {sendNodes && (
+                <SendToCanvasDialog
+                    assets={sendNodes}
+                    onClose={() => setSendNodes(null)}
+                    onToast={(message) => setToast(message)}
+                    onSent={(projectId) => {
+                        setSendNodes(null);
+                        if (projectId) onOpenCanvas?.(projectId);
+                    }}
+                />
+            )}
+            {toast && <div className="fixed bottom-6 left-1/2 z-[140] -translate-x-1/2 rounded-full bg-[#3e3a32] px-4 py-2 text-[12px] text-white shadow-lg">{toast}</div>}
         </div>
     );
 }

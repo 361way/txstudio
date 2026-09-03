@@ -120,6 +120,7 @@ func (a *App) registerRoutes() error {
 	credentialHandler := &handler.CredentialHandler{DB: a.DB, Crypto: a.Crypto}
 	proxyHandler := handler.NewProxyHandler(a.DB, a.Crypto)
 	vodHandler := handler.NewVODInvokeHandler(a.DB, a.Crypto)
+	mediaAssetHandler := handler.NewMediaAssetHandler(a.DB, a.Crypto)
 	generationHandler := &handler.GenerationHandler{DB: a.DB, VOD: vodHandler}
 	a.GenerationHandler = generationHandler
 	mpsHandler := handler.NewMPSInvokeHandler(a.DB, a.Crypto)
@@ -162,6 +163,15 @@ func (a *App) registerRoutes() error {
 			credentials.GET("", credentialHandler.List)
 			credentials.POST("", credentialHandler.Save)
 			credentials.DELETE("/:id", credentialHandler.Delete)
+		}
+
+		mediaAssets := api.Group("/media-assets")
+		{
+			mediaAssets.GET("/lookup", mediaAssetHandler.Lookup)
+			mediaAssets.POST("", mediaAssetHandler.Upsert)
+			mediaAssets.PUT("/:id/verify", mediaAssetHandler.MarkVerified)
+			mediaAssets.PUT("/:id/invalidate", mediaAssetHandler.Invalidate)
+			mediaAssets.PUT("/invalidate", mediaAssetHandler.Invalidate)
 		}
 
 		generationJobs := api.Group("/generation-jobs")

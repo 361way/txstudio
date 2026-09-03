@@ -63,6 +63,27 @@ type GenerationJob struct {
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
+// MediaAsset 保存按内容 MD5 去重的云端媒体索引；媒体本体仍位于 VOD。
+// 同一 (sub_app_id, md5, media_type) 仅保留一行，重复上传时原子刷新 FileID/MediaURL。
+type MediaAsset struct {
+	Base
+	SubAppID    uint64     `gorm:"index:idx_media_asset_identity,unique,priority:1;not null" json:"sub_app_id"`
+	MD5         string     `gorm:"size:32;index:idx_media_asset_identity,unique,priority:2;not null" json:"md5"`
+	MediaType   string     `gorm:"size:32;index:idx_media_asset_identity,unique,priority:3;index:idx_media_asset_recent,priority:2;not null" json:"media_type"`
+	FileID      string     `gorm:"size:255;index;not null" json:"file_id"`
+	MediaURL    string     `gorm:"size:4096;not null" json:"media_url"`
+	MimeType    string     `gorm:"size:128" json:"mime_type"`
+	FileSize    int64      `json:"file_size"`
+	Width       int        `json:"width"`
+	Height      int        `json:"height"`
+	StorageMode string     `gorm:"size:32;not null;default:Permanent" json:"storage_mode"`
+	ExpiresAt   *time.Time `gorm:"index" json:"expires_at,omitempty"`
+	Status      string     `gorm:"size:32;index;not null;default:ready" json:"status"`
+	VerifiedAt  *time.Time `json:"verified_at,omitempty"`
+	LastUsedAt  time.Time  `gorm:"index:idx_media_asset_recent,priority:3;not null" json:"last_used_at"`
+	UseCount    int64      `gorm:"not null;default:0" json:"use_count"`
+}
+
 // GenerationAsset 保存任务输入输出的媒体索引；媒体本体仍位于 VOD/COS 或本地缓存。
 type GenerationAsset struct {
 	Base
@@ -157,6 +178,7 @@ func AutoMigrateAll(db *gorm.DB) error {
 		&GenerationJob{},
 		&GenerationAsset{},
 		&GenerationEvent{},
+		&MediaAsset{},
 		&ImageTemplate{},
 		&Credential{},
 	); err != nil {

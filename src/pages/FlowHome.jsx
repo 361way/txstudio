@@ -19,7 +19,7 @@ import {
     PanelLeft, LayoutGrid, ChevronDown,
     Paperclip, Star, ArrowUp, ArrowLeft, Settings,
     Image as ImageIcon, Video, Layout, Sparkles,
-    History, Download, Home, Search,
+    History, Download, Home, Search, Send,
     X, Check, Info, SlidersHorizontal, Loader2, Volume2, VolumeX, Play, Bot, Globe, Plus,
 } from 'lucide-react';
 import GlobalAPISettings from '../components/GlobalAPISettings';
@@ -32,7 +32,11 @@ import {
     VOD_DEFAULT_VIDEO_MODEL_VERSION,
     getVodVideoModelCapability,
     runVodAigcPipeline,
+    uploadImageToVod,
 } from '../vodAdapter';
+import { prepareReferenceImage } from '../api/mediaAssetCache';
+import { buildCanvasAssetNode } from '../api/sendToCanvas';
+import SendToCanvasDialog from '../components/SendToCanvasDialog';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
 import {
     buildVodGenerationRequestSettings,
@@ -283,6 +287,8 @@ export default function FlowHome() {
     const [homeVideoStage, setHomeVideoStage] = useState('');
     const [homeVideoResults, setHomeVideoResults] = useState([]);
     const [homeReferenceImages, setHomeReferenceImages] = useState([]);
+    const [homeReferencePreparing, setHomeReferencePreparing] = useState(0);
+    const homeReferenceSessionRef = useRef(0);
     const [homePixVerseReferenceMode, setHomePixVerseReferenceMode] = useState('firstlast');
     const [homeAspectRatio, setHomeAspectRatio] = useState('16:9');
     const [homeResolution, setHomeResolution] = useState('1K');
@@ -290,6 +296,8 @@ export default function FlowHome() {
     const [homeStorageMode, setHomeStorageMode] = useState('Permanent');
     const [homeParameterOpen, setHomeParameterOpen] = useState(null);
     const [homeParameterError, setHomeParameterError] = useState('');
+    const [sendToCanvasNodes, setSendToCanvasNodes] = useState(null);
+    const [sendToCanvasToast, setSendToCanvasToast] = useState('');
     const homeReferenceInputRef = useRef(null);
     const [modelOpen, setModelOpen] = useState(false);
     const [quickInspirationOpen, setQuickInspirationOpen] = useState(false);
@@ -388,6 +396,41 @@ export default function FlowHome() {
     const openProjectList = useCallback(() => {
         setActiveMode('projects');
     }, []);
+
+    // 首页生成结果一键发送到画布：构造节点后交由目标选择弹窗处理。
+    const openSendToCanvas = useCallback((url, mediaType, prompt) => {
+        if (!url) return;
+        const node = buildCanvasAssetNode(url, {
+            mediaType,
+            index: 0,
+            prompt: prompt || '',
+            modelName: mediaType === 'video' ? `${videoModel} ${videoModelVersion}` : `${imageModel} ${imageModelVersion}`,
+        });
+        if (node) setSendToCanvasNodes([node]);
+    }, [imageModel, imageModelVersion, videoModel, videoModelVersion]);
+
+    useEffect(() => {
+        if (!sendToCanvasToast) return;
+        const timer = setTimeout(() => setSendToCanvasToast(''), 2600);
+        return () => clearTimeout(timer);
+    }, [sendToCanvasToast]);
+
+    // 从生成历史发送素材后，直接打开目标画布继续二次创作。
+    const openHistoryProjectCanvas = useCallback(async (projectId) => {
+        if (projectId === '' || projectId == null) return;
+        try {
+            // 重新拉取项目列表：新建画布后必须能查到刚创建的项目。
+            const projects = await listProjects();
+            const project = Array.isArray(projects) ? projects.find((item) => String(item.id) === String(projectId)) : null;
+            if (!project) {
+                setActiveMode('projects');
+                return;
+            }
+            openProject(project);
+        } catch {
+            setActiveMode('projects');
+        }
+    }, [openProject]);
 
     const createAndOpenProject = useCallback(async () => {
         if (projectNavLoading) return;
@@ -549,9 +592,34 @@ export default function FlowHome() {
         } else if (!validFiles.length) {
             setHomeParameterError(`请选择 ${homeReferenceRequirement} 的参考图`);
         } else {
-            const accepted = validFiles.slice(0, remaining).map((file) => ({ file, preview: URL.createObjectURL(file) }));
+            const sessionId = ++homeReferenceSessionRef.current;
+            const accepted = validFiles.slice(0, remaining).map((file) => ({
+                file,
+                preview: URL.createObjectURL(file),
+                status: 'checking',
+            }));
             setHomeReferenceImages((previous) => [...previous, ...accepted]);
             setHomeParameterError(validFiles.length > remaining ? `已按当前模型上限添加前 ${remaining} 张参考图` : '');
+            void (async () => {
+                setHomeReferencePreparing((count) => count + 1);
+                try {
+                    for (const item of accepted) {
+                        const asset = await prepareReferenceImage(item.file, HOME_PIPELINE_CONTEXT, {
+                            storageMode: homeStorageMode,
+                            upload: (input) => uploadImageToVod(input, HOME_PIPELINE_CONTEXT),
+                        });
+                        if (homeReferenceSessionRef.current !== sessionId) return;
+                        setHomeReferenceImages((previous) => previous.map((entry) => entry === item ? { ...entry, asset, status: 'ready' } : entry));
+                    }
+                } catch (error) {
+                    if (homeReferenceSessionRef.current === sessionId) {
+                        setHomeReferenceImages((previous) => previous.filter((entry) => !accepted.includes(entry)));
+                        setHomeParameterError(`参考图准备失败：${error?.message || '无法上传云端'}`);
+                    }
+                } finally {
+                    setHomeReferencePreparing((count) => Math.max(0, count - 1));
+                }
+            })();
         }
         if (homeReferenceInputRef.current) homeReferenceInputRef.current.value = '';
     };
@@ -568,6 +636,10 @@ export default function FlowHome() {
     // 图片和视频均在首页完成参数校验、任务提交、进度反馈和结果展示。
     const handleSend = async () => {
         if (homeAnyGenerationLoading) return;
+        if (homeReferenceImages.some((item) => item.status !== 'ready' || !item.asset)) {
+            setHomeParameterError('参考图仍在云端验证或上传中，请等待准备完成后再生成');
+            return;
+        }
         if (homeReferenceImages.length > homeReferenceLimit) {
             setHomeParameterError(`当前模型最多支持 ${homeReferenceLimit} 张参考图，请删除多余图片后再生成`);
             return;
@@ -596,7 +668,7 @@ export default function FlowHome() {
                     modelVersion: imageModelVersion,
                     prompt: value,
                     enhancePrompt: homeEnhancePrompt ? 'Enabled' : 'Disabled',
-                    sourceImages: homeReferenceImages.map((item) => item.file),
+                    sourceImages: homeReferenceImages.map((item) => item.asset.mediaUrl),
                     aspectRatio: requestSettings.aspectRatio,
                     extraConfig: {
                         ...requestSettings.extraConfig,
@@ -628,7 +700,7 @@ export default function FlowHome() {
                 resolution: homeVideoResolution,
                 duration: homeVideoDuration,
             });
-            const referenceFiles = homeReferenceImages.map((item) => item.file);
+            const referenceFiles = homeReferenceImages.map((item) => item.asset.mediaUrl);
             const pixVerseReferencePrompt = isPixVerseVideo && homeVideoReferenceFeature === 'multiReference' && referenceFiles.length > 0 && !/@pic\d+/i.test(value)
                 ? `${value}${value ? '。' : ''}参考图标记：${referenceFiles.map((_, index) => `@pic${index + 1}`).join('、')}。请根据提示词使用对应参考图。`
                 : value;
@@ -1201,6 +1273,7 @@ export default function FlowHome() {
                                                                 <div key={`${item.file.name}-${index}`} className="group relative h-14 w-14 overflow-hidden rounded-lg border border-[#e7e3d9] bg-[#f6f5f2]">
                                                                     <img src={item.preview} alt={t(`参考图 ${index + 1}`)} className="h-full w-full object-cover" />
                                                                     <span className="absolute bottom-0 left-0 right-0 bg-black/55 py-0.5 text-center text-[8px] text-white">{t(homeVideoReferenceFeature === 'firstLastFrame' ? (index === 0 ? '首帧' : '尾帧') : homeVideoReferenceFeature === 'multiReference' ? '角色参考' : `参考 ${index + 1}`)}</span>
+                                                                    {item.status !== 'ready' && <span className="absolute left-0.5 top-0.5 rounded-full bg-white/90 px-1 py-0.5 text-[8px] text-[#876417]">{t('校验中')}</span>}
                                                                     <button type="button" onClick={() => removeHomeReference(index)} aria-label={t('删除参考图')} className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition group-hover:opacity-100"><X size={11} /></button>
                                                                 </div>
                                                             ))}
@@ -1301,7 +1374,7 @@ export default function FlowHome() {
                                         <button
                                             type="button"
                                             onClick={handleSend}
-                                            disabled={homeGenerationLoading}
+                                            disabled={homeGenerationLoading || homeReferencePreparing > 0 || homeReferenceImages.some((item) => item.status !== 'ready')}
                                             className={`flex h-[36px] flex-shrink-0 items-center justify-center gap-1.5 bg-[#1f2329] text-white transition hover:bg-black focus:outline-none focus:ring-2 focus:ring-[#e7b238] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${isHomeVideo ? 'min-w-[96px] rounded-lg px-4 text-[12.5px] font-semibold' : 'w-[36px] rounded-full'}`}
                                             aria-label={t(isHomeVideo ? '生成视频' : '开始生成')}
                                         >
@@ -1352,7 +1425,10 @@ export default function FlowHome() {
                                                     </a>
                                                     <div className="flex items-center justify-between px-2 pb-1 pt-2">
                                                         <span className="text-[11.5px] text-gray-400">{t(`生成图片 ${index + 1}`)}</span>
-                                                        <a href={url} download target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#765611] hover:bg-[#fff1c9]"><Download size={13} />{t('下载')}</a>
+                                                        <div className="flex items-center gap-1">
+                                                            <button type="button" onClick={() => openSendToCanvas(url, 'image', text)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#876417] hover:bg-[#fff1c9]"><Send size={13} />{t('发送到画布')}</button>
+                                                            <a href={url} download target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#765611] hover:bg-[#fff1c9]"><Download size={13} />{t('下载')}</a>
+                                                        </div>
                                                     </div>
                                                 </article>
                                             ))}
@@ -1367,7 +1443,10 @@ export default function FlowHome() {
                                                 <video src={url} controls playsInline className="aspect-video w-full rounded-xl bg-black object-contain" />
                                                 <div className="flex items-center justify-between px-2 pb-1 pt-2">
                                                     <span className="text-[11.5px] text-gray-400">{t(`生成视频 ${index + 1}`)}</span>
-                                                    <a href={url} download target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#765611] hover:bg-[#fff1c9]"><Download size={13} />{t('下载')}</a>
+                                                    <div className="flex items-center gap-1">
+                                                        <button type="button" onClick={() => openSendToCanvas(url, 'video', text)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#876417] hover:bg-[#fff1c9]"><Send size={13} />{t('发送到画布')}</button>
+                                                        <a href={url} download target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] text-[#765611] hover:bg-[#fff1c9]"><Download size={13} />{t('下载')}</a>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -1411,7 +1490,10 @@ export default function FlowHome() {
                                     <AgentStudio />
                                 )}
                                 {activeMode === 'history' && (
-                                    <GenerationHistory initialProjectId={historyProjectId} />
+                                    <GenerationHistory
+                                        initialProjectId={historyProjectId}
+                                        onOpenCanvas={openHistoryProjectCanvas}
+                                    />
                                 )}
                                 {activeMode === 'image' && imageTemplateMode && (
                                     <ImageTemplateHub
@@ -1523,6 +1605,22 @@ export default function FlowHome() {
                 </div>
             </main>
             <GlobalAPISettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            {sendToCanvasNodes && (
+                <SendToCanvasDialog
+                    assets={sendToCanvasNodes}
+                    onClose={() => setSendToCanvasNodes(null)}
+                    onToast={setSendToCanvasToast}
+                    onSent={(projectId) => {
+                        setSendToCanvasNodes(null);
+                        if (projectId) void openHistoryProjectCanvas(projectId);
+                    }}
+                />
+            )}
+            {sendToCanvasToast && (
+                <div className="fixed bottom-6 left-1/2 z-[140] -translate-x-1/2 rounded-full bg-[#3e3a32] px-4 py-2 text-[12px] text-white shadow-lg">
+                    {sendToCanvasToast}
+                </div>
+            )}
         </div>
     );
 }

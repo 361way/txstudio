@@ -11,7 +11,9 @@ import {
     VOD_VIDEO_MODEL_MATRIX, getVodVideoModelCapability,
     VOD_DEFAULT_VIDEO_MODEL_NAME, VOD_DEFAULT_VIDEO_MODEL_VERSION,
     runVodAigcPipeline,
+    uploadImageToVod,
 } from '../vodAdapter';
+import { prepareReferenceImage } from '../api/mediaAssetCache';
 import i18n from '../i18n';
 
 const t = (s) => i18n.t ? i18n.t(s) : s;
@@ -64,10 +66,21 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const referenceImageRequirement = `${Array.from(supportedReferenceMimeTypes).map((type) => type.replace('image/', '').toUpperCase()).join('、')}，单张不超过 ${Math.floor(referenceMaxBytes / 1024 / 1024)}MB`;
     const referenceImageAccept = Array.from(supportedReferenceMimeTypes).join(',');
 
+    const [referencePreparing, setReferencePreparing] = useState(0);
+    const referenceSessionRef = useRef(0);
+
     const makePreview = useCallback((file) => ({
         file,
         preview: URL.createObjectURL(file),
+        status: 'checking',
     }), []);
+
+    const prepareReference = useCallback(async (file) => {
+        return prepareReferenceImage(file, PIPELINE_CONTEXT, {
+            storageMode,
+            upload: (input) => uploadImageToVod(input, PIPELINE_CONTEXT),
+        });
+    }, [storageMode]);
 
     const isValidReferenceImage = (file) => supportedReferenceMimeTypes.has(file?.type)
         && file.size > 0
@@ -81,10 +94,26 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             return;
         }
         setError('');
+        const sessionId = ++referenceSessionRef.current;
         setter((previous) => {
             if (previous?.preview) URL.revokeObjectURL(previous.preview);
             return makePreview(file);
         });
+        void (async () => {
+            setReferencePreparing((count) => count + 1);
+            try {
+                const asset = await prepareReference(file);
+                if (referenceSessionRef.current !== sessionId) return;
+                setter((previous) => previous ? { ...previous, asset, status: 'ready' } : previous);
+            } catch (nextError) {
+                if (referenceSessionRef.current === sessionId) {
+                    setter(null);
+                    setError(`参考图准备失败：${nextError?.message || '无法上传云端'}`);
+                }
+            } finally {
+                setReferencePreparing((count) => Math.max(0, count - 1));
+            }
+        })();
     };
     const handleUploadMulti = (files) => {
         const remaining = Math.max(0, videoCapability.maxReferenceImages - multiImages.length);
@@ -100,6 +129,24 @@ export default function VideoTool({ onBack, template, embedded = false }) {
         const accepted = validFiles.slice(0, remaining).map(makePreview);
         setError(validFiles.length > remaining ? `已按上限添加前 ${remaining} 张参考图` : '');
         setMultiImages((previous) => [...previous, ...accepted]);
+        const sessionId = ++referenceSessionRef.current;
+        void (async () => {
+            setReferencePreparing((count) => count + 1);
+            try {
+                for (const item of accepted) {
+                    const asset = await prepareReference(item.file);
+                    if (referenceSessionRef.current !== sessionId) return;
+                    setMultiImages((previous) => previous.map((entry) => entry === item ? { ...entry, asset, status: 'ready' } : entry));
+                }
+            } catch (nextError) {
+                if (referenceSessionRef.current === sessionId) {
+                    setMultiImages((previous) => previous.filter((entry) => !accepted.includes(entry)));
+                    setError(`参考图准备失败：${nextError?.message || '无法上传云端'}`);
+                }
+            } finally {
+                setReferencePreparing((count) => Math.max(0, count - 1));
+            }
+        })();
     };
 
     const clearPreview = (item, setter) => {
@@ -108,6 +155,13 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     };
 
     const generate = async () => {
+        const referenceNotReady = mode === 'firstlast'
+            ? (firstFrame && firstFrame.status !== 'ready') || (lastFrame && lastFrame.status !== 'ready')
+            : multiImages.some((item) => item.status !== 'ready');
+        if (referenceNotReady) {
+            setError('参考图仍在云端验证或上传中，请等待准备完成后再生成');
+            return;
+        }
         setLoading(true); setError(''); setResults([]); setStage('创建生成任务...');
         try {
             let sourceImages = [];
@@ -118,10 +172,10 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                     setError(`当前 ${modelName} ${modelVersion} 不支持首尾帧模式，请改用多图模式或切换模型`); setLoading(false); setStage(''); return;
                 }
                 if (!firstFrame) { setError('首尾帧模式必须上传首帧；尾帧不能单独使用'); setLoading(false); setStage(''); return; }
-                sourceImages.push(firstFrame.file);
+                sourceImages.push(firstFrame.asset.mediaUrl);
                 sourceFileInfos = [{ Usage: 'FirstFrame' }];
                 if (lastFrame) {
-                    sourceImages.push(lastFrame.file);
+                    sourceImages.push(lastFrame.asset.mediaUrl);
                     sourceFileInfos.push(null);
                     lastFrameSourceIndex = sourceImages.length - 1;
                 }
@@ -130,7 +184,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                     setError(`当前 ${modelName} ${modelVersion} 不支持多图参考模式，请切换模型`); setLoading(false); setStage(''); return;
                 }
                 if (!multiImages.length) { setError('请至少上传一张图片'); setLoading(false); setStage(''); return; }
-                sourceImages = multiImages.map((item) => item.file);
+                sourceImages = multiImages.map((item) => item.asset.mediaUrl);
                 sourceFileInfos = sourceImages.map(() => ({ Usage: 'Reference' }));
             }
             const durationValue = Number(String(duration).replace(/[^0-9.]/g, ''));
@@ -178,6 +232,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             {img ? (
                 <div className="relative inline-block group">
                     <img src={img.preview} alt="" className="w-28 h-28 object-cover rounded-xl border border-[#ececef]" />
+                    {img.status !== 'ready' && <span className="absolute left-1 top-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-[#876417] shadow">{t('云端校验中')}</span>}
                     <button type="button" onClick={onClear}
                         className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition"
                         aria-label={t(`删除${label}`)}
@@ -245,6 +300,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                     {multiImages.map((r, i) => (
                                         <div key={i} className="relative group">
                                             <img src={r.preview} alt="" className="w-20 h-20 object-cover rounded-xl border border-[#ececef]" />
+                                            {r.status !== 'ready' && <span className="absolute left-1 top-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-[#876417] shadow">{t('云端校验中')}</span>}
                                             <button onClick={() => setMultiImages((prev) => {
                                                 if (prev[i]?.preview) URL.revokeObjectURL(prev[i].preview);
                                                 return prev.filter((_, j) => j !== i);
@@ -337,7 +393,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                         </div>
                     )}
 
-                    <button onClick={generate} disabled={loading} className="btn-primary w-full py-3">
+                    <button onClick={generate} disabled={loading || referencePreparing > 0 || (mode === 'firstlast' ? (firstFrame && !firstFrame.asset) || (lastFrame && !lastFrame.asset) : multiImages.some((item) => !item.asset))} className="btn-primary w-full py-3">
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                         {loading ? t('生成中...') : t('生成视频')}
                     </button>

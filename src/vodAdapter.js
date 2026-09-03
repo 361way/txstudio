@@ -43,7 +43,7 @@ export const VOD_VIDEO_MODEL_MATRIX = {
     Hailuo: ['02', '2.3', '2.3-fast', 'H3'],
     Kling: ['1.6', '2.0', '2.1', '2.5', '2.6', 'O1', '3.0', '3.0-Omni'],
     Vidu: ['q2', 'q2-pro', 'q2-turbo', 'q3', 'q3-pro', 'q3-turbo'],
-    GV: ['3.1', '3.1-fast'],
+    GV: ['3.1', '3.1-fast', '3.1-lite'],
     OS: ['2.0'],
     Hunyuan: ['1.5'],
     Mingmou: ['1.0'],
@@ -256,6 +256,7 @@ function base64ToBlob(base64, mime = 'application/octet-stream') {
 // 后端负责：TC3-HMAC 签名 + SubAppId 注入 + 配额强制 + 用量记录
 // ============================================================================
 import { invokeVod } from './api/vod';
+import { getReferenceAssetFileId, getReferenceAssetUrl, prepareReferenceImage } from './api/mediaAssetCache';
 import { createGenerationTracker } from './api/generationHistory';
 
 /**
@@ -295,6 +296,12 @@ async function callVodApi(action, body, ctx = {}) {
 /**
  * 从 Blob/File/URL/DataURL 解析得到 {blob, ext, mime}
  */
+async function normalizeBlobInput(input) {
+    if (input instanceof Blob) return input;
+    if (typeof input === 'string' && /^https?:\/\//i.test(input)) return input;
+    throw new Error('[VOD Upload] 参考图需要在本地选中或已缓存的云端素材');
+}
+
 async function resolveBlob(input, ctx = {}) {
     if (input instanceof Blob) {
         const mime = input.type || 'image/png';
@@ -318,6 +325,9 @@ async function resolveBlob(input, ctx = {}) {
 const PIXVERSE_REFERENCE_MAX_PIXELS = 16 * 1024 * 1024;
 
 async function normalizePixVerseReference(input, ctx) {
+    if (typeof input === 'string' && /^https?:\/\//i.test(input)) {
+        return input;
+    }
     const { blob, mime } = await resolveBlob(input, ctx);
     const normalizedMime = String(mime || '').toLowerCase();
     const maxBytes = PIXVERSE_VIDEO_CAPABILITY.maxReferenceImageBytes;
@@ -771,15 +781,26 @@ export async function runVodAigcPipeline(params, ctx = {}) {
             continue;
         }
         const isPixVerseEditInput = isPixVerseVideoEdit || entry.meta?.Category === 'Video';
-        const uploadInput = isPixVerseVideo && !isPixVerseEditInput
-            ? await normalizePixVerseReference(entry.source, ctx)
-            : entry.source;
-        const uploadResult = await uploadImageToVod(uploadInput, ctx);
+        let uploadResult;
+        if (isPixVerseEditInput) {
+            uploadResult = await uploadImageToVod(entry.source, ctx);
+        } else {
+            const uploadInput = isPixVerseVideo
+                ? await normalizePixVerseReference(entry.source, ctx)
+                : await normalizeBlobInput(entry.source);
+            const uploadBlob = uploadInput instanceof Blob
+                ? uploadInput
+                : (await resolveBlob(uploadInput, ctx)).blob;
+            uploadResult = await prepareReferenceImage(uploadBlob, ctx, {
+                storageMode: params.extraConfig?.StorageMode,
+                upload: (input) => uploadImageToVod(input, ctx),
+            });
+        }
         const pixVerseMedia = isPixVerseVideo && !isPixVerseEditInput
             ? await waitForVodImageReady(uploadResult.fileId, ctx)
             : null;
         uploadResults.push({ ...entry, ...uploadResult, pixVerseMedia });
-        const donePayload = { index, total: sourceEntries.length, role: sourceRoleAt(entry), fileId: uploadResult.fileId };
+        const donePayload = { index, total: sourceEntries.length, role: sourceRoleAt(entry), fileId: uploadResult.fileId, mediaUrl: uploadResult.mediaUrl, md5: uploadResult.md5, fromCache: uploadResult.fromCache };
         if (isPixVerseEditInput) {
             donePayload.mediaUrl = uploadResult.mediaUrl;
         } else {
@@ -788,7 +809,7 @@ export async function runVodAigcPipeline(params, ctx = {}) {
         }
         emit('upload_done', donePayload);
     }
-    const fileIds = uploadResults.map((item) => item.fileId).filter(Boolean);
+    const fileIds = uploadResults.map((item) => getReferenceAssetFileId(item)).filter(Boolean);
     const fileInfos = sourceFileInfos
         ? uploadResults
             .map((item, index) => {
@@ -796,9 +817,9 @@ export async function runVodAigcPipeline(params, ctx = {}) {
                 const pixVerseMeta = isPixVerseVideo
                     ? {
                         Type: 'Url',
-                        Url: item.mediaUrl || item.pixVerseMedia?.mediaUrl || item.url,
+                        Url: item.pixVerseMedia?.mediaUrl || getReferenceAssetUrl(item),
                     }
-                    : { FileId: item.fileId };
+                    : { FileId: getReferenceAssetFileId(item) };
                 if (isPixVerseVideo && !pixVerseMeta.Url) return null;
                 if (!isPixVerseVideo && !pixVerseMeta.FileId) return null;
                 const referenceMeta = isPixVerseVideo && item.meta.Usage === 'Reference'
@@ -816,7 +837,7 @@ export async function runVodAigcPipeline(params, ctx = {}) {
     const lastFrameSource = uploadResults.find((item) => item.isLastFrame) || null;
     const lastFrameFileId = isPixVerseVideo ? undefined : lastFrameSource?.fileId;
     const lastFrameUrl = isPixVerseVideo
-        ? (lastFrameSource?.mediaUrl || lastFrameSource?.pixVerseMedia?.mediaUrl || lastFrameSource?.url)
+        ? (getReferenceAssetUrl(lastFrameSource) || lastFrameSource?.pixVerseMedia?.mediaUrl)
         : lastFrameSource?.url;
     if (isPixVerseVideo && sourceFileInfos && fileInfos?.length !== uploadResults.filter((item) => item.meta).length) {
         throw new Error('PixVerse 参考图上传完成但未取得公网 MediaUrl，无法按 Url 请求提交');
@@ -912,6 +933,13 @@ const DEFAULT_VIDEO_CAPABILITY = Object.freeze({
     supportsReferenceImages: true,
 });
 
+const GV_VIDEO_CAPABILITY = Object.freeze({
+    // GV 3.1 / 3.1-fast / 3.1-lite：画面比例仅支持 16:9（横屏）与 9:16（竖屏），生成时长固定 8 秒。
+    ...DEFAULT_VIDEO_CAPABILITY,
+    durations: ['8s'],
+    ratios: ['16:9', '9:16'],
+});
+
 const PIXVERSE_VIDEO_CAPABILITY = Object.freeze({
     // PixVerse v6/c1：支持首尾帧和 1–7 张参考图；官方支持 360P/540P/720P/1080P，默认 720P。
     ...DEFAULT_VIDEO_CAPABILITY,
@@ -928,6 +956,9 @@ const PIXVERSE_VIDEO_CAPABILITY = Object.freeze({
 });
 
 export function getVodVideoModelCapability(modelName, modelVersion) {
+    if (modelName === 'GV' && ['3.1', '3.1-fast', '3.1-lite'].includes(modelVersion)) {
+        return GV_VIDEO_CAPABILITY;
+    }
     if (modelName === 'PixVerse' && ['v6', 'c1'].includes(modelVersion)) {
         return PIXVERSE_VIDEO_CAPABILITY;
     }
