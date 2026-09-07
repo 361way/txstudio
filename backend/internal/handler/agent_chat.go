@@ -98,6 +98,39 @@ func isPublicHTTPS(raw string) bool {
 	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil
 }
 
+const defaultTokenHubBaseURL = "https://tokenhub.tencentmaas.com"
+
+var reservedBaseURLTLDs = map[string]bool{
+	"test":      true,
+	"example":   true,
+	"invalid":   true,
+	"local":     true,
+	"localhost": true,
+}
+
+// normalizeAgentBaseURL 校验 TokenHub Base URL 是否为可用的公网 HTTPS 地址。
+// 占位域名（如 example.test）、保留 TLD、localhost、非 HTTPS 等一律视为无效，
+// 由调用方回退默认地址，避免凭证中误存的占位地址导致所有请求 502。
+func normalizeAgentBaseURL(raw string) (string, bool) {
+	trimmed := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if trimmed == "" {
+		return "", false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+		return "", false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || !strings.Contains(host, ".") {
+		return "", false
+	}
+	parts := strings.Split(host, ".")
+	if reservedBaseURLTLDs[parts[len(parts)-1]] {
+		return "", false
+	}
+	return trimmed, true
+}
+
 func newAgentChatHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -137,10 +170,22 @@ func (h *AgentChatHandler) Chat(c *gin.Context) {
 		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本模型未配置，请在右上角 API 设置中配置 TokenHub")
 		return
 	}
+	// 凭证中的 base_url 无效（占位域名 / 保留 TLD / 非 HTTPS）时回退默认 TokenHub 地址
+	if _, ok := normalizeAgentBaseURL(baseURL); !ok {
+		if fallback, fallbackOK := normalizeAgentBaseURL(h.fallbackBaseURL); fallbackOK {
+			baseURL = fallback
+		} else {
+			baseURL = defaultTokenHubBaseURL
+		}
+	}
 	target := baseURL + "/v1/chat/completions"
 	if !isPublicHTTPS(target) {
 		writeAgentChatError(c, http.StatusServiceUnavailable, "智能 Agent 文本服务地址无效或不安全")
 		return
+	}
+	upstreamHost := target
+	if parsed, err := url.Parse(target); err == nil && parsed.Host != "" {
+		upstreamHost = parsed.Host
 	}
 
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentChatRequestBody)
@@ -176,7 +221,7 @@ func (h *AgentChatHandler) Chat(c *gin.Context) {
 	response, err := h.client.Do(request)
 	if err != nil {
 		logUpstreamTransportError(c, "tokenhub", "chat-completions", payload.Model, upstreamStartedAt, err)
-		writeAgentChatError(c, http.StatusBadGateway, "文本模型服务暂不可用")
+		writeAgentChatError(c, http.StatusBadGateway, fmt.Sprintf("文本模型服务暂不可用：无法连接 %s，请在全局 API 设置中检查 TokenHub Base URL", upstreamHost))
 		return
 	}
 	defer response.Body.Close()

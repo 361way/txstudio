@@ -115,15 +115,36 @@ export default function GlobalAPISettings({ open, onClose }) {
 
     if (!open) return null;
 
+    // 校验 TokenHub Base URL：空值使用默认；占位域名（example.test 等）/ 保留 TLD / 非 HTTPS 拒绝保存，
+    // 防止无效地址写入 SQLite 后导致所有文本/视觉请求 502。
+    const validateTokenhubBaseUrl = (raw) => {
+        const trimmed = String(raw || '').trim();
+        if (!trimmed) return DEFAULT_TOKENHUB_URL;
+        let parsed;
+        try { parsed = new URL(trimmed); } catch { return null; }
+        if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username) return null;
+        const host = parsed.hostname.toLowerCase();
+        const parts = host.split('.');
+        const tld = parts[parts.length - 1];
+        if (host === 'localhost' || host.endsWith('.localhost') || parts.length < 2
+            || ['test', 'example', 'invalid', 'local'].includes(tld)) return null;
+        return trimmed.replace(/\/+$/, '');
+    };
+    const tokenhubBaseUrlInvalid = tokenhub.baseUrl.trim() && validateTokenhubBaseUrl(tokenhub.baseUrl) === null;
+
     const saveProviders = async () => {
         setSaving(true);
         setMessage('');
         try {
             const tasks = [];
+            const tokenhubBaseUrl = validateTokenhubBaseUrl(tokenhub.baseUrl);
+            if (tokenhubBaseUrl === null) {
+                throw new Error('TokenHub Base URL 无效：必须是可访问的 HTTPS 地址，不能是占位域名（如 example.test）');
+            }
             if (tokenhub.apiKey.trim()) {
                 tasks.push(saveCredential('tokenhub', {
                     api_key: tokenhub.apiKey.trim(),
-                    base_url: tokenhub.baseUrl.trim() || DEFAULT_TOKENHUB_URL,
+                    base_url: tokenhubBaseUrl,
                 }));
             }
             if (configured.vod || vod.secretId.trim() || vod.secretKey.trim()) {
@@ -149,7 +170,7 @@ export default function GlobalAPISettings({ open, onClose }) {
                     ...(current.openai || {}),
                     // 浏览器只保存占位符；真实 API Key 由本地后端从 SQLite 解密后注入代理请求。
                     key: '__server__',
-                    url: tokenhub.baseUrl.trim() || DEFAULT_TOKENHUB_URL,
+                    url: tokenhubBaseUrl,
                     apiType: 'openai',
                     useProxy: true,
                     forceAsync: false,
@@ -226,7 +247,12 @@ export default function GlobalAPISettings({ open, onClose }) {
                                     {configured.tokenhub && <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-700"><Check size={12} />SQLite 已配置</span>}
                                 </div>
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                    <label className="text-xs text-gray-500">Base URL<input value={tokenhub.baseUrl} onChange={(e) => setTokenhub((prev) => ({ ...prev, baseUrl: e.target.value }))} className="mt-1.5 w-full rounded-lg border border-[#dedee2] px-3 py-2.5 text-sm text-[#1f2329] outline-none focus:border-[#9b9ba2]" /></label>
+                                    <label className="text-xs text-gray-500">Base URL<input value={tokenhub.baseUrl} onChange={(e) => setTokenhub((prev) => ({ ...prev, baseUrl: e.target.value }))} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm text-[#1f2329] outline-none focus:border-[#9b9ba2] ${tokenhubBaseUrlInvalid ? 'border-red-400 bg-red-50/40' : 'border-[#dedee2]'}`} /></label>
+                                    {tokenhubBaseUrlInvalid && (
+                                        <p className="sm:col-span-2 -mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] leading-4 text-red-600">
+                                            当前 Base URL 是无效的占位地址（无法解析的域名）。请改回官方地址 <button type="button" className="underline" onClick={() => setTokenhub((prev) => ({ ...prev, baseUrl: DEFAULT_TOKENHUB_URL }))}>https://tokenhub.tencentmaas.com</button>，否则文本与视觉理解请求都会失败。
+                                        </p>
+                                    )}
                                     <label className="text-xs text-gray-500">API Key<div className="relative mt-1.5"><input type={showSecrets ? 'text' : 'password'} value={tokenhub.apiKey} onChange={(e) => setTokenhub((prev) => ({ ...prev, apiKey: e.target.value }))} placeholder={configured.tokenhub ? '已配置；输入新值可覆盖' : 'sk-...'} className="w-full rounded-lg border border-[#dedee2] px-3 py-2.5 pr-10 text-sm text-[#1f2329] outline-none focus:border-[#9b9ba2]" /><button type="button" onClick={() => setShowSecrets((value) => !value)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400">{showSecrets ? <EyeOff size={15} /> : <Eye size={15} />}</button></div></label>
                                 </div>
                             </section>

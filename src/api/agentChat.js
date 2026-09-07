@@ -11,9 +11,11 @@ const readErrorMessage = (payload, fallback) => (
  * 通过同源 Go 服务调用 TokenHub，避免浏览器直连产生 CORS/网络错误。
  * API Key 与 Base URL 均由后端从加密凭证中读取。
  */
-export async function requestAgentChat({ model, messages, temperature, signal }) {
+export async function requestAgentChat({ model, messages, temperature, responseFormat, signal }) {
     const payload = { model, messages };
     if (Number.isFinite(temperature)) payload.temperature = temperature;
+    // TokenHub 支持 response_format（json_object / json_schema 等），需在提示词中同步要求 JSON 输出
+    if (responseFormat && typeof responseFormat === 'object') payload.response_format = responseFormat;
 
     let response;
     try {

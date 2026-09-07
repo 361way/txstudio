@@ -1951,6 +1951,30 @@ const parseReversePromptResult = (text) => {
     } catch { }
     return null;
 };
+
+// 反推图片提示词：视觉输入归一化。
+// TokenHub 图片理解已验证格式为 JPEG/PNG/GIF/WEBP，但 GLM-5V-Turbo 等模型不支持 GIF，
+// 统一将 GIF 转为 JPEG 再送入模型，避免 400 图片格式错误。
+const normalizeVisionImageDataUrl = (dataUrl) => new Promise((resolve, reject) => {
+    if (!/^data:image\/gif/i.test(String(dataUrl || ''))) {
+        resolve(dataUrl);
+        return;
+    }
+    const img = new Image();
+    img.onload = () => {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || 1;
+            canvas.height = img.naturalHeight || 1;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.92));
+        } catch (error) {
+            reject(new Error('GIF 图片转换失败，请改用 JPEG/PNG/WEBP 格式'));
+        }
+    };
+    img.onerror = () => reject(new Error('无法解析 GIF 图片'));
+    img.src = dataUrl;
+});
 const TOKENHUB_PROVIDER_KEY = 'openai';
 const TENCENT_VOD_BASE_URL = `https://${VOD_API_HOST}`;
 
@@ -10256,16 +10280,26 @@ function TxStudioApp({
     }, []);
 
     const getMediaAnalysisConfig = useCallback((modelKey, capability = 'video') => {
+        // 回退链：用户选择的模型（能力匹配时）→ 默认视觉模型 → 首个配置的可用视觉模型 → 兜底
         const requested = getApiConfigByKey(resolveModelKey(modelKey || DEFAULT_VIDEO_ANALYSIS_MODEL_ID));
         if (supportsAnalysisCapability(requested, capability)) return requested;
-        return getApiConfigByKey(resolveModelKey(DEFAULT_VIDEO_ANALYSIS_MODEL_ID))
-            || { id: DEFAULT_VIDEO_ANALYSIS_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai', capabilities: ['text', 'image', 'video'] };
-    }, [getApiConfigByKey, resolveModelKey, supportsAnalysisCapability]);
+        const fallback = getApiConfigByKey(resolveModelKey(DEFAULT_VIDEO_ANALYSIS_MODEL_ID));
+        if (supportsAnalysisCapability(fallback, capability)) return fallback;
+        const candidate = apiConfigs.find((config) => (
+            config.provider === TOKENHUB_PROVIDER_KEY
+            && isChatModelType(config.type)
+            && !TOKENHUB_DEPRECATED_MODEL_IDS.includes(config.id)
+            && supportsAnalysisCapability(config, capability)
+        ));
+        if (candidate) return candidate;
+        return { id: DEFAULT_VIDEO_ANALYSIS_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai', capabilities: ['text', 'image', 'video'] };
+    }, [apiConfigs, getApiConfigByKey, resolveModelKey, supportsAnalysisCapability]);
 
     // 反推图片提示词：可选模型限定为 TokenHub 中配置了视觉理解（image 能力）的模型
     const tokenHubVisionModels = useMemo(() => (
         apiConfigs
             .filter((config) => isChatModelType(config.type) && config.provider === TOKENHUB_PROVIDER_KEY)
+            .filter((config) => !TOKENHUB_DEPRECATED_MODEL_IDS.includes(config.id))
             .filter((config) => supportsAnalysisCapability(config, 'image'))
             .map((config) => ({
                 key: config._uid || config.id,
@@ -10304,6 +10338,17 @@ function TxStudioApp({
                     if (analysisModelKey && analysisModelKey !== settings?.model) {
                         if (!settingsChanged) settings = { ...settings };
                         settings.model = analysisModelKey;
+                        settingsChanged = true;
+                    }
+                }
+
+                // 反推图片提示词：旧节点选中的模型可能已下线（如 youtu-vita）或配置丢失，自动回退可用视觉模型
+                if (node.type === 'image-prompt-reverse') {
+                    const visionConfig = getMediaAnalysisConfig(settings?.model, 'image');
+                    const visionModelKey = resolveModelKey(visionConfig?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
+                    if (visionModelKey && visionModelKey !== settings?.model) {
+                        if (!settingsChanged) settings = { ...settings };
+                        settings.model = visionModelKey;
                         settingsChanged = true;
                     }
                 }
@@ -27217,6 +27262,8 @@ ${inputText.substring(0, 15000)} ... (截断)
         const config = getMediaAnalysisConfig(node.settings?.model, 'image');
         if (selectedConfig && selectedConfig.id !== config.id) {
             showToast(getTokenHubTaskHint(selectedConfig.id, 'image'), 'warning', 5000);
+        } else if (!selectedConfig && node.settings?.model) {
+            showToast(`模型 ${node.settings.model} 已下线或不可用，本次自动使用 ${config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID}`, 'warning', 5000);
         }
         const modelId = resolveModelKey(config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
         const { key: apiKey } = getApiCredentials(modelId);
@@ -27232,9 +27279,12 @@ ${inputText.substring(0, 15000)} ... (截断)
             : n));
 
         try {
-            const dataUrl = await materializeMediaDataUrl(images[0], { maxBytes: 8 * 1024 * 1024 });
+            // TokenHub 图片理解规范：JPEG/PNG/WEBP（GIF 部分模型不支持），统一归一化后再送模型
+            const rawDataUrl = await materializeMediaDataUrl(images[0], { maxBytes: 8 * 1024 * 1024 });
+            const dataUrl = await normalizeVisionImageDataUrl(rawDataUrl);
 
-            const systemPrompt = `你是一个专业的 AI 绘图提示词反推助手。请仔细分析用户提供的图片，还原出可用于 AI 绘图的高质量提示词。
+            // 按官方图片理解示例组织消息：单条 user 消息，content 数组内图片块在前、文本块在后
+            const instructionText = `你是一个专业的 AI 绘图提示词反推助手。请仔细分析提供的图片，还原出可用于 AI 绘图的高质量提示词。
 
 请返回严格的 JSON 格式：
 {
@@ -27249,23 +27299,37 @@ ${inputText.substring(0, 15000)} ... (截断)
 4. 只输出 JSON，不要输出任何其他文字。`;
 
             const userContent = [
-                { type: 'text', text: '请反推这张图片的 AI 绘图提示词。' },
                 { type: 'image_url', image_url: { url: dataUrl } },
+                { type: 'text', text: instructionText },
             ];
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 120000);
 
+            const requestModel = config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID;
+            const sendVisionRequest = (withResponseFormat) => requestAgentChat({
+                model: requestModel,
+                messages: [
+                    { role: 'user', content: userContent },
+                ],
+                // TokenHub 支持 json_object 结构化输出（提示词中已同步要求 JSON）
+                ...(withResponseFormat ? { responseFormat: { type: 'json_object' } } : {}),
+                signal: controller.signal,
+            });
+
             let data;
             try {
-                data = await requestAgentChat({
-                    model: config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userContent },
-                    ],
-                    signal: controller.signal,
-                });
+                try {
+                    data = await sendVisionRequest(true);
+                } catch (firstError) {
+                    if (firstError.name === 'AbortError') throw firstError;
+                    // 部分视觉模型不支持 response_format 参数（返回 400），去掉后重试一次
+                    if (String(firstError?.message || '').includes('HTTP 400')) {
+                        data = await sendVisionRequest(false);
+                    } else {
+                        throw firstError;
+                    }
+                }
             } catch (fetchError) {
                 if (fetchError.name === 'AbortError') {
                     throw new Error('请求超时，请检查网络连接或稍后重试');
@@ -31771,6 +31835,12 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             </div>
                                         );
                                     })()}
+
+                                    {tokenHubVisionModels.length === 0 && (
+                                        <div className={`rounded-md px-2 py-1.5 text-[10px] leading-4 ${theme === 'dark' ? 'bg-amber-950/30 text-amber-400' : 'bg-amber-50 text-amber-700'}`}>
+                                            {t('未找到支持视觉理解的 TokenHub 模型，请在「全局 API 设置」中确认 TokenHub 配置（API Key 与 Base URL）后重试。')}
+                                        </div>
+                                    )}
 
                                     {/* 执行反推 */}
                                     <button
