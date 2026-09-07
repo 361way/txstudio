@@ -40,7 +40,7 @@ export const VOD_IMAGE_MODEL_MATRIX = {
     Kling: ['2.1', '3.0', '3.0-Omni', 'O1']
 };
 export const VOD_VIDEO_MODEL_MATRIX = {
-    Hailuo: ['02', '2.3', '2.3-fast', 'H3'],
+    Hailuo: ['02', '2.3', '2.3-fast', 'H3', 'H3-Max'],
     Kling: ['1.6', '2.0', '2.1', '2.5', '2.6', 'O1', '3.0', '3.0-Omni'],
     Vidu: ['q2', 'q2-pro', 'q2-turbo', 'q3', 'q3-pro', 'q3-turbo'],
     GV: ['3.1', '3.1-fast', '3.1-lite'],
@@ -780,7 +780,8 @@ export async function runVodAigcPipeline(params, ctx = {}) {
             emit('upload_done', { index, total: sourceEntries.length, role: sourceRoleAt(entry), url: entry.source, directUrl: true });
             continue;
         }
-        const isPixVerseEditInput = isPixVerseVideoEdit || entry.meta?.Category === 'Video';
+        const isRawMediaReference = entry.meta?.Category === 'Video' || entry.meta?.Category === 'Audio';
+        const isPixVerseEditInput = isPixVerseVideoEdit || isRawMediaReference;
         let uploadResult;
         if (isPixVerseEditInput) {
             uploadResult = await uploadImageToVod(entry.source, ctx);
@@ -914,11 +915,41 @@ export const VOD_VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 export const VOD_VIDEO_DURATIONS = ['5s', '10s'];
 
 const HAILUO_H3_VIDEO_CAPABILITY = Object.freeze({
-    // VODoc 的 Hailuo H3 文档：时长仅支持 6/10 秒，比例范围为 2:5 至 5:2。
-    durations: ['6s', '10s'],
+    // MiniMax 海螺 H3：时长 4-15 秒可选。
+    // 生成模式：文生视频 / 首帧尾帧图生视频 / 多模态参考生视频（图片、视频、音频参考，不支持仅音频参考）。
+    // 参考要求：
+    //   图片 ≤9 张，宽高范围 [256, 5760]；
+    //   视频 ≤3 段，单段 [2,15] 秒，总时长 ≤15 秒，宽高 [256, 5760]，宽高比 5:2~2:5；
+    //   音频 ≤3 段，必须搭配图片或视频输入，单段 [2,15] 秒，总时长 ≤15 秒。
+    durations: Array.from({ length: 12 }, (_, index) => `${index + 4}s`),
     ratios: ['2:5', '9:16', '3:4', '1:1', '4:3', '16:9', '5:2'],
     resolutions: ['768P', '1080P', '2K', '4K'],
-    maxReferenceImages: 1,
+    maxReferenceImages: 9,
+    maxReferenceImageBytes: 20 * 1024 * 1024,
+    referenceImageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    supportsReferenceImages: true,
+    supportsReferenceVideos: true,
+    maxReferenceVideos: 3,
+    supportsReferenceAudios: true,
+    maxReferenceAudios: 3,
+    referenceMediaDimensionRange: [256, 5760],
+    referenceVideoDurationRange: [2, 15],
+    referenceVideoTotalDurationMax: 15,
+    referenceAudioDurationRange: [2, 15],
+    referenceAudioTotalDurationMax: 15,
+    referenceVideoMaxBytes: 100 * 1024 * 1024,
+    referenceAudioMaxBytes: 50 * 1024 * 1024,
+    supportsFirstLastFrame: true,
+});
+
+const HAILUO_H3_MAX_VIDEO_CAPABILITY = Object.freeze({
+    // 海螺 H3-Max：仅支持文生视频与首帧/尾帧图生视频，不支持多模态参考（参考图/参考视频/参考音频）；
+    // 时长 5-15 秒可选；比例沿用 H3 系列范围。
+    durations: Array.from({ length: 11 }, (_, index) => `${index + 5}s`),
+    ratios: ['2:5', '9:16', '3:4', '1:1', '4:3', '16:9', '5:2'],
+    resolutions: ['768P', '1080P', '2K', '4K'],
+    maxReferenceImages: 0,
+    supportsReferenceImages: false,
     supportsFirstLastFrame: true,
 });
 
@@ -964,6 +995,9 @@ export function getVodVideoModelCapability(modelName, modelVersion) {
     }
     if (modelName === 'Hailuo' && modelVersion === 'H3') {
         return HAILUO_H3_VIDEO_CAPABILITY;
+    }
+    if (modelName === 'Hailuo' && modelVersion === 'H3-Max') {
+        return HAILUO_H3_MAX_VIDEO_CAPABILITY;
     }
     if (modelName === 'Kling' && ['3.0', '3.0-Omni'].includes(modelVersion)) {
         return {

@@ -5,7 +5,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import {
     ArrowLeft, Clapperboard, X, Plus, Loader2, AlertCircle, Wand2, Sparkles,
-    Film, Images,
+    Film, Images, Video as VideoIcon, Music,
 } from 'lucide-react';
 import {
     VOD_VIDEO_MODEL_MATRIX, getVodVideoModelCapability,
@@ -43,6 +43,8 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const [firstFrame, setFirstFrame] = useState(null);
     const [lastFrame, setLastFrame] = useState(null);
     const [multiImages, setMultiImages] = useState([]);
+    const [multiVideos, setMultiVideos] = useState([]);
+    const [multiAudios, setMultiAudios] = useState([]);
     const [modelName, setModelName] = useState(template?.model_name || VOD_DEFAULT_VIDEO_MODEL_NAME);
     const [modelVersion, setModelVersion] = useState(template?.model_version || VOD_DEFAULT_VIDEO_MODEL_VERSION);
     const [ratio, setRatio] = useState(template?.ratio || '16:9');
@@ -63,6 +65,23 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const referenceMaxBytes = videoCapability.maxReferenceImageBytes || VIDEO_REFERENCE_MAX_BYTES;
     const supportsFirstLastFrame = !!videoCapability.supportsFirstLastFrame;
     const supportsReferenceImages = videoCapability.supportsReferenceImages !== false;
+    const maxReferenceVideos = videoCapability.supportsReferenceVideos ? (videoCapability.maxReferenceVideos || 0) : 0;
+    const maxReferenceAudios = videoCapability.supportsReferenceAudios ? (videoCapability.maxReferenceAudios || 0) : 0;
+    const supportsReferenceVideos = maxReferenceVideos > 0;
+    const supportsReferenceAudios = maxReferenceAudios > 0;
+    const supportsMultiReference = supportsReferenceImages || supportsReferenceVideos || supportsReferenceAudios;
+    const referenceMediaDimensionRange = videoCapability.referenceMediaDimensionRange || null;
+    const referenceVideoDurationRange = videoCapability.referenceVideoDurationRange || null;
+    const referenceVideoTotalDurationMax = videoCapability.referenceVideoTotalDurationMax || null;
+    const referenceAudioDurationRange = videoCapability.referenceAudioDurationRange || null;
+    const referenceAudioTotalDurationMax = videoCapability.referenceAudioTotalDurationMax || null;
+    const referenceVideoMaxBytes = videoCapability.referenceVideoMaxBytes || 100 * 1024 * 1024;
+    const referenceAudioMaxBytes = videoCapability.referenceAudioMaxBytes || 50 * 1024 * 1024;
+    const referenceMediaAccept = [
+        ...(supportsReferenceImages ? Array.from(supportedReferenceMimeTypes) : []),
+        ...(supportsReferenceVideos ? ['video/mp4', 'video/quicktime', 'video/webm'] : []),
+        ...(supportsReferenceAudios ? ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/ogg'] : []),
+    ].join(',');
     const referenceImageRequirement = `${Array.from(supportedReferenceMimeTypes).map((type) => type.replace('image/', '').toUpperCase()).join('、')}，单张不超过 ${Math.floor(referenceMaxBytes / 1024 / 1024)}MB`;
     const referenceImageAccept = Array.from(supportedReferenceMimeTypes).join(',');
 
@@ -75,12 +94,34 @@ export default function VideoTool({ onBack, template, embedded = false }) {
         status: 'checking',
     }), []);
 
-    const prepareReference = useCallback(async (file) => {
+    const prepareReference = useCallback(async (file, kind = 'image') => {
         return prepareReferenceImage(file, PIPELINE_CONTEXT, {
+            mediaType: kind === 'image' ? 'image' : kind,
             storageMode,
             upload: (input) => uploadImageToVod(input, PIPELINE_CONTEXT),
         });
     }, [storageMode]);
+
+    const probeMediaDuration = (file) => new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const isVideo = file.type.startsWith('video/');
+        const element = document.createElement(isVideo ? 'video' : 'audio');
+        element.preload = 'metadata';
+        element.onloadedmetadata = () => {
+            const result = {
+                duration: Number.isFinite(element.duration) ? element.duration : 0,
+                width: isVideo ? element.videoWidth || 0 : 0,
+                height: isVideo ? element.videoHeight || 0 : 0,
+            };
+            URL.revokeObjectURL(url);
+            resolve(result);
+        };
+        element.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('无法读取媒体文件信息'));
+        };
+        element.src = url;
+    });
 
     const isValidReferenceImage = (file) => supportedReferenceMimeTypes.has(file?.type)
         && file.size > 0
@@ -116,32 +157,108 @@ export default function VideoTool({ onBack, template, embedded = false }) {
         })();
     };
     const handleUploadMulti = (files) => {
-        const remaining = Math.max(0, videoCapability.maxReferenceImages - multiImages.length);
-        const validFiles = Array.from(files || []).filter(isValidReferenceImage);
-        if (!remaining) {
-            setError(`当前模型最多支持 ${videoCapability.maxReferenceImages} 张参考图`);
+        const incoming = Array.from(files || []);
+        if (!incoming.length) return;
+
+        const imageFiles = [];
+        const videoFiles = [];
+        const audioFiles = [];
+        const rejected = [];
+        incoming.forEach((file) => {
+            if (file.type.startsWith('image/')) {
+                (isValidReferenceImage(file) ? imageFiles : rejected).push(file);
+            } else if (file.type.startsWith('video/')) {
+                (file.size > 0 && file.size <= referenceVideoMaxBytes ? videoFiles : rejected).push(file);
+            } else if (file.type.startsWith('audio/')) {
+                (file.size > 0 && file.size <= referenceAudioMaxBytes ? audioFiles : rejected).push(file);
+            } else {
+                rejected.push(file);
+            }
+        });
+        if (rejected.length) {
+            setError(`已忽略 ${rejected.length} 个不符合要求的文件（图片 ${referenceImageRequirement}；视频不超过 ${Math.floor(referenceVideoMaxBytes / 1024 / 1024)}MB；音频不超过 ${Math.floor(referenceAudioMaxBytes / 1024 / 1024)}MB）`);
+        }
+
+        const imageSlots = supportsReferenceImages ? Math.max(0, videoCapability.maxReferenceImages - multiImages.length) : 0;
+        const videoSlots = Math.max(0, maxReferenceVideos - multiVideos.length);
+        const audioSlots = Math.max(0, maxReferenceAudios - multiAudios.length);
+        if (!imageSlots && !videoSlots && !audioSlots) {
+            setError(`当前模型参考素材已达上限（图片 ${videoCapability.maxReferenceImages} 张、视频 ${maxReferenceVideos} 段、音频 ${maxReferenceAudios} 段）`);
             return;
         }
-        if (!validFiles.length) {
-            setError(`请选择 ${referenceImageRequirement} 的参考图`);
-            return;
+
+        const acceptedImages = imageFiles.slice(0, imageSlots).map((file) => makePreview(file));
+        const acceptedVideos = videoFiles.slice(0, videoSlots).map((file) => ({ file, kind: 'video', preview: '', name: file.name || '', status: 'validating' }));
+        const acceptedAudios = audioFiles.slice(0, audioSlots).map((file) => ({ file, kind: 'audio', preview: '', name: file.name || '', status: 'validating' }));
+        const overflowCount = (imageFiles.length - acceptedImages.length) + (videoFiles.length - acceptedVideos.length) + (audioFiles.length - acceptedAudios.length);
+        if (overflowCount > 0 && !rejected.length) {
+            setError(`已达参考素材数量上限，仅添加了前 ${incoming.length - overflowCount} 个文件`);
         }
-        const accepted = validFiles.slice(0, remaining).map(makePreview);
-        setError(validFiles.length > remaining ? `已按上限添加前 ${remaining} 张参考图` : '');
-        setMultiImages((previous) => [...previous, ...accepted]);
+
+        if (acceptedImages.length) setMultiImages((previous) => [...previous, ...acceptedImages]);
+        if (acceptedVideos.length) setMultiVideos((previous) => [...previous, ...acceptedVideos]);
+        if (acceptedAudios.length) setMultiAudios((previous) => [...previous, ...acceptedAudios]);
+
         const sessionId = ++referenceSessionRef.current;
+        const allAccepted = [...acceptedImages, ...acceptedVideos, ...acceptedAudios];
+        const patchItem = (item, patch, listSetter) => listSetter((previous) => previous.map((entry) => entry === item ? { ...entry, ...patch } : entry));
+        const removeItem = (item, listSetter) => listSetter((previous) => previous.filter((entry) => entry !== item));
+
+        const validateMediaItem = async (item) => {
+            if (item.kind === 'image') return { probed: null };
+            let probed = { duration: 0, width: 0, height: 0 };
+            try {
+                probed = await probeMediaDuration(item.file);
+            } catch (error) {
+                return { error: error.message || '无法读取媒体信息' };
+            }
+            const range = item.kind === 'video' ? referenceVideoDurationRange : referenceAudioDurationRange;
+            const totalMax = item.kind === 'video' ? referenceVideoTotalDurationMax : referenceAudioTotalDurationMax;
+            const existingItems = item.kind === 'video' ? multiVideos : multiAudios;
+            const existingTotal = existingItems
+                .filter((entry) => entry !== item && Number.isFinite(entry.duration))
+                .reduce((sum, entry) => sum + entry.duration, 0);
+            if (range && (probed.duration < range[0] || probed.duration > range[1])) {
+                return { error: `${item.kind === 'video' ? '参考视频' : '参考音频'}单段时长须在 ${range[0]}-${range[1]} 秒之间` };
+            }
+            if (totalMax && existingTotal + probed.duration > totalMax) {
+                return { error: `${item.kind === 'video' ? '参考视频' : '参考音频'}总时长不能超过 ${totalMax} 秒` };
+            }
+            if (item.kind === 'video' && referenceMediaDimensionRange && probed.width && probed.height) {
+                const [minDim, maxDim] = referenceMediaDimensionRange;
+                if (probed.width < minDim || probed.width > maxDim || probed.height < minDim || probed.height > maxDim) {
+                    return { error: `参考视频宽高须在 ${minDim}-${maxDim} 范围内` };
+                }
+            }
+            return { probed };
+        };
+
         void (async () => {
             setReferencePreparing((count) => count + 1);
             try {
-                for (const item of accepted) {
-                    const asset = await prepareReference(item.file);
+                for (const item of allAccepted) {
+                    const { error: validationError, probed } = await validateMediaItem(item);
                     if (referenceSessionRef.current !== sessionId) return;
-                    setMultiImages((previous) => previous.map((entry) => entry === item ? { ...entry, asset, status: 'ready' } : entry));
+                    if (validationError) {
+                        if (item.kind === 'image') removeItem(item, setMultiImages);
+                        else if (item.kind === 'video') removeItem(item, setMultiVideos);
+                        else removeItem(item, setMultiAudios);
+                        setError(validationError);
+                        continue;
+                    }
+                    patchItem(item, { status: 'checking', duration: probed?.duration }, item.kind === 'image' ? setMultiImages : item.kind === 'video' ? setMultiVideos : setMultiAudios);
+                    const asset = await prepareReference(item.file, item.kind);
+                    if (referenceSessionRef.current !== sessionId) return;
+                    patchItem(item, { asset, status: 'ready' }, item.kind === 'image' ? setMultiImages : item.kind === 'video' ? setMultiVideos : setMultiAudios);
                 }
             } catch (nextError) {
                 if (referenceSessionRef.current === sessionId) {
-                    setMultiImages((previous) => previous.filter((entry) => !accepted.includes(entry)));
-                    setError(`参考图准备失败：${nextError?.message || '无法上传云端'}`);
+                    allAccepted.forEach((item) => {
+                        if (item.kind === 'image') removeItem(item, setMultiImages);
+                        else if (item.kind === 'video') removeItem(item, setMultiVideos);
+                        else removeItem(item, setMultiAudios);
+                    });
+                    setError(`参考素材准备失败：${nextError?.message || '无法上传云端'}`);
                 }
             } finally {
                 setReferencePreparing((count) => Math.max(0, count - 1));
@@ -155,11 +272,12 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     };
 
     const generate = async () => {
+        const allMultiReferences = [...multiImages, ...multiVideos, ...multiAudios];
         const referenceNotReady = mode === 'firstlast'
             ? (firstFrame && firstFrame.status !== 'ready') || (lastFrame && lastFrame.status !== 'ready')
-            : multiImages.some((item) => item.status !== 'ready');
+            : allMultiReferences.some((item) => item.status !== 'ready');
         if (referenceNotReady) {
-            setError('参考图仍在云端验证或上传中，请等待准备完成后再生成');
+            setError('参考素材仍在云端验证或上传中，请等待准备完成后再生成');
             return;
         }
         setLoading(true); setError(''); setResults([]); setStage('创建生成任务...');
@@ -169,7 +287,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
             let lastFrameSourceIndex = -1;
             if (mode === 'firstlast') {
                 if (!supportsFirstLastFrame) {
-                    setError(`当前 ${modelName} ${modelVersion} 不支持首尾帧模式，请改用多图模式或切换模型`); setLoading(false); setStage(''); return;
+                    setError(`当前 ${modelName} ${modelVersion} 不支持首尾帧模式，请改用参考模式或切换模型`); setLoading(false); setStage(''); return;
                 }
                 if (!firstFrame) { setError('首尾帧模式必须上传首帧；尾帧不能单独使用'); setLoading(false); setStage(''); return; }
                 sourceImages.push(firstFrame.asset.mediaUrl);
@@ -180,12 +298,22 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                     lastFrameSourceIndex = sourceImages.length - 1;
                 }
             } else {
-                if (!supportsReferenceImages) {
-                    setError(`当前 ${modelName} ${modelVersion} 不支持多图参考模式，请切换模型`); setLoading(false); setStage(''); return;
+                if (!supportsMultiReference) {
+                    setError(`当前 ${modelName} ${modelVersion} 不支持多模态参考模式，请切换模型`); setLoading(false); setStage(''); return;
                 }
-                if (!multiImages.length) { setError('请至少上传一张图片'); setLoading(false); setStage(''); return; }
-                sourceImages = multiImages.map((item) => item.asset.mediaUrl);
-                sourceFileInfos = sourceImages.map(() => ({ Usage: 'Reference' }));
+                if (!allMultiReferences.length) {
+                    setError('请至少上传一个参考素材（音频参考必须搭配图片或视频输入）');
+                    setLoading(false); setStage(''); return;
+                }
+                if (!multiImages.length && !multiVideos.length && multiAudios.length) {
+                    setError('不支持仅音频参考：音频必须与图片或视频参考一起输入');
+                    setLoading(false); setStage(''); return;
+                }
+                sourceImages = allMultiReferences.map((item) => item.asset.mediaUrl);
+                sourceFileInfos = allMultiReferences.map((item) => ({
+                    Usage: 'Reference',
+                    Category: item.kind === 'video' ? 'Video' : item.kind === 'audio' ? 'Audio' : 'Image',
+                }));
             }
             const durationValue = Number(String(duration).replace(/[^0-9.]/g, ''));
             const pixVersePrompt = modelName === 'PixVerse' && mode === 'multi' && sourceImages.length > 0 && !/@pic\d+/i.test(prompt)
@@ -281,8 +409,8 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                         <button data-active={mode === 'firstlast'} onClick={() => setMode('firstlast')} disabled={!supportsFirstLastFrame} title={supportsFirstLastFrame ? undefined : t('当前模型不支持首尾帧')}>
                             <span className="inline-flex items-center gap-1.5 justify-center"><Film className="w-4 h-4" />{t('首尾帧模式')}</span>
                         </button>
-                        <button data-active={mode === 'multi'} onClick={() => setMode('multi')} disabled={!supportsReferenceImages} title={supportsReferenceImages ? undefined : t('当前模型不支持多图参考')}>
-                            <span className="inline-flex items-center gap-1.5 justify-center"><Images className="w-4 h-4" />{t('多图模式')}</span>
+                        <button data-active={mode === 'multi'} onClick={() => setMode('multi')} disabled={!supportsMultiReference} title={supportsMultiReference ? undefined : t('当前模型不支持多模态参考')}>
+                            <span className="inline-flex items-center gap-1.5 justify-center"><Images className="w-4 h-4" />{t('多模态参考')}</span>
                         </button>
                     </div>
 
@@ -295,10 +423,15 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                             </div>
                         ) : (
                             <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-2">{t('多图（1 张及以上）')}</label>
+                                <label className="block text-sm font-medium text-gray-600 mb-2">
+                                    {t('参考素材')}
+                                    {supportsReferenceImages && ` · ${t('图片')}${t('≤')}${videoCapability.maxReferenceImages}`}
+                                    {supportsReferenceVideos && ` · ${t('视频')}${t('≤')}${maxReferenceVideos}${t('段')}`}
+                                    {supportsReferenceAudios && ` · ${t('音频')}${t('≤')}${maxReferenceAudios}${t('段')}${t('（须搭配图片或视频）')}`}
+                                </label>
                                 <div className="flex flex-wrap gap-3">
                                     {multiImages.map((r, i) => (
-                                        <div key={i} className="relative group">
+                                        <div key={`img-${i}`} className="relative group">
                                             <img src={r.preview} alt="" className="w-20 h-20 object-cover rounded-xl border border-[#ececef]" />
                                             {r.status !== 'ready' && <span className="absolute left-1 top-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-[#876417] shadow">{t('云端校验中')}</span>}
                                             <button onClick={() => setMultiImages((prev) => {
@@ -310,12 +443,42 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                             </button>
                                         </div>
                                     ))}
-                                    {multiImages.length < videoCapability.maxReferenceImages && (
+                                    {multiVideos.map((r, i) => (
+                                        <div key={`video-${i}`} className="relative group">
+                                            <div className="w-20 h-20 rounded-xl border border-[#ececef] bg-zinc-100 flex flex-col items-center justify-center gap-1 px-1">
+                                                <VideoIcon className="w-5 h-5 text-zinc-500" />
+                                                <span className="text-[9px] text-zinc-500 truncate w-full text-center">{r.name}</span>
+                                                {Number.isFinite(r.duration) && r.duration > 0 && <span className="text-[9px] text-zinc-400">{r.duration.toFixed(1)}s</span>}
+                                            </div>
+                                            {r.status !== 'ready' && <span className="absolute left-1 top-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-[#876417] shadow">{r.status === 'validating' ? t('校验中') : t('云端校验中')}</span>}
+                                            <button onClick={() => setMultiVideos((prev) => prev.filter((_, j) => j !== i))}
+                                                className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition">
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {multiAudios.map((r, i) => (
+                                        <div key={`audio-${i}`} className="relative group">
+                                            <div className="w-20 h-20 rounded-xl border border-[#ececef] bg-zinc-100 flex flex-col items-center justify-center gap-1 px-1">
+                                                <Music className="w-5 h-5 text-zinc-500" />
+                                                <span className="text-[9px] text-zinc-500 truncate w-full text-center">{r.name}</span>
+                                                {Number.isFinite(r.duration) && r.duration > 0 && <span className="text-[9px] text-zinc-400">{r.duration.toFixed(1)}s</span>}
+                                            </div>
+                                            {r.status !== 'ready' && <span className="absolute left-1 top-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-[#876417] shadow">{r.status === 'validating' ? t('校验中') : t('云端校验中')}</span>}
+                                            <button onClick={() => setMultiAudios((prev) => prev.filter((_, j) => j !== i))}
+                                                className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition">
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {(multiImages.length < (supportsReferenceImages ? videoCapability.maxReferenceImages : 0)
+                                        || multiVideos.length < maxReferenceVideos
+                                        || multiAudios.length < maxReferenceAudios) && (
                                         <>
                                             <input
                                                 ref={multiImagesInputRef}
                                                 type="file"
-                                                accept={referenceImageAccept}
+                                                accept={referenceMediaAccept}
                                                 multiple
                                                 className="sr-only"
                                                 onChange={(event) => {
@@ -327,8 +490,8 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                                 type="button"
                                                 onClick={() => multiImagesInputRef.current?.click()}
                                                 className="dropzone w-20 h-20 cursor-pointer"
-                                                title={t(`添加参考图（最多 ${videoCapability.maxReferenceImages} 张）`)}
-                                                aria-label={t(`添加参考图（最多 ${videoCapability.maxReferenceImages} 张）`)}
+                                                title={t('添加参考素材（图片 / 视频 / 音频）')}
+                                                aria-label={t('添加参考素材（图片 / 视频 / 音频）')}
                                             >
                                                 <Plus className="w-5 h-5" />
                                             </button>
@@ -343,13 +506,13 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('模型')}</label>
-                            <select value={modelName} onChange={(e) => { const name = e.target.value; const version = (VOD_VIDEO_MODEL_MATRIX[name] || [''])[0]; const capability = getVodVideoModelCapability(name, version); setModelName(name); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages([]); }} className="field">
+                            <select value={modelName} onChange={(e) => { const name = e.target.value; const version = (VOD_VIDEO_MODEL_MATRIX[name] || [''])[0]; const capability = getVodVideoModelCapability(name, version); setModelName(name); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages([]); setMultiVideos([]); setMultiAudios([]); }} className="field">
                                 {Object.keys(VOD_VIDEO_MODEL_MATRIX).map((m) => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('版本')}</label>
-                            <select value={modelVersion} onChange={(e) => { const version = e.target.value; const capability = getVodVideoModelCapability(modelName, version); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages((current) => current.slice(0, capability.maxReferenceImages)); }} className="field">
+                            <select value={modelVersion} onChange={(e) => { const version = e.target.value; const capability = getVodVideoModelCapability(modelName, version); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages((current) => current.slice(0, capability.maxReferenceImages)); setMultiVideos([]); setMultiAudios([]); }} className="field">
                                 {versions.map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                         </div>

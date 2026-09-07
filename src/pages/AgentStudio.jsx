@@ -14,6 +14,7 @@ import {
     getVodVideoModelCapability,
 } from '../vodAdapter';
 import { getAgentTextModels, runScriptAgentLoop } from '../api/agentLoop';
+import { TOKENHUB_TEXT_DEFAULT_MODEL_ID } from '../data/tokenHubModels';
 import { createGenerationTracker } from '../api/generationHistory';
 import i18n from '../i18n';
 
@@ -62,7 +63,7 @@ function EmptyRun() {
 export default function AgentStudio() {
     const textModels = useMemo(() => getAgentTextModels(), []);
     const [script, setScript] = useState('');
-    const [textModel, setTextModel] = useState(textModels.find((model) => model.id === 'hy3')?.id || textModels[0]?.id || 'hy3');
+    const [textModel, setTextModel] = useState(textModels.find((model) => model.id === TOKENHUB_TEXT_DEFAULT_MODEL_ID)?.id || textModels[0]?.id || TOKENHUB_TEXT_DEFAULT_MODEL_ID);
     const [imageModel, setImageModel] = useState(VOD_DEFAULT_IMAGE_MODEL_NAME);
     const [imageVersion, setImageVersion] = useState(modelDefault(VOD_IMAGE_MODEL_MATRIX, VOD_DEFAULT_IMAGE_MODEL_NAME, VOD_DEFAULT_IMAGE_MODEL_VERSION));
     const [videoModel, setVideoModel] = useState(VOD_DEFAULT_VIDEO_MODEL_NAME);

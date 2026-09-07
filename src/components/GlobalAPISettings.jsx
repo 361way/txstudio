@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Eye, EyeOff, KeyRound, LibraryBig, Loader2, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import { listCredentials, saveCredential } from '../api/credential';
-import { buildTokenHubApiConfigs, getTokenHubCapabilityLabel } from '../data/tokenHubModels';
+import { TOKENHUB_DEPRECATED_MODEL_IDS, buildTokenHubApiConfigs, getTokenHubCapabilityLabel } from '../data/tokenHubModels';
 
 const PROVIDERS_KEY = 'txstudio_providers';
 const API_CONFIGS_KEY = 'txstudio_api_configs';
 const GLOBAL_KEY = 'txstudio_global_key';
 const DEFAULT_TOKENHUB_URL = 'https://tokenhub.tencentmaas.com';
 const DEFAULT_VOD_URL = 'https://vod.tencentcloudapi.com';
-const REMOVED_MODEL_IDS = new Set(['hy3-preview', 'MJ V6', 'grok-video-3', 'gpt-4o-image']);
+const REMOVED_MODEL_IDS = new Set(['hy3-preview', 'MJ V6', 'grok-video-3', 'gpt-4o-image', ...TOKENHUB_DEPRECATED_MODEL_IDS]);
 const REMOVED_PROVIDER_KEYS = new Set(['midjourney', 'grok']);
 
 const readJSON = (key, fallback) => {
@@ -249,7 +249,7 @@ export default function GlobalAPISettings({ open, onClose }) {
                     ) : (
                         <div className="space-y-3">
                             <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
-                                默认文本生成使用 <strong>hy3</strong>；图片理解和视频理解使用 <strong>youtu-vita</strong>。其他 TokenHub 模型也可选择，请根据下方能力标签匹配任务。<a href="https://cloud.tencent.com/document/product/1823/130051" target="_blank" rel="noreferrer" className="ml-1 underline">查看官方模型列表</a>
+                                默认文本生成使用 <strong>hy4-preview</strong>；图片理解和视频理解使用 <strong>glm-5v-turbo</strong>。其他 TokenHub 模型也可选择，请根据下方能力标签匹配任务；已下线或即将下线的模型（如 kimi-k2.5、qwen3.5 系列、youtu-vita 等）已被移除。<a href="https://cloud.tencent.com/document/product/1823/130051" target="_blank" rel="noreferrer" className="ml-1 underline">查看官方模型列表</a>
                             </div>
                             {models.map((model, index) => (
                                 <div key={model._uid || index} className="grid items-end gap-3 rounded-xl border border-[#ececef] p-4 sm:grid-cols-[1fr_150px_120px_auto]">

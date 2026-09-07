@@ -62,7 +62,8 @@ import {
     Monitor,
     Zap, // V3.5.24
     Film, // 智能分镜视频合并编辑器
-    Ban, Clock, Edit3, Pencil // V3.7.24: API management buttons + V3.7.25: Edit icons
+    Ban, Clock, Edit3, Pencil, // V3.7.24: API management buttons + V3.7.25: Edit icons
+    ScanSearch // 反推图片提示词
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -107,6 +108,7 @@ import { requestAgentChat } from './api/agentChat';
 import {
     TOKENHUB_TEXT_DEFAULT_MODEL_ID,
     TOKENHUB_MEDIA_DEFAULT_MODEL_ID,
+    TOKENHUB_DEPRECATED_MODEL_IDS,
     buildTokenHubApiConfigs,
     getTokenHubCapabilityLabel,
     getTokenHubTaskHint,
@@ -1914,6 +1916,41 @@ const LOCAL_PROXY_DEFAULT_URL = 'http://127.0.0.1:8080';
 const DEFAULT_BASE_URL = TOKENHUB_BASE_URL;
 const DEFAULT_TOKENHUB_MODEL_ID = TOKENHUB_TEXT_DEFAULT_MODEL_ID;
 const DEFAULT_VIDEO_ANALYSIS_MODEL_ID = TOKENHUB_MEDIA_DEFAULT_MODEL_ID;
+
+// 反推图片提示词：从多格式 API 响应中提取文本内容
+const extractAgentChatContent = (data) => {
+    if (!data) return '';
+    if (Array.isArray(data.choices) && data.choices.length > 0) return data.choices[0]?.message?.content || '';
+    if (Array.isArray(data.data?.choices) && data.data.choices.length > 0) return data.data.choices[0]?.message?.content || '';
+    if (typeof data.content === 'string') return data.content;
+    if (typeof data.data?.content === 'string') return data.data.content;
+    if (typeof data.text === 'string') return data.text;
+    if (typeof data.data?.text === 'string') return data.data.text;
+    if (typeof data.message === 'string') return data.message;
+    if (typeof data.message?.content === 'string') return data.message.content;
+    if (typeof data.result === 'string') return data.result;
+    if (typeof data.result?.content === 'string') return data.result.content;
+    if (typeof data.data?.result === 'string') return data.data.result;
+    if (typeof data.data?.result?.content === 'string') return data.data.result.content;
+    return '';
+};
+
+// 反推图片提示词：解析模型返回的 JSON（兼容 markdown 代码块包裹）
+const parseReversePromptResult = (text) => {
+    if (!text) return null;
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const raw = (fenced ? fenced[1] : text).trim();
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    try {
+        const parsed = JSON.parse(raw.slice(start, end + 1));
+        if (parsed && (parsed.english_prompt || parsed.chinese_prompt)) {
+            return { english: String(parsed.english_prompt || ''), chinese: String(parsed.chinese_prompt || '') };
+        }
+    } catch { }
+    return null;
+};
 const TOKENHUB_PROVIDER_KEY = 'openai';
 const TENCENT_VOD_BASE_URL = `https://${VOD_API_HOST}`;
 
@@ -2181,7 +2218,9 @@ const DELETED_MODEL_IDS = [
     'MJ V6',
     'grok-video-3',
     'gpt-4o-image',
-    'hy3-preview'
+    'hy3-preview',
+    // TokenHub 已下线 / 即将下线模型（自动从存量配置中清理）
+    ...TOKENHUB_DEPRECATED_MODEL_IDS
 ];
 const REMOVED_PROVIDER_KEYS = ['yunwu', 'jimeng', 'midjourney', 'grok'];
 const isRemovedProviderKey = (providerKey) => REMOVED_PROVIDER_KEYS.includes(String(providerKey || '').trim());
@@ -7335,13 +7374,16 @@ function TxStudioApp({
     const [lastUsedAnalyzeModel, setLastUsedAnalyzeModel] = useState(() => {
         try {
             const saved = localStorage.getItem('txstudio_last_analyze_model');
-            return !saved || ['hy3', 'gemini-3-pro'].includes(saved) ? DEFAULT_VIDEO_ANALYSIS_MODEL_ID : saved;
+            return !saved || ['hy3', 'gemini-3-pro', 'youtu-vita'].includes(saved) ? DEFAULT_VIDEO_ANALYSIS_MODEL_ID : saved;
         } catch {
             return DEFAULT_VIDEO_ANALYSIS_MODEL_ID;
         }
     });
     const [lastUsedExtractModel, setLastUsedExtractModel] = useState(() => {
         try { return localStorage.getItem('txstudio_last_extract_model') || DEFAULT_TOKENHUB_MODEL_ID; } catch { return DEFAULT_TOKENHUB_MODEL_ID; }
+    });
+    const [lastUsedReverseModel, setLastUsedReverseModel] = useState(() => {
+        try { return localStorage.getItem('txstudio_last_reverse_model') || DEFAULT_VIDEO_ANALYSIS_MODEL_ID; } catch { return DEFAULT_VIDEO_ANALYSIS_MODEL_ID; }
     });
 
     // V2.6.1 Feature: 本地缓存服务器连接检查
@@ -10219,6 +10261,18 @@ function TxStudioApp({
         return getApiConfigByKey(resolveModelKey(DEFAULT_VIDEO_ANALYSIS_MODEL_ID))
             || { id: DEFAULT_VIDEO_ANALYSIS_MODEL_ID, provider: TOKENHUB_PROVIDER_KEY, type: 'Chat', apiType: 'openai', capabilities: ['text', 'image', 'video'] };
     }, [getApiConfigByKey, resolveModelKey, supportsAnalysisCapability]);
+
+    // 反推图片提示词：可选模型限定为 TokenHub 中配置了视觉理解（image 能力）的模型
+    const tokenHubVisionModels = useMemo(() => (
+        apiConfigs
+            .filter((config) => isChatModelType(config.type) && config.provider === TOKENHUB_PROVIDER_KEY)
+            .filter((config) => supportsAnalysisCapability(config, 'image'))
+            .map((config) => ({
+                key: config._uid || config.id,
+                id: config.id,
+                label: config.displayName || config.id,
+            }))
+    ), [apiConfigs, supportsAnalysisCapability]);
 
     useEffect(() => {
         if (!apiConfigs.length) return;
@@ -22205,7 +22259,9 @@ function TxStudioApp({
                     ? { w: 580, h: 460 }
                     : type === 'video-analyze'
                         ? { w: 480, h: 500 }
-                        : type === 'storyboard-node'
+                        : type === 'image-prompt-reverse'
+                            ? { w: 420, h: 460 }
+                            : type === 'storyboard-node'
                             ? { w: 720, h: 500 }
                             : type === 'image-compare'
                                 ? { w: 400, h: 300 }
@@ -22255,6 +22311,8 @@ function TxStudioApp({
                     ? { model: resolveModelKey(lastUsedVideoModel), duration: '5s', ratio: lastUsedRatio, resolution: lastUsedVideoResolution, videoPrompt: '', vodAudioGeneration: true }
                     : type === 'video-analyze'
                         ? { model: resolveModelKey(lastUsedAnalyzeModel), segmentDuration: parseInt(lastUsedSegmentDuration), analysisMode: 'manual', voiceoverResults: [], analysisResults: [] }
+                    : type === 'image-prompt-reverse'
+                        ? { model: resolveModelKey(lastUsedReverseModel), result: '', resultModel: '', isReversing: false, errorMsg: null }
                     : type === 'storyboard-node'
                             ? {
                                 projectTitle: t('未命名分镜'),
@@ -27127,6 +27185,112 @@ ${inputText.substring(0, 15000)} ... (截断)
         }
     };
 
+    // --- 反推图片提示词节点：上传图片 / 执行反推 ---
+    const handleReversePromptUpload = async (nodeId, file) => {
+        const targetNode = nodesMap.get(nodeId);
+        if (!targetNode) return;
+        if (!file || !file.type.startsWith('image/')) {
+            showToast('反推图片提示词仅支持图片文件', 'warning');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            const content = ev.target.result;
+            if (content) {
+                await createLinkedInputNode(targetNode, content, false);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleReverseImagePrompt = async (nodeId) => {
+        const node = nodesMap.get(nodeId);
+        if (!node || node.type !== 'image-prompt-reverse') return;
+
+        const images = getConnectedInputImages(nodeId);
+        if (images.length === 0) {
+            alert(t('请先连接一个图片输入节点，或将图片拖入/上传到本节点'));
+            return;
+        }
+
+        const selectedConfig = getApiConfigByKey(resolveModelKey(node.settings?.model));
+        const config = getMediaAnalysisConfig(node.settings?.model, 'image');
+        if (selectedConfig && selectedConfig.id !== config.id) {
+            showToast(getTokenHubTaskHint(selectedConfig.id, 'image'), 'warning', 5000);
+        }
+        const modelId = resolveModelKey(config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID);
+        const { key: apiKey } = getApiCredentials(modelId);
+
+        if (!apiKey) {
+            alert(t('请先在 API 设置中配置 Key'));
+            setSettingsOpen(true);
+            return;
+        }
+
+        setNodes(prev => prev.map(n => n.id === nodeId
+            ? { ...n, settings: { ...n.settings, isReversing: true, errorMsg: null } }
+            : n));
+
+        try {
+            const dataUrl = await materializeMediaDataUrl(images[0], { maxBytes: 8 * 1024 * 1024 });
+
+            const systemPrompt = `你是一个专业的 AI 绘图提示词反推助手。请仔细分析用户提供的图片，还原出可用于 AI 绘图的高质量提示词。
+
+请返回严格的 JSON 格式：
+{
+  "english_prompt": "英文提示词",
+  "chinese_prompt": "中文提示词"
+}
+
+要求：
+1. english_prompt 使用英文，尽量覆盖画面主体、动作、场景环境、构图、镜头、光线、色调与艺术风格；
+2. chinese_prompt 为英文提示词语义一致的中文版本；
+3. 只描述图片中可见的内容，不要虚构不存在的元素；
+4. 只输出 JSON，不要输出任何其他文字。`;
+
+            const userContent = [
+                { type: 'text', text: '请反推这张图片的 AI 绘图提示词。' },
+                { type: 'image_url', image_url: { url: dataUrl } },
+            ];
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+            let data;
+            try {
+                data = await requestAgentChat({
+                    model: config?.id || DEFAULT_VIDEO_ANALYSIS_MODEL_ID,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userContent },
+                    ],
+                    signal: controller.signal,
+                });
+            } catch (fetchError) {
+                if (fetchError.name === 'AbortError') {
+                    throw new Error('请求超时，请检查网络连接或稍后重试');
+                }
+                throw fetchError;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            const content = extractAgentChatContent(data);
+            if (!content || !content.trim()) {
+                throw new Error('模型未返回有效内容，请稍后重试');
+            }
+
+            setNodes(prev => prev.map(n => n.id === nodeId
+                ? { ...n, settings: { ...n.settings, isReversing: false, result: content, resultModel: config?.id || '' } }
+                : n));
+        } catch (error) {
+            const message = error?.message || '反推失败，请稍后重试';
+            setNodes(prev => prev.map(n => n.id === nodeId
+                ? { ...n, settings: { ...n.settings, isReversing: false, errorMsg: message } }
+                : n));
+        }
+    };
+
     const handleGenNodeDrop = async (nodeId, e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -27138,7 +27302,7 @@ ${inputText.substring(0, 15000)} ... (截断)
             const dragUrl = resolveDroppedUrlCandidate(resolveHistoryPayloadUrl(payload), payload.type);
             if (dragUrl) {
                 const isVideo = payload.type === 'video' || isVideoUrl(dragUrl);
-                if (isVideo && (targetNode.type === 'gen-image' || targetNode.type === 'image-compare' || targetNode.type === 'gen-video')) {
+                if (isVideo && (targetNode.type === 'gen-image' || targetNode.type === 'image-compare' || targetNode.type === 'gen-video' || targetNode.type === 'image-prompt-reverse')) {
                     showToast('当前节点仅支持图片参考', 'warning');
                     return;
                 }
@@ -27150,7 +27314,7 @@ ${inputText.substring(0, 15000)} ... (截断)
         const candidate = resolveDroppedUrlCandidate(getDragUrlCandidate(e));
         if (candidate) {
             const isVideo = isVideoUrl(candidate);
-            if (isVideo && (targetNode.type === 'gen-image' || targetNode.type === 'image-compare' || targetNode.type === 'gen-video')) {
+            if (isVideo && (targetNode.type === 'gen-image' || targetNode.type === 'image-compare' || targetNode.type === 'gen-video' || targetNode.type === 'image-prompt-reverse')) {
                 showToast('当前节点仅支持图片参考', 'warning');
                 return;
             }
@@ -28359,7 +28523,7 @@ ${inputText.substring(0, 15000)} ... (截断)
         const isNanoBanana2 = currentModel
             ? ((currentModel.modelName || currentModel.id || '').includes('nano-banana-2'))
             : ((node.settings?.model || '').includes('nano-banana-2'));
-        const enableSmartDrop = node.type === 'gen-image' || node.type === 'gen-video' || node.type === 'image-compare';
+        const enableSmartDrop = node.type === 'gen-image' || node.type === 'gen-video' || node.type === 'image-compare' || node.type === 'image-prompt-reverse';
 
         // 低细节模式：只渲染核心内容
         if (isLowDetail) {
@@ -31474,6 +31638,212 @@ ${inputText.substring(0, 15000)} ... (截断)
                             </div>
                         </div>
                     )}
+
+                    {node.type === 'image-prompt-reverse' && (() => {
+                        const connectedImages = getConnectedInputImages(node.id);
+                        const previewImage = connectedImages[0] || null;
+                        const isDropdownOpen = activeDropdown?.nodeId === node.id && activeDropdown.type === 'reverse-model';
+                        const currentModelKey = resolveModelKey(node.settings?.model);
+                        const currentConfig = getApiConfigByKey(currentModelKey);
+                        const selectedResult = parseReversePromptResult(node.settings?.result);
+                        const currentCapabilitySupported = supportsAnalysisCapability(currentConfig, 'image');
+
+                        return (
+                            <div
+                                className={`relative w-full h-full flex flex-col transition-colors pointer-events-auto ${theme === 'dark' ? 'bg-zinc-900/80' : theme === 'solarized' ? 'bg-[#fdf6e3]' : 'bg-zinc-100'}`}
+                                onDragOver={handleCanvasDragOver}
+                                onClick={(e) => {
+                                    const selection = window.getSelection();
+                                    if (selection && selection.toString().length > 0) return;
+                                    const target = e.target;
+                                    if (target && (
+                                        target.tagName === 'INPUT' ||
+                                        target.tagName === 'TEXTAREA' ||
+                                        target.tagName === 'SELECT' ||
+                                        target.tagName === 'BUTTON' ||
+                                        target.isContentEditable ||
+                                        target.closest('input, textarea, select, button, [contenteditable="true"]')
+                                    )) return;
+                                    e.stopPropagation();
+                                }}
+                            >
+                                <div className="flex items-center justify-between px-3 py-2 border-b text-xs font-semibold">
+                                    <div className="flex items-center gap-1.5">
+                                        <ScanSearch size={13} className="text-purple-500" />
+                                        <span>{t('反推图片提示词')}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 flex flex-col gap-2.5 p-3 overflow-y-auto custom-scrollbar min-h-0">
+                                    {/* 图片预览 */}
+                                    <div
+                                        className={`relative rounded-lg border overflow-hidden flex items-center justify-center ${theme === 'dark' ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-zinc-300'}`}
+                                        style={{ minHeight: 110 }}
+                                    >
+                                        {previewImage ? (
+                                            <LazyBase64Image src={previewImage} className="max-h-40 w-full object-contain" alt={t('待反推图片')} />
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center gap-1 py-5 text-[11px] text-zinc-500">
+                                                <LinkIcon size={20} className="text-zinc-400" />
+                                                <span>{t('连接图片输入节点，或拖入 / 上传图片')}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 模型选择 */}
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-[11px] text-zinc-500 shrink-0">模型:</label>
+                                        <div className="relative flex-1">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveDropdown(isDropdownOpen ? null : { nodeId: node.id, type: 'reverse-model' });
+                                                }}
+                                                className={`w-full flex items-center justify-between px-2 py-1 rounded text-[11px] border transition-colors ${theme === 'dark'
+                                                    ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
+                                                    : 'bg-zinc-50 border-zinc-300 text-zinc-800 hover:border-zinc-400'
+                                                    }`}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                            >
+                                                <span className="truncate font-mono">{currentConfig?.displayName || currentConfig?.id || node.settings?.model || t('选择视觉模型')}</span>
+                                                <ChevronDown size={10} className="opacity-50 shrink-0 ml-1" />
+                                            </button>
+                                            {isDropdownOpen && (
+                                                <div
+                                                    className={`absolute top-full left-0 mt-1 w-64 max-h-72 overflow-y-auto custom-scrollbar rounded-lg shadow-xl p-1 z-[60] border ${theme === 'dark' ? 'bg-[#18181b] border-zinc-700' : theme === 'solarized' ? 'bg-[#eee8d5] border-[#d7cfb2]' : 'bg-white border-zinc-200'}`}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                >
+                                                    {tokenHubVisionModels.map((model) => (
+                                                        <button
+                                                            key={model.key}
+                                                            onClick={() => {
+                                                                updateNodeSettings(node.id, { model: model.key });
+                                                                setLastUsedReverseModel(model.key);
+                                                                try { localStorage.setItem('txstudio_last_reverse_model', model.key); } catch { }
+                                                                setActiveDropdown(null);
+                                                            }}
+                                                            className={`w-full text-left px-2 py-1.5 rounded transition-colors ${currentModelKey === model.key
+                                                                ? theme === 'dark' ? 'bg-blue-600/30 text-blue-300' : theme === 'solarized' ? 'bg-[#fdf6e3] text-zinc-800' : 'bg-blue-100 text-blue-700'
+                                                                : theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-300' : theme === 'solarized' ? 'hover:bg-[#fdf6e3] text-zinc-700' : 'hover:bg-zinc-100 text-zinc-700'
+                                                                }`}
+                                                        >
+                                                            <div className="truncate font-mono text-[10px] font-medium">{model.id}</div>
+                                                            <div className={`truncate text-[9px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                                                {getTokenHubCapabilityLabel(model.id)}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                    {tokenHubVisionModels.length === 0 && (
+                                                        <div className={`text-[10px] px-2 py-3 text-center ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                                            {t('TokenHub 中未找到支持视觉理解的模型')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const input = document.createElement('input');
+                                                input.type = 'file';
+                                                input.accept = 'image/*';
+                                                input.onchange = () => handleReversePromptUpload(node.id, input.files?.[0]);
+                                                input.click();
+                                            }}
+                                            className={`px-2 py-1 rounded text-[11px] border transition-colors shrink-0 ${theme === 'dark' ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100'}`}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            title={t('上传图片')}
+                                        >
+                                            <ImagePlus size={12} />
+                                        </button>
+                                    </div>
+
+                                    {(() => {
+                                        if (!currentConfig?.id) return null;
+                                        return (
+                                            <div className={`rounded-md px-2 py-1.5 text-[10px] leading-4 ${currentCapabilitySupported
+                                                ? theme === 'dark' ? 'bg-emerald-950/30 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                                                : theme === 'dark' ? 'bg-amber-950/30 text-amber-400' : 'bg-amber-50 text-amber-700'
+                                                }`}>
+                                                {currentCapabilitySupported
+                                                    ? `${getTokenHubCapabilityLabel(currentConfig.id)} · ${t('可用于图片提示词反推')}`
+                                                    : getTokenHubTaskHint(currentConfig.id, 'image')}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* 执行反推 */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleReverseImagePrompt(node.id);
+                                        }}
+                                        disabled={node.settings?.isReversing || !previewImage || tokenHubVisionModels.length === 0}
+                                        className="w-full py-2 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                        {node.settings?.isReversing ? (
+                                            <>
+                                                <Loader2 size={13} className="animate-spin" /> {t('反推中...')}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ScanSearch size={13} /> {t('反推提示词')}
+                                            </>
+                                        )}
+                                    </button>
+
+                                    {node.settings?.errorMsg && (
+                                        <div className={`rounded-md px-2 py-1.5 text-[10px] ${theme === 'dark' ? 'bg-red-950/30 text-red-400' : 'bg-red-50 text-red-600'}`}>
+                                            {node.settings.errorMsg}
+                                        </div>
+                                    )}
+
+                                    {/* 结果展示 */}
+                                    {(() => {
+                                        const rawResult = String(node.settings?.result || '');
+                                        if (!rawResult) return null;
+                                        const copyText = async (text) => {
+                                            try {
+                                                await navigator.clipboard.writeText(text);
+                                                showToast(t('已复制到剪贴板'), 'success');
+                                            } catch {
+                                                showToast(t('复制失败'), 'error');
+                                            }
+                                        };
+                                        const sections = selectedResult
+                                            ? [{ label: t('英文提示词'), text: selectedResult.english }, { label: t('中文提示词'), text: selectedResult.chinese }]
+                                            : [{ label: t('反推结果'), text: rawResult }];
+                                        return (
+                                            <div className="space-y-2">
+                                                {sections.filter((s) => s.text).map((section, sIdx) => (
+                                                    <div key={sIdx} className={`p-2 rounded border ${theme === 'dark' ? 'bg-zinc-900 border-zinc-600' : theme === 'solarized' ? 'bg-[#fdf6e3] border-[#eee8d5]' : 'bg-zinc-50 border-zinc-200'}`}>
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-[9px] text-zinc-500 mb-1">{section.label}</div>
+                                                                <div
+                                                                    className="text-[10px] text-zinc-700 dark:text-zinc-300 break-words select-text cursor-text whitespace-pre-wrap"
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                >{section.text}</div>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); copyText(section.text); }}
+                                                                className={`p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 ${theme === 'dark' ? 'text-zinc-400 hover:text-zinc-300' : 'text-zinc-500 hover:text-zinc-700'}`}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                title={t('复制')}
+                                                            >
+                                                                <CopyPlus size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {node.type === 'storyboard-node' && (() => {
                         // --- 辅助函数：处理单个镜头的图片上传 ---
@@ -38801,6 +39171,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                         },
                                         { type: 'video-input', label: t('视频输入 / 关键帧整理') },
                                         { type: 'video-analyze', label: t('视频拆解 / 提示词反推') },
+                                        { type: 'image-prompt-reverse', label: t('反推图片提示词') },
                                         { type: 'storyboard-node', label: t('智能分镜表') },
                                         { type: 'gen-image', label: t('AI 绘图') },
                                         { type: 'gen-video', label: t('AI 视频') },

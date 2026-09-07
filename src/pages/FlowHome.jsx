@@ -319,7 +319,7 @@ export default function FlowHome() {
         ? ''
         : isPixVerseVideo
             ? homePixVerseReferenceMode
-            : videoModel === 'Hailuo' && videoModelVersion === 'H3'
+            : videoModel === 'Hailuo' && ['H3', 'H3-Max'].includes(videoModelVersion)
                 ? 'firstLastFrame'
                 : videoModel === 'Kling' && videoModelVersion === '3.0'
                     ? 'firstLastFrame'

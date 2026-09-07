@@ -4,6 +4,7 @@ import {
     buildVodGenerationRequestSettings,
     getVodGenerationCapability,
 } from '../data/vodGenerationCapabilities';
+import { TOKENHUB_DEPRECATED_MODEL_IDS, TOKENHUB_TEXT_DEFAULT_MODEL_ID } from '../data/tokenHubModels';
 
 const MODELS_KEY = 'txstudio_api_configs';
 
@@ -28,6 +29,8 @@ export function getAgentTextModels() {
         ? configured
             .filter((item) => ['Chat', 'ChatImage'].includes(item?.type) && item?.id)
             .filter((item) => !['midjourney', 'grok'].includes(String(item?.provider || '').trim()))
+            // 已下线 / 即将下线的 TokenHub 模型不进入智能 Agent 的可选列表
+            .filter((item) => !TOKENHUB_DEPRECATED_MODEL_IDS.includes(item.id))
             .map((item) => item.id === 'hy3-preview'
                 ? { ...item, id: 'hy3', modelName: 'hy3', displayName: 'hy3' }
                 : item)
@@ -39,13 +42,13 @@ export function getAgentTextModels() {
             modelName: item.modelName || item.id,
             provider: item.provider || 'openai',
         }))
-        : [{ id: 'hy3', name: 'hy3', modelName: 'hy3', provider: 'openai' }];
+        : [{ id: TOKENHUB_TEXT_DEFAULT_MODEL_ID, name: TOKENHUB_TEXT_DEFAULT_MODEL_ID, modelName: TOKENHUB_TEXT_DEFAULT_MODEL_ID, provider: 'openai' }];
 }
 
 function resolveTextModelName(modelId) {
     const models = readJSON(MODELS_KEY, []);
     const config = Array.isArray(models) ? models.find((item) => item?.id === modelId) : null;
-    return config?.modelName || config?.id || modelId || 'hy3';
+    return config?.modelName || config?.id || modelId || TOKENHUB_TEXT_DEFAULT_MODEL_ID;
 }
 
 function extractTextResponse(payload) {
