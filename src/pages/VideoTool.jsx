@@ -49,6 +49,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     const [modelVersion, setModelVersion] = useState(template?.model_version || VOD_DEFAULT_VIDEO_MODEL_VERSION);
     const [ratio, setRatio] = useState(template?.ratio || '16:9');
     const [duration, setDuration] = useState('5s');
+    const [resolution, setResolution] = useState(template?.resolution || '720P');
     const [storageMode, setStorageMode] = useState(() => template?.storage_mode === 'Temporary' ? 'Temporary' : 'Permanent');
     const [prompt, setPrompt] = useState(template?.prompt || '');
     const [loading, setLoading] = useState(false);
@@ -64,7 +65,10 @@ export default function VideoTool({ onBack, template, embedded = false }) {
     ]);
     const referenceMaxBytes = videoCapability.maxReferenceImageBytes || VIDEO_REFERENCE_MAX_BYTES;
     const supportsFirstLastFrame = !!videoCapability.supportsFirstLastFrame;
+    const supportsLastFrameOnly = !!videoCapability.supportsLastFrameOnly;
     const supportsReferenceImages = videoCapability.supportsReferenceImages !== false;
+    const resolutionLabels = videoCapability.resolutionLabels || null;
+    const hasResolutionOptions = Array.isArray(videoCapability.resolutions) && videoCapability.resolutions.length > 0;
     const maxReferenceVideos = videoCapability.supportsReferenceVideos ? (videoCapability.maxReferenceVideos || 0) : 0;
     const maxReferenceAudios = videoCapability.supportsReferenceAudios ? (videoCapability.maxReferenceAudios || 0) : 0;
     const supportsReferenceVideos = maxReferenceVideos > 0;
@@ -289,11 +293,21 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 if (!supportsFirstLastFrame) {
                     setError(`当前 ${modelName} ${modelVersion} 不支持首尾帧模式，请改用参考模式或切换模型`); setLoading(false); setStage(''); return;
                 }
-                if (!firstFrame) { setError('首尾帧模式必须上传首帧；尾帧不能单独使用'); setLoading(false); setStage(''); return; }
-                sourceImages.push(firstFrame.asset.mediaUrl);
-                sourceFileInfos = [{ Usage: 'FirstFrame' }];
+                if (!firstFrame && !lastFrame) {
+                    setError('请至少上传首帧或尾帧（当前模型支持文生 / 首帧 / 尾帧 / 首尾帧生视频）');
+                    setLoading(false); setStage(''); return;
+                }
+                if (!firstFrame && !supportsLastFrameOnly) {
+                    setError('当前模型不支持仅尾帧生视频，请先上传首帧');
+                    setLoading(false); setStage(''); return;
+                }
+                if (firstFrame) {
+                    sourceImages.push(firstFrame.asset.mediaUrl);
+                    sourceFileInfos = [{ Usage: 'FirstFrame' }];
+                }
                 if (lastFrame) {
                     sourceImages.push(lastFrame.asset.mediaUrl);
+                    if (!sourceFileInfos) sourceFileInfos = [];
                     sourceFileInfos.push(null);
                     lastFrameSourceIndex = sourceImages.length - 1;
                 }
@@ -316,6 +330,15 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 }));
             }
             const durationValue = Number(String(duration).replace(/[^0-9.]/g, ''));
+            // Wan 3.0 等模型：有视频输入时，输入视频总时长 + 输出视频时长不超过上限
+            if (videoCapability.referenceVideoPlusOutputDurationMax && multiVideos.length) {
+                const videoInputTotal = multiVideos.reduce((sum, item) => sum + (Number.isFinite(item.duration) ? item.duration : 0), 0);
+                const budgetMax = videoCapability.referenceVideoPlusOutputDurationMax;
+                if (videoInputTotal > 0 && videoInputTotal + durationValue > budgetMax) {
+                    setError(`参考视频总时长 ${videoInputTotal.toFixed(1)} 秒 + 输出时长 ${durationValue} 秒超过 ${budgetMax} 秒上限，请减少参考视频或缩短输出时长`);
+                    setLoading(false); setStage(''); return;
+                }
+            }
             const pixVersePrompt = modelName === 'PixVerse' && mode === 'multi' && sourceImages.length > 0 && !/@pic\d+/i.test(prompt)
                 ? `${prompt.trim()}${prompt.trim() ? '。' : ''}参考图标记：${sourceImages.map((_, index) => `@pic${index + 1}`).join('、')}。请根据提示词使用对应参考图。`
                 : prompt.trim() || undefined;
@@ -330,6 +353,7 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                 aspectRatio: ratio === 'Auto' ? undefined : ratio,
                 extraConfig: {
                     ...(Number.isFinite(durationValue) ? { Duration: durationValue } : {}),
+                    ...(hasResolutionOptions && resolution && resolution !== 'Auto' ? { Resolution: resolution } : {}),
                     StorageMode: storageMode,
                 },
             }, {
@@ -502,17 +526,17 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                         )}
                     </div>
 
-                    {/* 模型/版本/比例/时长/存储 */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+                    {/* 模型/版本/比例/时长/分辨率/存储 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('模型')}</label>
-                            <select value={modelName} onChange={(e) => { const name = e.target.value; const version = (VOD_VIDEO_MODEL_MATRIX[name] || [''])[0]; const capability = getVodVideoModelCapability(name, version); setModelName(name); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages([]); setMultiVideos([]); setMultiAudios([]); }} className="field">
+                            <select value={modelName} onChange={(e) => { const name = e.target.value; const version = (VOD_VIDEO_MODEL_MATRIX[name] || [''])[0]; const capability = getVodVideoModelCapability(name, version); setModelName(name); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setResolution((current) => capability.resolutions.includes(current) ? current : (capability.defaultResolution || capability.resolutions[0] || '')); setMultiImages([]); setMultiVideos([]); setMultiAudios([]); }} className="field">
                                 {Object.keys(VOD_VIDEO_MODEL_MATRIX).map((m) => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('版本')}</label>
-                            <select value={modelVersion} onChange={(e) => { const version = e.target.value; const capability = getVodVideoModelCapability(modelName, version); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setMultiImages((current) => current.slice(0, capability.maxReferenceImages)); setMultiVideos([]); setMultiAudios([]); }} className="field">
+                            <select value={modelVersion} onChange={(e) => { const version = e.target.value; const capability = getVodVideoModelCapability(modelName, version); setModelVersion(version); setRatio((current) => capability.ratios.includes(current) ? current : capability.ratios[0]); setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0]); setResolution((current) => capability.resolutions.includes(current) ? current : (capability.defaultResolution || capability.resolutions[0] || '')); setMultiImages((current) => current.slice(0, capability.maxReferenceImages)); setMultiVideos([]); setMultiAudios([]); }} className="field">
                                 {versions.map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                         </div>
@@ -528,6 +552,14 @@ export default function VideoTool({ onBack, template, embedded = false }) {
                                 {videoCapability.durations.map((d) => <option key={d} value={d}>{d}</option>)}
                             </select>
                         </div>
+                        {hasResolutionOptions && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 mb-2">{t('分辨率')}</label>
+                                <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="field">
+                                    {videoCapability.resolutions.map((r) => <option key={r} value={r}>{resolutionLabels?.[r] || r}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-gray-600 mb-2">{t('存储模式')}</label>
                             <select value={storageMode} onChange={(e) => setStorageMode(e.target.value)} className="field">

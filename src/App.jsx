@@ -29798,7 +29798,8 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         <option key={res} value={res}>
                                                             {res === 'Auto'
                                                                 ? '不选'
-                                                                : getValueLabelWithNotes(res, !!resolutionConfig?.videoResolutionNotesEnabled, resolutionConfig?.videoResolutionNotes || {})}
+                                                                : (getVodSubModelCapability(resolutionConfig, node.settings?.customParams)?.capability?.resolutionLabels?.[res]
+                                                                    || getValueLabelWithNotes(res, !!resolutionConfig?.videoResolutionNotesEnabled, resolutionConfig?.videoResolutionNotes || {}))}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -36644,11 +36645,12 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                                     >
                                                                         {r === 'Auto'
                                                                             ? '不选'
-                                                                            : getValueLabelWithNotes(
-                                                                                r,
-                                                                                !!currentModel?.videoResolutionNotesEnabled,
-                                                                                currentModel?.videoResolutionNotes || {}
-                                                                            )}
+                                                                            : (getVodSubModelCapability(currentModel, node.settings?.customParams)?.capability?.resolutionLabels?.[r]
+                                                                                || getValueLabelWithNotes(
+                                                                                    r,
+                                                                                    !!currentModel?.videoResolutionNotesEnabled,
+                                                                                    currentModel?.videoResolutionNotes || {}
+                                                                                ))}
                                                                     </button>
                                                                 ))}
                                                             </div>

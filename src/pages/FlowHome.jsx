@@ -1146,7 +1146,7 @@ export default function FlowHome() {
                                                 <label>
                                                     <span className="mb-1 block text-[10px] font-medium text-[#81796a]">{t('清晰度')}</span>
                                                     <select value={homeVideoResolution} onChange={(event) => { setHomeVideoResolution(event.target.value); setHomeResolution(event.target.value); }} aria-label={t('视频清晰度')} className="h-8 w-full rounded-lg border border-[#e3ded1] bg-white px-2.5 text-[11.5px] text-[#36332d] outline-none focus:border-[#d4aa42]">
-                                                        {homeResolutionOptions.map((resolution) => <option key={resolution} value={resolution}>{resolution}</option>)}
+                                                        {homeResolutionOptions.map((resolution) => <option key={resolution} value={resolution}>{(isHomeVideo ? homeVideoCapability.resolutionLabels?.[resolution] : null) || resolution}</option>)}
                                                     </select>
                                                 </label>
                                                 <label>
@@ -1347,7 +1347,7 @@ export default function FlowHome() {
                                                     <button type="button" aria-label={t('关闭分辨率菜单')} className="fixed inset-0 z-10 cursor-default" onClick={() => setHomeParameterOpen(null)} />
                                                     <div className="absolute bottom-full left-0 z-20 mb-2 w-[170px] rounded-xl border border-[#e7e4da] bg-white p-2 shadow-[0_12px_34px_rgba(37,32,19,0.14)]">
                                                         <div className="px-1.5 pb-1.5 text-[10.5px] font-medium tracking-[0.08em] text-[#a38749]">{t('输出分辨率')}</div>
-                                                        {homeResolutionOptions.map((resolution) => <button key={resolution} type="button" onClick={() => { setHomeResolution(resolution); setHomeParameterOpen(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[12px] transition ${resolution === homeResolution ? 'bg-[#fff1c8] font-medium text-[#684e17]' : 'text-gray-600 hover:bg-[#f5f4f1]'}`}>{resolution}{resolution === homeResolution && <Check size={13} />}</button>)}
+                                                        {homeResolutionOptions.map((resolution) => <button key={resolution} type="button" onClick={() => { setHomeResolution(resolution); setHomeParameterOpen(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[12px] transition ${resolution === homeResolution ? 'bg-[#fff1c8] font-medium text-[#684e17]' : 'text-gray-600 hover:bg-[#f5f4f1]'}`}>{(isHomeVideo ? homeVideoCapability.resolutionLabels?.[resolution] : null) || resolution}{resolution === homeResolution && <Check size={13} />}</button>)}
                                                     </div>
                                                 </>
                                             )}

@@ -42,6 +42,7 @@ export const VOD_IMAGE_MODEL_MATRIX = {
 export const VOD_VIDEO_MODEL_MATRIX = {
     Hailuo: ['02', '2.3', '2.3-fast', 'H3', 'H3-Max'],
     Kling: ['1.6', '2.0', '2.1', '2.5', '2.6', 'O1', '3.0', '3.0-Omni'],
+    Wan: ['3.0', '3.0-prime'],
     Vidu: ['q2', 'q2-pro', 'q2-turbo', 'q3', 'q3-pro', 'q3-turbo'],
     GV: ['3.1', '3.1-fast', '3.1-lite'],
     OS: ['2.0'],
@@ -641,6 +642,19 @@ export function extractVodResultUrls(taskDetail) {
     return { urls, fileIds, taskType };
 }
 
+// 将 VOD 侧常见的内容审核类任务失败翻译为可操作提示
+const buildVodTaskFailureMessage = (errCode, message) => {
+    const raw = `[VOD Task Failed] ${errCode}: ${message}`;
+    const lower = String(message || '').toLowerCase();
+    if (lower.includes('ip infringement') || String(message || '').includes('侵权')) {
+        return `${raw} ｜ 生成内容疑似涉及 IP 侵权，被平台输出审核拦截。建议：① 移除提示词中的明星、知名角色、品牌、IP 名称；② 更换不含版权形象的参考图/首尾帧；③ 改为原创角色与场景后重试。如确认误判，可在腾讯云控制台提交工单申诉。`;
+    }
+    if (lower.includes('sensitive') || lower.includes('moderation') || String(message || '').includes('敏感') || String(message || '').includes('审核')) {
+        return `${raw} ｜ 生成内容未通过平台内容审核，请调整提示词或参考素材后重试。`;
+    }
+    return raw;
+};
+
 /**
  * 轮询直到任务结束；返回最终的 taskDetail。
  * @param {string} taskId
@@ -666,7 +680,7 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
                 const hasError = errCode && errCode !== '0' && errCode !== 0 && errCode !== '';
                 if (hasError) {
                     const msg = taskNode.Message || 'AIGC 任务失败';
-                    throw new Error(`[VOD Task Failed] ${errCode}: ${msg}`);
+                    throw new Error(buildVodTaskFailureMessage(errCode, msg));
                 }
             }
             return detail;
@@ -846,7 +860,9 @@ export async function runVodAigcPipeline(params, ctx = {}) {
     if (isPixVerseVideo && lastFrameSource && !lastFrameUrl) {
         throw new Error('PixVerse 尾帧上传完成但未取得公网 MediaUrl');
     }
-    if (lastFrameSource && !uploadResults.some((item) => item.meta?.Usage === 'FirstFrame')) {
+    if (lastFrameSource
+        && !uploadResults.some((item) => item.meta?.Usage === 'FirstFrame')
+        && !videoCapability?.supportsLastFrameOnly) {
         throw new Error(`${params.modelName} ${params.modelVersion} 的尾帧必须与首帧一起使用，请先提供首帧图片`);
     }
 
@@ -953,6 +969,31 @@ const HAILUO_H3_MAX_VIDEO_CAPABILITY = Object.freeze({
     supportsFirstLastFrame: true,
 });
 
+const WAN_VIDEO_CAPABILITY = Object.freeze({
+    // Wan 3.0 / 3.0-prime：文生、首帧生、尾帧生、首尾帧生、参考生。
+    // 参考生限制：图片 ≤10 张；视频 ≤5 段且总时长 ≤15 秒；音频 ≤5 段且总时长 ≤15 秒（须搭配图片/视频输入）。
+    // 分辨率：480P、720P、1080P、2K（超分）、4K（超分）。
+    // 时长：无视频输入时为 [2,30] 秒整数；有视频输入时输入视频总时长 + 输出视频时长 ≤30 秒。
+    durations: Array.from({ length: 29 }, (_, index) => `${index + 2}s`),
+    ratios: ['16:9', '9:16', '4:3', '3:4', '1:1'],
+    resolutions: ['480P', '720P', '1080P', '2K', '4K'],
+    resolutionLabels: { '2K': '2K（超分）', '4K': '4K（超分）' },
+    maxReferenceImages: 10,
+    maxReferenceImageBytes: 20 * 1024 * 1024,
+    referenceImageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    supportsReferenceImages: true,
+    supportsReferenceVideos: true,
+    maxReferenceVideos: 5,
+    referenceVideoTotalDurationMax: 15,
+    supportsReferenceAudios: true,
+    maxReferenceAudios: 5,
+    referenceAudioTotalDurationMax: 15,
+    // 有视频输入时：输入视频总时长 + 输出视频时长 ≤ 30 秒
+    referenceVideoPlusOutputDurationMax: 30,
+    supportsFirstLastFrame: true,
+    supportsLastFrameOnly: true,
+});
+
 const DEFAULT_VIDEO_CAPABILITY = Object.freeze({
     durations: VOD_VIDEO_DURATIONS,
     ratios: VOD_VIDEO_RATIOS,
@@ -998,6 +1039,9 @@ export function getVodVideoModelCapability(modelName, modelVersion) {
     }
     if (modelName === 'Hailuo' && modelVersion === 'H3-Max') {
         return HAILUO_H3_MAX_VIDEO_CAPABILITY;
+    }
+    if (modelName === 'Wan' && ['3.0', '3.0-prime'].includes(modelVersion)) {
+        return WAN_VIDEO_CAPABILITY;
     }
     if (modelName === 'Kling' && ['3.0', '3.0-Omni'].includes(modelVersion)) {
         return {
