@@ -35,7 +35,7 @@ export const VOD_IMAGE_MODEL_MATRIX = {
     GEM: ['2.5', '3.0', '3.1', '3.1-lite'],
     SI: ['4.0', '4.5', '5.0-lite'],
     Qwen: ['0925'],
-    Hunyuan: ['3.0'],
+    Hunyuan: ['3.0', '3.5'],
     Vidu: ['q2'],
     Kling: ['2.1', '3.0', '3.0-Omni', 'O1']
 };
@@ -259,6 +259,8 @@ function base64ToBlob(base64, mime = 'application/octet-stream') {
 import { invokeVod } from './api/vod';
 import { getReferenceAssetFileId, getReferenceAssetUrl, prepareReferenceImage } from './api/mediaAssetCache';
 import { createGenerationTracker } from './api/generationHistory';
+import { listCredentials } from './api/credential';
+import { resolveMpsCreateImageModel, createCreateImageTask, pollImageTask, uploadMpsImage } from './api/mps';
 
 /**
  * 调用腾讯云 VOD API（经后端代签转发）
@@ -722,7 +724,128 @@ export async function pollVodTask(taskId, ctx, opts = {}) {
  * @param {Object} ctx  { credentials, useProxy, localServerUrl, onStage(stage,info) }
  * @returns {Promise<{urls:string[], taskId:string, taskDetail:Object}>}
  */
+/**
+ * MPS ProcessImage 生图通路（混元生图 3.5 等）。
+ * 文生图不带 InputInfo；图生图把参考图上传 COS 后经 AddOnParameter.ImageSet 传入。
+ */
+const MPS_CREATE_IMAGE_MAX_REFERENCES = 6;
+
+async function resolveMpsStorageConfig() {
+    const credentials = await listCredentials();
+    const list = Array.isArray(credentials) ? credentials : [];
+    const tencentCloud = list.find((item) => item.provider === 'tencent-cloud' && item.has_data);
+    const bucket = String(tencentCloud?.config?.mps_bucket || '').trim();
+    const region = String(tencentCloud?.config?.mps_region || tencentCloud?.config?.region || '').trim();
+    if (!bucket || !region) {
+        throw new Error('请先在「全局 API 设置」中配置腾讯云媒体服务的 MPS Bucket 与 Region');
+    }
+    return { bucket, region };
+}
+
+// MPS ProcessImage 仅接收 JPG / PNG / WEBP（后端按文件头校验）。
+// 其余格式（GIF / BMP / AVIF 等）统一转为 JPEG，保证上传的 JPG 与其它图片都能作为参考图。
+async function normalizeMpsReferenceBlob(blob) {
+    const mime = String(blob?.type || '').toLowerCase();
+    if (['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(mime)) return blob;
+    if (typeof document === 'undefined' || typeof createImageBitmap !== 'function') return blob;
+    try {
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width || 1;
+        canvas.height = bitmap.height || 1;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        const jpeg = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+        if (jpeg) return jpeg;
+    } catch (_) { /* 转换失败则回退原始 Blob */ }
+    return blob;
+}
+
+async function runMpsCreateImagePipeline(params, ctx) {
+    const model = resolveMpsCreateImageModel(params.modelName, params.modelVersion);
+    const historyOptions = ctx.history === false ? null : (ctx.history || {});
+    const sources = (Array.isArray(params.sourceImages) ? params.sourceImages : []).filter(Boolean);
+    const tracker = historyOptions ? await createGenerationTracker({
+        source: historyOptions.source || 'canvas',
+        type: params.type,
+        provider: 'tencent-mps',
+        prompt: params.prompt || '',
+        modelName: params.modelName,
+        modelVersion: params.modelVersion,
+        storageMode: params.extraConfig?.StorageMode || 'Permanent',
+        projectId: historyOptions.projectId,
+        parentJobId: historyOptions.parentJobId,
+        parameters: {
+            aspect_ratio: params.aspectRatio || '',
+            resolution: params.extraConfig?.Resolution || '',
+            reference_count: sources.length,
+            mps_model: model,
+            ...(historyOptions.parameters || {}),
+        },
+        assets: sources.map((source, index) => ({
+            role: 'reference',
+            ordinal: index,
+            media_type: 'image',
+            mime_type: typeof source === 'object' ? source?.type || '' : '',
+            file_size: typeof source === 'object' ? source?.size || 0 : 0,
+            metadata: { name: typeof source === 'object' ? source?.name || '' : '', direct_url: typeof source === 'string' },
+        })),
+    }) : null;
+    const emit = (stage, info = {}) => {
+        if (typeof ctx.onStage === 'function') {
+            try { ctx.onStage(stage, info); } catch (_) { /* 忽略上层回调异常 */ }
+        }
+        tracker?.stage(stage, info);
+    };
+    try {
+        const storage = await resolveMpsStorageConfig();
+        const references = [];
+        const limited = sources.slice(0, MPS_CREATE_IMAGE_MAX_REFERENCES);
+        for (let index = 0; index < limited.length; index += 1) {
+            emit('upload_start', { index, total: limited.length });
+            const source = limited[index];
+            // resolveBlob 已直接返回 { blob }：Blob 直接复用，URL/字符串才需要解析，避免二次解析报错。
+            const resolved = source instanceof Blob
+                ? { blob: source, mime: source.type }
+                : await resolveBlob(source, ctx);
+            const blob = await normalizeMpsReferenceBlob(resolved.blob);
+            // 带上与内容一致的扩展名，满足后端「扩展名与内容匹配」校验。
+            const file = (typeof File === 'function' && !blob.name)
+                ? new File([blob], `mps-ref-${Date.now()}-${index}${mimeToExt(blob.type) || '.jpg'}`, { type: blob.type })
+                : blob;
+            references.push(await uploadMpsImage(file));
+            emit('upload_done', { index, total: limited.length });
+        }
+        emit('create_task', {});
+        const created = await createCreateImageTask({
+            model,
+            prompt: params.prompt || '',
+            resolution: params.extraConfig?.Resolution || '2K',
+            aspectRatio: params.aspectRatio || '1:1',
+            referenceInputs: references,
+            outputBucket: storage.bucket,
+            outputRegion: storage.region,
+        });
+        emit('task_created', { taskId: created.taskId });
+        // 云端任务 ID 是浏览器中断后的唯一恢复锚点，轮询前落库。
+        await tracker?.flush();
+        const { urls, detail } = await pollImageTask(created.taskId, storage.region, {
+            onPoll: ({ attempt }) => emit('polling', { attempt }),
+        });
+        emit('task_finish', {});
+        await tracker?.complete({ urls, fileIds: [], mediaType: 'image' });
+        return { urls, taskId: created.taskId, taskDetail: detail, outputFileIds: [], historyJobId: tracker?.id };
+    } catch (error) {
+        await tracker?.fail(error, error?.name === 'AbortError' ? 'cancelled' : 'failed');
+        throw error;
+    }
+}
+
 export async function runVodAigcPipeline(params, ctx = {}) {
+    // 混元生图 3.5 等模型改走 MPS ProcessImage（ImageTask.CreateImageConfig），
+    // 在此统一分流，画布 / 首页 / 图片工具 / 智能 Agent 共用同一入口即可生效。
+    if (params.type === 'image' && resolveMpsCreateImageModel(params.modelName, params.modelVersion)) {
+        return runMpsCreateImagePipeline(params, ctx);
+    }
     const historyOptions = ctx.history === false ? null : (ctx.history || {});
     const storageMode = params.extraConfig?.StorageMode || 'Permanent';
     const tracker = historyOptions ? await createGenerationTracker({

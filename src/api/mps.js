@@ -652,6 +652,74 @@ export function createObjectDetectTask(options) {
 
 // ---- 局部重绘（官方 dry_run 实测：CreateImageConfig 图生图，参考图走 AddOnParameter.ImageSet） ----
 // 官方同样不传 mask 图：涂抹区域在前端转成区域文字（left-center 等）拼进 prompt。
+// ---- AI 生图（ImageTask.CreateImageConfig：文生图 / 图生图） ----
+// Model 按「ModelName/ModelVersion」映射：混元生图 3.5 → scene-image-lite-v2。
+// 文生图：不传 InputInfo（与官方 Dry Run 一致），仅 ImageTask + OutputStorage；
+// 图生图：参考图经 AddOnParameter.ImageSet(COS) 传入。
+export const MPS_CREATE_IMAGE_MODELS = {
+    'hunyuan/3.5': 'scene-image-lite-v2',
+};
+
+export function resolveMpsCreateImageModel(modelName, modelVersion) {
+    const key = `${String(modelName || '').trim().toLowerCase()}/${String(modelVersion || '').trim().toLowerCase()}`;
+    return MPS_CREATE_IMAGE_MODELS[key] || '';
+}
+
+export function buildCreateImagePayload({
+    model = 'scene-image-lite-v2',
+    prompt = '',
+    resolution = '2K',
+    aspectRatio = '1:1',
+    num = 1,
+    negativePrompt = '',
+    referenceInputs = [],
+    outputBucket,
+    outputRegion,
+    outputDir = '/mps-saas/output/aigc-image/',
+}) {
+    const config = {
+        Model: model,
+        Prompt: String(prompt || '').trim(),
+        Resolution: resolution,
+        AspectRatio: aspectRatio,
+    };
+    const imageNum = Math.floor(Number(num) || 1);
+    if (imageNum > 1) config.Num = Math.min(4, imageNum);
+    const negative = String(negativePrompt || '').trim();
+    if (negative) config.NegativePrompt = negative;
+
+    const payload = {
+        OutputStorage: {
+            Type: 'COS',
+            CosOutputStorage: { Bucket: outputBucket, Region: outputRegion },
+        },
+        OutputDir: outputDir,
+        ImageTask: { CreateImageConfig: config },
+    };
+    const references = (Array.isArray(referenceInputs) ? referenceInputs : []).filter((item) => item?.object);
+    if (references.length) {
+        payload.AddOnParameter = {
+            ImageSet: references.map((image) => ({
+                Image: {
+                    Type: 'COS',
+                    CosInputInfo: { Bucket: image.bucket, Region: image.region, Object: image.object },
+                },
+            })),
+        };
+    }
+    return payload;
+}
+
+export async function createCreateImageTask(options) {
+    const payload = buildCreateImagePayload(options);
+    const result = await invokeMps('ProcessImage', payload, options.outputRegion);
+    const error = result?.Response?.Error;
+    if (error) throw new Error(error.Message || error.Code || '创建 AI 生图任务失败');
+    const taskId = result?.Response?.TaskId;
+    if (!taskId) throw new Error('腾讯云 MPS 未返回 TaskId');
+    return { taskId, payload, response: result };
+}
+
 export function buildRepaintPayload({ input, outputBucket, outputRegion, prompt = '', model = 'WAND-create-1.0-flash', resolution = '2K', aspectRatio = '1:1' }) {
     return {
         OutputStorage: {

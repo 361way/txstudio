@@ -49,7 +49,9 @@ export const VOD_IMAGE_MODEL_CAPABILITIES = {
         defaultRatio: '1:1',
         defaultResolution: '1K',
         maxReferences: 3,
-        description: '混元 3.0 通用生图，适合写实、国风与商业素材。',
+        // 3.5 经 MPS ProcessImage（CreateImageConfig）生图，参考图上限按 MPS 侧保守取值
+        maxReferencesByVersion: { '3.5': 6, '3.0': 3 },
+        description: '混元 3.0 通用生图（写实、国风与商业素材）；3.5 走 MPS ProcessImage 文生图 / 图生图。',
     },
     Vidu: {
         wikiSlug: 'aigc-image-Vidu',
