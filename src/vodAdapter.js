@@ -31,7 +31,12 @@ export const VOD_DEFAULT_VIDEO_MODEL_VERSION = '3.0';
 
 // ModelName / ModelVersion 支持矩阵（来自官方文档 2026-05）
 export const VOD_IMAGE_MODEL_MATRIX = {
-    OG: ['image2_low', 'image2_medium', 'image2_high'],
+    OG: [
+        'image2_low', 'image2_medium', 'image2_high',
+        // Image 2.5 系列：sunburst（日光）与 flare（光晕），后缀为算力/质量档位
+        'image2.5_sunburst_low', 'image2.5_sunburst_medium', 'image2.5_sunburst_high', 'image2.5_sunburst_xhigh', 'image2.5_sunburst_max',
+        'image2.5_flare_low', 'image2.5_flare_medium', 'image2.5_flare_high', 'image2.5_flare_xhigh', 'image2.5_flare_max',
+    ],
     GEM: ['2.5', '3.0', '3.1', '3.1-lite'],
     SI: ['4.0', '4.5', '5.0-lite'],
     Qwen: ['0925'],
@@ -299,10 +304,20 @@ async function callVodApi(action, body, ctx = {}) {
 /**
  * 从 Blob/File/URL/DataURL 解析得到 {blob, ext, mime}
  */
-async function normalizeBlobInput(input) {
+async function normalizeBlobInput(input, ctx = {}) {
     if (input instanceof Blob) return input;
-    if (typeof input === 'string' && /^https?:\/\//i.test(input)) return input;
-    throw new Error('[VOD Upload] 参考图需要在本地选中或已缓存的云端素材');
+    if (typeof input !== 'string' || !input.trim()) {
+        throw new Error('[VOD Upload] 参考图格式无效，请重新选择图片');
+    }
+    const value = input.trim();
+    // HTTP(S) 保留 URL，由后续受控下载与缓存上传流程处理。
+    if (/^https?:\/\//i.test(value)) return value;
+    // data:/blob: 只能在当前浏览器上下文读取；先物化为 Blob 后进入既有 MD5 缓存与 VOD 上传链路。
+    if (/^(data:|blob:)/i.test(value)) {
+        return (await resolveBlob(value, ctx)).blob;
+    }
+    // 不允许 file:、asset: 或任意未知字符串越过浏览器侧的来源解析与 VOD 权限边界。
+    throw new Error('[VOD Upload] 参考图仅支持画布图片、已缓存云端图片或 HTTP(S) 地址；本地文件路径不可直接上传');
 }
 
 async function resolveBlob(input, ctx = {}) {
@@ -925,7 +940,7 @@ export async function runVodAigcPipeline(params, ctx = {}) {
         } else {
             const uploadInput = isPixVerseVideo
                 ? await normalizePixVerseReference(entry.source, ctx)
-                : await normalizeBlobInput(entry.source);
+                : await normalizeBlobInput(entry.source, ctx);
             const uploadBlob = uploadInput instanceof Blob
                 ? uploadInput
                 : (await resolveBlob(uploadInput, ctx)).blob;

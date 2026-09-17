@@ -330,42 +330,38 @@ const LocalImageManager = (() => {
         });
     };
 
-    // Get image as Blob URL from IndexedDB
+    // 从 IndexedDB 读取原始 Blob。渲染组件应自行持有 Object URL，避免全局 LRU
+    // 缓存回收 URL 时让已渲染图片变成损坏图标。
+    const getImageBlob = async (id) => {
+        const db = await initDB();
+        if (!db) return null;
+        return new Promise((resolve) => {
+            try {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(id);
+                request.onsuccess = () => resolve(request.result?.blob instanceof Blob ? request.result.blob : null);
+                request.onerror = () => resolve(null);
+            } catch (err) {
+                console.error('[LocalImageManager] Get blob error:', err);
+                resolve(null);
+            }
+        });
+    };
+
+    // Get image as Blob URL from IndexedDB（供非渲染场景和兼容调用使用）
     const getImage = async (id) => {
-        // Check cache first
         if (blobUrlCache.has(id)) {
             const cached = blobUrlCache.get(id);
             blobUrlCache.delete(id);
             blobUrlCache.set(id, cached);
             return cached;
         }
-
-        const db = await initDB();
-        if (!db) return null;
-
-        return new Promise((resolve) => {
-            try {
-                const transaction = db.transaction([STORE_NAME], 'readonly');
-                const store = transaction.objectStore(STORE_NAME);
-                const request = store.get(id);
-
-                request.onsuccess = () => {
-                    const record = request.result;
-                    if (record && record.blob) {
-                        const url = URL.createObjectURL(record.blob);
-                        rememberBlobUrl(id, url);
-                        resolve(url);
-                    } else {
-                        resolve(null);
-                    }
-                };
-
-                request.onerror = () => resolve(null);
-            } catch (err) {
-                console.error('[LocalImageManager] Get error:', err);
-                resolve(null);
-            }
-        });
+        const blob = await getImageBlob(id);
+        if (!blob) return null;
+        const url = URL.createObjectURL(blob);
+        rememberBlobUrl(id, url);
+        return url;
     };
 
     // Delete image from IndexedDB
@@ -417,7 +413,7 @@ const LocalImageManager = (() => {
     // V3.7.19: Removed auto-init on module load - now lazy-loaded on first use
     // initDB();
 
-    return { saveImage, getImage, deleteImage, getStats, isImageId, initDB, clearRuntimeCache };
+    return { saveImage, getImage, getImageBlob, deleteImage, getStats, isImageId, initDB, clearRuntimeCache };
 })();
 
 // Expose for debugging
@@ -528,10 +524,12 @@ const LazyBase64Image = ({ src, className, alt, onError, onLoad, ...props }) => 
             setLoading(true);
             const resolveFromIDB = async () => {
                 try {
-                    const url = await LocalImageManager.getImage(src);
+                    const blob = await LocalImageManager.getImageBlob(src);
                     if (!active) return;
-                    if (url) {
-                        // IndexedDB 资源由 LocalImageManager 的 LRU 缓存统一管理和释放。
+                    if (blob) {
+                        // 渲染组件独立持有 URL，避免 LocalImageManager 的 LRU 缓存清理时撤销当前 <img> 的 src。
+                        const url = URL.createObjectURL(blob);
+                        blobUrlRef.current = url;
                         setBlobUrl(url);
                     } else {
                         const fallback = getAssetBundleFallbackById(src);
@@ -4598,13 +4596,25 @@ const writeAutoSaveMeta = (meta) => {
 };
 
 // --- Helper: Get Image Dimensions ---
-const getImageDimensions = (src) => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-        img.onerror = () => reject(new Error("Failed to load image"));
-        img.src = src;
-    });
+const getImageDimensions = async (src) => {
+    let resolvedSrc = src;
+    let ownedBlobUrl = '';
+    if (LocalImageManager.isImageId(src)) {
+        const blob = await LocalImageManager.getImageBlob(src);
+        if (!blob) throw new Error('本地图片不存在');
+        ownedBlobUrl = URL.createObjectURL(blob);
+        resolvedSrc = ownedBlobUrl;
+    }
+    try {
+        return await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = resolvedSrc;
+        });
+    } finally {
+        if (ownedBlobUrl) URL.revokeObjectURL(ownedBlobUrl);
+    }
 };
 
 // --- Helper: Check if URL is video ---
@@ -17595,6 +17605,33 @@ function TxStudioApp({
         }
     };
 
+    // VOD 参考图安全物化：画布上的本地上传、粘贴、资源包和 IndexedDB 图片常为 data:/blob: 地址。
+    // 这些地址只在当前浏览器上下文有效，先转换为 Blob，再交给 VOD 的同 SubAppId 缓存校验与上传链路。
+    // HTTP(S) 地址保持原样，供适配器受控下载；拒绝 file: 等本地路径与未知协议。
+    const materializeVodReference = async (source) => {
+        if (source instanceof Blob) return source;
+        if (typeof source !== 'string' || !source.trim()) {
+            throw new Error('[VOD Upload] 参考图格式无效，请重新选择图片');
+        }
+        const resolved = await resolveSpecialUrl(source.trim());
+        if (!resolved) throw new Error('[VOD Upload] 参考图已失效，请重新选择图片');
+        if (/^https?:\/\//i.test(resolved)) return resolved;
+        if (!/^(data:|blob:)/i.test(resolved)) {
+            throw new Error('[VOD Upload] 仅支持画布图片、已缓存云端图片或 HTTP(S) 图片地址，不支持本地文件路径');
+        }
+        const blob = await getBlobFromUrl(resolved, { useProxy: false, preferLocal: true });
+        if (!(blob instanceof Blob) || !blob.size) {
+            throw new Error('[VOD Upload] 无法读取参考图，请重新选择图片');
+        }
+        if (!String(blob.type || '').toLowerCase().startsWith('image/')) {
+            throw new Error('[VOD Upload] 参考素材必须是图片，请重新选择图片');
+        }
+        if (blob.size > 20 * 1024 * 1024) {
+            throw new Error('[VOD Upload] 参考图不能超过 20MB');
+        }
+        return blob;
+    };
+
     const startGeneration = async (prompt, type, sourceImages, nodeId, options = {}) => {
         // V3.5.20: 优先解析 IndexedDB 图片键 (img_xxx)
         // 解决 "Failed to fetch" 错误，确保所有 img_ 键都转换为 Blob URL
@@ -17810,8 +17847,11 @@ function TxStudioApp({
                 alert(t('请在节点自定义参数中选择 ModelName 和 ModelVersion'));
                 return;
             }
-            // 仅接受 blob/url 形式的参考图（已由 startGeneration 开头解析过）
-            let vodSourceImages = Array.isArray(connectedImages) ? connectedImages : [];
+            // 将画布 data:/blob:/IndexedDB/资源包图片物化为 Blob；HTTP(S) 继续走适配器的受控下载。
+            // 后续仍复用 prepareReferenceImage 的 MD5 缓存、同 SubAppId 校验与 VOD 上传流程。
+            let vodSourceImages = Array.isArray(connectedImages)
+                ? await Promise.all(connectedImages.map((source) => materializeVodReference(source)))
+                : [];
             let vodSourceFileInfos = null;
             let vodLastFrameSourceIndex = -1;
             const vodExtraTaskParams = {};
@@ -17899,6 +17939,8 @@ function TxStudioApp({
                     vodLastFrameSourceIndex = -1;
                 }
             }
+            // 分镜首尾帧与角色参考图可能在上方重新写入字符串，最终统一物化，确保同一安全上传链路。
+            vodSourceImages = await Promise.all(vodSourceImages.map((source) => materializeVodReference(source)));
             // 首页与画布共用同一套比例、分辨率和时长校正与请求映射。
             const vodRequestSettings = buildVodGenerationRequestSettings(
                 type,
@@ -25209,20 +25251,39 @@ ${inputText.substring(0, 15000)} ... (截断)
         if (!nodeId || !content) return;
         let dimensions = { w: 0, h: 0 };
         try { dimensions = await getImageDimensions(content); } catch { /* 图片仍可使用 */ }
+        const currentNodes = nodesRef.current || [];
+        if (!currentNodes.some((node) => node.id === nodeId)) {
+            throw new Error('图片节点已不存在，请刷新画布后重试');
+        }
         saveToUndoStack();
-        setNodes((previous) => previous.map((node) => node.id === nodeId ? { ...node, content, dimensions } : node));
+        const nextNodes = currentNodes.map((node) => node.id === nodeId
+            ? { ...node, content, dimensions, isMasking: false, maskContent: null }
+            : node);
+        // 替换图片需要立即写入项目快照，不能依赖 1.5 秒后的自动保存，
+        // 否则旧画布在刷新/切换项目时可能重新覆盖刚替换的内容。
+        await persistCanvasMutation(nextNodes, connectionsRef.current || []);
     }, [saveToUndoStack]);
 
     const handleFileUpload = async (nodeId, event) => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
+        const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+        if (!supportedTypes.has(String(file.type || '').toLowerCase())) {
+            showToast('仅支持 JPG、PNG、WEBP 或 GIF 图片，请转换后重试', 'error');
+            return;
+        }
+        if (!file.size || file.size > 20 * 1024 * 1024) {
+            showToast('图片大小必须在 20MB 以内', 'error');
+            return;
+        }
         try {
             const imageId = await LocalImageManager.saveImage(file);
-            if (!imageId) throw new Error('无法写入本地媒体库');
+            if (!imageId) throw new Error('无法写入本地媒体库，请检查浏览器存储空间或权限');
             await setInputImageNodeContent(nodeId, imageId);
+            showToast('图片已更换并保存到当前画布', 'success');
         } catch (error) {
-            showToast(`图片保存失败: ${error?.message || '未知错误'}`, 'error');
+            showToast(`图片更换失败: ${error?.message || '未知错误'}`, 'error');
         }
     };
 
@@ -30619,7 +30680,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                                         }`}
                                                     onMouseDown={(e) => e.stopPropagation()}
                                                 >
-                                                    {t('更换')} <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(node.id, e)} />
+                                                    {t('更换')} <input type="file" className="hidden" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => handleFileUpload(node.id, e)} />
                                                 </label>
                                                 <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); openHistoryImagePicker(node.id); }} className="rounded-lg border border-white/20 bg-black/35 px-3 py-1.5 text-xs text-white backdrop-blur-sm transition hover:bg-black/55">{t('生成历史')}</button>
                                                 {!isVideoUrl(inputImageDisplayContent) && (
@@ -30724,7 +30785,7 @@ ${inputText.substring(0, 15000)} ... (截断)
                                             onMouseDown={(e) => e.stopPropagation()}
                                         >
                                             {t('选择图片')}
-                                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(node.id, e)} />
+                                            <input type="file" className="hidden" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => handleFileUpload(node.id, e)} />
                                         </label>
                                         <button type="button" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); openHistoryImagePicker(node.id); }} className={`rounded-lg border px-4 py-2 text-xs font-medium transition ${theme === 'dark' ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'}`}>{t('从生成历史选择')}</button>
                                     </div>
