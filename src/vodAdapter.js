@@ -840,7 +840,7 @@ async function runMpsCreateImagePipeline(params, ctx) {
             outputBucket: storage.bucket,
             outputRegion: storage.region,
         });
-        emit('task_created', { taskId: created.taskId });
+        emit('task_created', { taskId: created.taskId, region: storage.region, provider: 'tencent-mps', generationJobId: tracker?.id });
         // 云端任务 ID 是浏览器中断后的唯一恢复锚点，轮询前落库。
         await tracker?.flush();
         const { urls, detail } = await pollImageTask(created.taskId, storage.region, {

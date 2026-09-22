@@ -35,6 +35,8 @@ import {
     uploadImageToVod,
 } from '../vodAdapter';
 import { prepareReferenceImage } from '../api/mediaAssetCache';
+import { pollImageTask } from '../api/mps';
+import { updateGenerationJob } from '../api/generationHistory';
 import { buildCanvasAssetNode } from '../api/sendToCanvas';
 import SendToCanvasDialog from '../components/SendToCanvasDialog';
 import { getVodImageModelCapability } from '../data/vodImageModelCapabilities';
@@ -101,6 +103,7 @@ const HISTORY = [];
 const IMAGE_MODELS = Object.keys(VOD_IMAGE_MODEL_MATRIX);
 const VIDEO_MODELS = Object.keys(VOD_VIDEO_MODEL_MATRIX);
 const HOME_REFERENCE_MAX_BYTES = 20 * 1024 * 1024;
+const HOME_PENDING_MPS_IMAGE_TASK_KEY = 'txstudio_home_pending_mps_image_task';
 
 const REFERENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const HOME_PIPELINE_CONTEXT = {
@@ -354,6 +357,52 @@ export default function FlowHome() {
     const visibleCapabilities = capabilityCategory === 'all'
         ? IMAGE_CAPABILITIES
         : IMAGE_CAPABILITIES.filter((item) => item.category === capabilityCategory);
+    // MPS 任务为云端异步任务。页面刷新/应用重启发生在轮询期间时，恢复本次首页生图结果，
+    // 避免任务已成功却只因前端中断而看不到图片。
+    useEffect(() => {
+        let cancelled = false;
+        let pending;
+        try {
+            pending = JSON.parse(sessionStorage.getItem(HOME_PENDING_MPS_IMAGE_TASK_KEY) || 'null');
+        } catch { pending = null; }
+        if (!pending?.taskId || !pending?.region) return undefined;
+
+        setHomeGenerationType('image');
+        setHomeImageLoading(true);
+        setHomeImageStage('正在恢复混元生图任务…');
+        void pollImageTask(pending.taskId, pending.region, {
+            onPoll: ({ attempt }) => {
+                if (!cancelled) setHomeImageStage(`正在恢复混元生图任务 · 第 ${attempt} 次查询`);
+            },
+        }).then(async ({ urls }) => {
+            if (cancelled) return;
+            setHomeImageResults(urls);
+            setHomeImageStage('图片生成完成');
+            if (pending.generationJobId) {
+                try {
+                    await updateGenerationJob(pending.generationJobId, {
+                        status: 'completed',
+                        progress: 100,
+                        assets: urls.map((url, ordinal) => ({
+                            role: 'output', ordinal, media_type: 'image', cloud_url: url,
+                            storage_provider: 'tencent-mps', storage_mode: 'Permanent',
+                        })),
+                        event: { stage: 'completed', level: 'info', message: '已恢复 MPS 图片任务结果' },
+                    });
+                } catch { /* 结果展示成功即可；历史同步失败不影响用户 */ }
+            }
+            sessionStorage.removeItem(HOME_PENDING_MPS_IMAGE_TASK_KEY);
+        }).catch((error) => {
+            if (cancelled) return;
+            setHomeParameterError(`混元生图任务恢复失败：${error?.message || '未知错误'}`);
+            setHomeImageStage('');
+            sessionStorage.removeItem(HOME_PENDING_MPS_IMAGE_TASK_KEY);
+        }).finally(() => {
+            if (!cancelled) setHomeImageLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, []);
+
     const changeInterfaceLanguage = async (nextLanguage) => {
         if (nextLanguage !== 'zh' && nextLanguage !== 'en') return;
         await i18n.changeLanguage(nextLanguage);
@@ -677,10 +726,25 @@ export default function FlowHome() {
                 }, {
                     ...HOME_PIPELINE_CONTEXT,
                     history: { source: 'home', parameters: { entry: 'home_image' } },
-                    onStage: (stage) => setHomeImageStage(IMAGE_STAGE_LABELS[stage] || '正在生成图片'),
+                    onStage: (stage, info = {}) => {
+                        setHomeImageStage(IMAGE_STAGE_LABELS[stage] || '正在生成图片');
+                        if (stage === 'task_created' && info.provider === 'tencent-mps' && info.taskId && info.region) {
+                            try {
+                                sessionStorage.setItem(HOME_PENDING_MPS_IMAGE_TASK_KEY, JSON.stringify({
+                                    taskId: info.taskId,
+                                    region: info.region,
+                                    modelName: imageModel,
+                                    modelVersion: imageModelVersion,
+                                    generationJobId: info.generationJobId || null,
+                                    createdAt: Date.now(),
+                                }));
+                            } catch { /* 会话存储不可用时保持当前页面轮询 */ }
+                        }
+                    },
                 });
                 setHomeImageResults(urls);
                 setHomeImageStage('图片生成完成');
+                try { sessionStorage.removeItem(HOME_PENDING_MPS_IMAGE_TASK_KEY); } catch { }
             } catch (error) {
                 setHomeParameterError(`生成失败：${error?.message || '未知错误'}`);
                 setHomeImageStage('');
